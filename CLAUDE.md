@@ -107,6 +107,10 @@ Con Qwen 3.5 9B en una RTX 3060 Ti de 8 GB:
 ## Modo de trabajo
 
 - Hacer commit y push directo a `main` después de cada cambio coherente.
+- Commits pequeños y numerosos: una actualización entera se reparte en
+  varios commits (orientativo 4–7), cada uno con un paso que compile por sí
+  solo (p. ej. estructura HTML, estilos, lógica, correcciones), no en uno
+  solo. Un cambio realmente pequeño puede ir en un único commit.
 - Mensajes de commit claros, en español.
 - Credenciales: se usan las ya configuradas en la máquina (`gh` como helper
   de git por HTTPS). No crear tokens ni cambiar la configuración global de git.
