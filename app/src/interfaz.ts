@@ -1,13 +1,18 @@
 // Conversación con el único empleado por ahora: qwen, servido por llama-server local (ver main.ts).
 
-interface MensajeChat { de: "yo" | "qwen"; texto: string; t: number }
-type EstadoQwen = { fase: "cargando" | "listo" | "escribiendo" } | { fase: "error"; detalle: string };
+type MensajeChat =
+  | { de: "yo" | "qwen"; texto: string; t: number }
+  | { de: "herramienta"; nombre: string; argumentos: string; salida: string; codigo: number; t: number };
+type EstadoQwen =
+  | { fase: "cargando" | "listo" | "escribiendo" }
+  | { fase: "ejecutando" | "esperando-clave" | "error"; detalle: string };
 declare const discalaves: {
   historial(): Promise<MensajeChat[]>;
   estado(): Promise<EstadoQwen>;
   enviar(texto: string): Promise<{ error?: string }>;
   alCambiarEstado(f: (e: EstadoQwen) => void): void;
   alRecibirTrozo(f: (t: string) => void): void;
+  alPaso(f: () => void): void;
 };
 
 const CONTACTO = { nombre: "qwen", acento: "violeta" };
@@ -16,6 +21,8 @@ const TEXTO_ESTADO: Record<EstadoQwen["fase"], string> = {
   cargando: "cargando el modelo…",
   listo: "en línea · local",
   escribiendo: "escribiendo…",
+  ejecutando: "ejecutando",
+  "esperando-clave": "esperando tu contraseña para",
   error: "sin conexión",
 };
 
@@ -63,13 +70,40 @@ function dibujarLista() {
   const cuerpo = crear("span", "fila-cuerpo");
   const arriba = crear("span", "fila-arriba");
   arriba.append(crear("span", "nombre", CONTACTO.nombre), crear("span", "hora", ultimo ? horaCorta(ultimo.t) : ""));
-  const vista = estadoQwen.fase === "escribiendo" ? "escribiendo…" : ultimo ? (ultimo.de === "yo" ? "tú: " : "") + ultimo.texto : "sin mensajes";
+  const ocupado = !["listo", "cargando", "error"].includes(estadoQwen.fase);
+  const vista = ocupado ? TEXTO_ESTADO[estadoQwen.fase] + "…" : ultimo ? (ultimo.de === "yo" ? "tú: " : "") + resumen(ultimo) : "sin mensajes";
   cuerpo.append(arriba, crear("span", "vista", vista));
   fila.append(avatarQwen(), cuerpo);
   document.getElementById("lista")!.replaceChildren(fila);
 }
 
-function burbuja(de: MensajeChat["de"], texto: string): HTMLElement {
+function resumen(m: MensajeChat): string {
+  return m.de === "herramienta" ? `${m.nombre}: ${descripcion(m)}` : m.texto;
+}
+
+function descripcion(m: { nombre: string; argumentos: string }): string {
+  try {
+    const a = JSON.parse(m.argumentos);
+    return m.nombre === "terminal" ? a.comando : m.nombre === "escribir_archivo" ? a.ruta : m.argumentos;
+  } catch {
+    return m.argumentos;
+  }
+}
+
+// Paso de herramienta: "✓ terminal → comando", con la salida desplegable.
+function tarjeta(m: Extract<MensajeChat, { de: "herramienta" }>): HTMLElement {
+  const fila = crear("div", "mensaje");
+  const d = document.createElement("details");
+  d.className = m.codigo === 0 ? "burbuja herramienta" : "burbuja herramienta fallo";
+  const s = crear("summary", "", m.codigo === 0 ? "✓ " : "✗ ");
+  const sudo = m.nombre === "terminal" && /^\s*sudo\s/.test(descripcion(m));
+  s.append(crear("strong", "", sudo ? "sudo" : m.nombre.replace("_", " ")), " → ", crear("code", "", descripcion(m)));
+  d.append(s, crear("pre", "", m.salida));
+  fila.append(d);
+  return fila;
+}
+
+function burbuja(de: "yo" | "qwen", texto: string): HTMLElement {
   const fila = crear("div", de === "yo" ? "mensaje mio" : "mensaje");
   const b = crear("div", "burbuja");
   // ponytail: del markdown del modelo solo se interpretan las **negritas**; el resto se ve tal cual.
@@ -91,7 +125,8 @@ function dibujarHilo() {
   let anterior = 0;
   for (const m of mensajes) {
     if (m.t - anterior > 60 * 60 * 1000) hilo.append(crear("p", "separador", etiquetaDia(m.t)));
-    hilo.append(burbuja(m.de, m.texto));
+    if (m.de === "herramienta") hilo.append(tarjeta(m));
+    else if (m.texto) hilo.append(burbuja(m.de, m.texto));
     anterior = m.t;
   }
   hilo.scrollTop = hilo.scrollHeight;
@@ -99,7 +134,7 @@ function dibujarHilo() {
 
 function dibujarEstado() {
   const el = document.getElementById("cab-estado")!;
-  el.textContent = estadoQwen.fase === "error" ? `${TEXTO_ESTADO.error}: ${estadoQwen.detalle}` : TEXTO_ESTADO[estadoQwen.fase];
+  el.textContent = "detalle" in estadoQwen ? `${TEXTO_ESTADO[estadoQwen.fase]}: ${estadoQwen.detalle}` : TEXTO_ESTADO[estadoQwen.fase];
   el.dataset.fase = estadoQwen.fase;
   (document.getElementById("enviar") as HTMLButtonElement).disabled = estadoQwen.fase !== "listo";
 }
@@ -116,6 +151,20 @@ discalaves.alCambiarEstado((e) => {
   dibujarLista();
 });
 
+function burbujaPendiente() {
+  const respuesta = burbuja("qwen", "");
+  burbujaEnCurso = respuesta.querySelector("p")!;
+  burbujaEnCurso.classList.add("pensando");
+  hilo.append(respuesta);
+  hilo.scrollTop = hilo.scrollHeight;
+}
+
+// Tras cada ronda de herramientas: se redibuja lo guardado y se abre otra burbuja para lo que siga.
+discalaves.alPaso(async () => {
+  await recargar();
+  burbujaPendiente();
+});
+
 discalaves.alRecibirTrozo((t) => {
   if (!burbujaEnCurso) return;
   burbujaEnCurso.classList.remove("pensando");
@@ -129,11 +178,7 @@ document.getElementById("redactor")!.addEventListener("submit", async (ev) => {
   if (!texto || estadoQwen.fase !== "listo") return;
   entrada.value = "";
   hilo.append(burbuja("yo", texto));
-  const respuesta = burbuja("qwen", "");
-  burbujaEnCurso = respuesta.querySelector("p")!;
-  burbujaEnCurso.classList.add("pensando");
-  hilo.append(respuesta);
-  hilo.scrollTop = hilo.scrollHeight;
+  burbujaPendiente();
 
   const { error } = await discalaves.enviar(texto);
   burbujaEnCurso = null;
