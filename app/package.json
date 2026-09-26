@@ -1,0 +1,15 @@
+{
+  "name": "discalaves",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Interfaz de escritorio de Discalaves (prototipo, datos de ejemplo)",
+  "license": "Apache-2.0",
+  "main": "dist/main.js",
+  "scripts": {
+    "start": "tsc && electron ."
+  },
+  "devDependencies": {
+    "electron": "^44.4.5",
+    "typescript": "^7.0.2"
+  }
+}

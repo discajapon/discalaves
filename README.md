@@ -2,6 +2,8 @@
 
 > **Estado: en diseño, aún no funcional.** Todavía no hay nada que instalar.
 > Este README describe lo que el proyecto quiere ser, no lo que ya hace.
+> Por ahora solo existe un prototipo visual de la interfaz, con datos de
+> ejemplo, en [`app/`](app/): los empleados todavía no hacen nada.
 
 Discalaves es un equipo de "empleados" de IA que corre en tu propia
 computadora. Les asignas tareas como a compañeros de trabajo; cada empleado

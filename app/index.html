@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:">
+  <title>Discalaves</title>
+  <link rel="stylesheet" href="estilos.css">
+</head>
+<body>
+  <!-- Vidrio líquido: el mapa desplaza el fondo solo cerca de los bordes (centro gris neutro = sin desplazamiento). -->
+  <svg class="oculto" aria-hidden="true">
+    <filter id="vidrio" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB">
+      <feImage preserveAspectRatio="none" result="mapa"
+        href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'><defs><linearGradient id='x'><stop offset='0' stop-color='rgb(255,0,0)'/><stop offset='1' stop-color='rgb(0,0,0)'/></linearGradient><linearGradient id='y' x2='0' y2='1'><stop offset='0' stop-color='rgb(0,255,0)'/><stop offset='1' stop-color='rgb(0,0,0)'/></linearGradient><filter id='b'><feGaussianBlur stdDeviation='4'/></filter></defs><rect width='100' height='100' fill='url(%23x)'/><rect width='100' height='100' fill='url(%23y)' style='mix-blend-mode:screen'/><rect x='10' y='10' width='80' height='80' rx='10' fill='rgb(128,128,128)' filter='url(%23b)'/></svg>"/>
+      <feGaussianBlur in="SourceGraphic" stdDeviation="2" result="suave"/>
+      <feDisplacementMap in="suave" in2="mapa" scale="70" xChannelSelector="R" yChannelSelector="G" result="refractado"/>
+      <feColorMatrix in="refractado" type="saturate" values="1.6"/>
+    </filter>
+  </svg>
+
+  <div class="fondo" aria-hidden="true">
+    <span class="mancha m1"></span><span class="mancha m2"></span><span class="mancha m3"></span><span class="mancha m4"></span>
+  </div>
+
+  <div class="app">
+    <aside class="lateral vidrio">
+      <div class="lateral-arriba">
+        <button class="icono" type="button" aria-label="Nueva conversación">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+        </button>
+      </div>
+      <label class="buscador">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></svg>
+        <input type="search" placeholder="buscar" aria-label="Buscar conversaciones">
+      </label>
+      <nav id="lista" class="lista" aria-label="Conversaciones"></nav>
+      <div class="usuario">
+        <span id="usuario-iniciales" class="iniciales"></span>
+        <span id="usuario-nombre" class="nombre"></span>
+      </div>
+    </aside>
+
+    <main class="panel">
+      <header class="cabecera vidrio">
+        <span id="cab-avatar"></span>
+        <h1 id="cab-nombre" class="nombre"></h1>
+        <button class="icono" type="button" aria-label="Ver su escritorio" title="Ver su escritorio (próximamente)">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>
+        </button>
+      </header>
+
+      <section id="hilo" class="hilo" aria-label="Mensajes"></section>
+
+      <form id="redactor" class="redactor vidrio">
+        <button class="icono" type="button" aria-label="Adjuntar">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+        </button>
+        <input id="entrada" type="text" aria-label="Mensaje" autocomplete="off">
+        <button class="microfono" type="submit" aria-label="Dictar mensaje">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+        </button>
+      </form>
+    </main>
+  </div>
+
+  <script src="dist/datos.js"></script>
+  <script src="dist/interfaz.js"></script>
+</body>
+</html>

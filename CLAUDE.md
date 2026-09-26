@@ -22,8 +22,16 @@ nombre o identidad del proyecto.
 
 ## Estado actual
 
-En diseño. Todavía no hay código del producto. El repositorio contiene solo
-`README.md`, `LICENSE`, `NOTICE` y este archivo.
+En diseño. Hay un prototipo de la interfaz en `app/` (Electron + TypeScript,
+sin framework de UI): solo pantalla, con datos de ejemplo fijos en
+`app/src/datos.ts`; sin agentes, modelos ni backend. Arranque:
+`cd app && npm install && npm start`.
+
+La interfaz se escribe como HTML/CSS/TS estándar para poder servirla como web
+local (y en el celular) más adelante; Electron es solo la ventana. Los tokens
+de diseño viven en `app/estilos.css` (nada de hex sueltos). El "vidrio
+líquido" (filtro SVG de refracción vía `backdrop-filter: url(#vidrio)`) solo
+funciona en Chromium.
 
 ## Principios
 
