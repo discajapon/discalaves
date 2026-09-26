@@ -216,7 +216,18 @@ async function turno(c: Conversacion, interfaz: Electron.WebContents) {
       messages: [{ role: "system", content: sistema }, ...contexto(c)],
     }),
   });
-  if (!r.ok) throw new Error(`el servidor respondió ${r.status}: ${(await r.text()).slice(0, 200)}`);
+  if (!r.ok) {
+    const cuerpo = await r.text();
+    let mensaje = cuerpo;
+    try {
+      mensaje = JSON.parse(cuerpo).error?.message ?? cuerpo;
+    } catch {
+      // no era JSON: se muestra tal cual
+    }
+    const memoria = mensaje.match(/requires more system memory \(([\d.]+ GiB)\) than is available \(([\d.]+ GiB)\)/);
+    if (memoria) throw new Error(`no hay memoria para cargar ${c.nombre}: necesita ${memoria[1]} y hay ${memoria[2]} libres. Cierra otras apps (o qwen) y vuelve a intentarlo.`);
+    throw new Error(`el servidor respondió ${r.status}: ${mensaje.slice(0, 200)}`);
+  }
   let texto = "";
   const llamadas: Llamada[] = [];
   for await (const d of deltas(r)) {
