@@ -22,10 +22,25 @@ nombre o identidad del proyecto.
 
 ## Estado actual
 
-En diseño. Hay un prototipo de la interfaz en `app/` (Electron + TypeScript,
-sin framework de UI): solo pantalla, con datos de ejemplo fijos en
-`app/src/datos.ts`; sin agentes, modelos ni backend. Arranque:
-`cd app && npm install && npm start`.
+En diseño. Hay un prototipo en `app/` (Electron + TypeScript, sin framework
+de UI) con un solo contacto, **qwen**, con el que se conversa de verdad:
+el proceso principal (`app/src/main.ts`) lanza `llama-server` (llama.cpp,
+API compatible con OpenAI) en `127.0.0.1:8089` con una clave aleatoria por
+sesión, y la interfaz habla con él solo por IPC (`app/src/preload.ts`), con
+respuestas en streaming. Todavía no hay agentes, herramientas, contenedores
+ni varios empleados. Arranque: `cd app && npm install && npm start`.
+
+- Runtime y modelo, fuera del repositorio, en `~/Documents/IA-discalves`
+  (cambiable con la variable `DISCALAVES_IA`): `llama.cpp/` (binarios
+  oficiales con CUDA 12.8, versión en `llama.cpp/VERSION`) y
+  `modelos/Qwen3.5-9B-Q4_K_M.gguf` (unsloth/Qwen3.5-9B-GGUF). El instalador
+  futuro deberá traer ambos.
+- Servidor: contexto 8192, 1 slot, razonamiento desactivado,
+  `-fitt 256` (con el margen por defecto de 1 GB, en 8 GB de VRAM quedaban
+  capas en CPU: ~13 tok/s frente a ~32 tok/s). Log en
+  `~/.config/discalaves/llama-server.log`.
+- Historial: `~/.config/discalaves/conversaciones/qwen.json`; se envían al
+  modelo los últimos 20 mensajes.
 
 La interfaz se escribe como HTML/CSS/TS estándar para poder servirla como web
 local (y en el celular) más adelante; Electron es solo la ventana. Los tokens
