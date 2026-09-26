@@ -6,7 +6,8 @@
   "license": "Apache-2.0",
   "main": "dist/main.js",
   "scripts": {
-    "start": "tsc && electron ."
+    "start": "tsc && electron .",
+    "prueba": "tsc && node dist/prueba.js"
   },
   "devDependencies": {
     "electron": "^44.4.5",
