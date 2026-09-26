@@ -409,3 +409,46 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
   height: auto;
   padding-top: var(--e2);
 }
+
+/* Menú del +: elegir con qué IA abrir una conversación. Anclado al botón (anchor positioning). */
+#nueva { anchor-name: --nueva; }
+.menu-ia {
+  position-anchor: --nueva;
+  inset: auto;
+  top: anchor(bottom);
+  left: anchor(left);
+  margin: var(--e1) 0 0;
+  width: 280px;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: var(--e2);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio-panel);
+  background: var(--fondo);
+  color: var(--tinta);
+  box-shadow: 0 12px 40px var(--velo);
+}
+.menu-titulo {
+  padding: var(--e2) var(--e2) var(--e1);
+  font-size: var(--texto-chico);
+  color: var(--secundario);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.menu-ia > .detalle { padding: var(--e1) var(--e2); }
+.detalle { font-size: var(--texto-chico); color: var(--secundario); }
+.fila-arriba .detalle { margin-left: auto; }
+.opcion-ia {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: var(--e2);
+  border: 0;
+  border-radius: var(--radio-fila);
+  background: none;
+  text-align: left;
+  cursor: pointer;
+}
+.opcion-ia:hover, .opcion-ia:focus-visible { background: var(--gris-suave); }
+.solo-chat { font-size: var(--texto-chico); font-weight: 700; color: var(--tinta); }
