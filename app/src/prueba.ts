@@ -8,8 +8,9 @@ import { ejecutarHerramienta } from "./herramientas";
 async function main() {
   const carpeta = fs.mkdtempSync(path.join(os.tmpdir(), "discalaves-prueba-"));
   const fuera = path.join(os.homedir(), `.discalaves-no-debe-existir-${process.pid}`);
-  const nada = () => {};
-  const correr = (nombre: string, args: object) => ejecutarHerramienta(carpeta, nombre, JSON.stringify(args), nada);
+  let pedidas = 0;
+  const ctx = { carpeta, avisar: () => {}, aprobar: async () => (pedidas++, false) };
+  const correr = (nombre: string, args: object) => ejecutarHerramienta(ctx, nombre, JSON.stringify(args));
 
   let r = await correr("terminal", { comando: "echo hola && pwd" });
   assert.equal(r.codigo, 0);
@@ -26,6 +27,11 @@ async function main() {
   await correr("terminal", { comando: `ln -s ${fuera} escape` });
   await correr("escribir_archivo", { ruta: "escape", contenido: "x" });
   assert.equal(fs.existsSync(fuera), false, "escribir_archivo escapó de la caja");
+
+  // Borrar necesita aprobación; si el usuario dice que no, no se borra.
+  r = await correr("terminal", { comando: "ls && rm -rf informes" });
+  assert.equal(pedidas, 1);
+  assert.ok(fs.existsSync(path.join(carpeta, "informes/a.md")), "borró sin aprobación");
 
   r = await correr("terminal", { comando: "exit 3" });
   assert.equal(r.codigo, 3);

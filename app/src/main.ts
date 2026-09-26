@@ -5,6 +5,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { DEFINICIONES, ejecutarHerramienta } from "./herramientas";
+import * as navegador from "./navegador";
 
 // ponytail: rutas y puerto fijos para un solo empleado; el instalador y el gestor de modelos los definirán.
 const IA = process.env.DISCALAVES_IA ?? path.join(os.homedir(), "Documents", "IA-discalves");
@@ -13,16 +14,18 @@ const MODELO = path.join(IA, "modelos", "Qwen3.5-9B-Q4_K_M.gguf");
 const PUERTO = 8089;
 const CLAVE = randomBytes(24).toString("hex"); // sin clave, cualquier web abierta en el navegador podría usar el servidor
 const CARPETA = path.join(IA, "trabajo", "qwen"); // su computadora aislada la ve como /home/qwen
-const CONTEXTO_CARACTERES = 16000; // ponytail: ventana por tamaño (~5k tokens de 8k); resumir cuando las conversaciones crezcan
+const CONTEXTO_CARACTERES = 32000; // ponytail: ventana por tamaño (~9k tokens de 16k); resumir cuando las conversaciones crezcan
 const MAX_PASOS = 8; // honestidad con modelos pequeños: tras 8 herramientas seguidas se detiene y pregunta
 
 const SISTEMA =
   "Eres qwen, un empleado de Discalaves que trabaja en la computadora del usuario. " +
   "Responde en el idioma del usuario, de forma breve y clara. " +
-  "Tienes una computadora aislada con terminal e internet (herramientas terminal y escribir_archivo); tu carpeta es /home/qwen. " +
+  "Tienes una computadora aislada con terminal, navegador e internet; tu carpeta es /home/qwen. " +
+  "Para investigar en la web: buscar_web, luego abrir_pagina con las direcciones más útiles; para formularios: ver_pagina, hacer_clic y escribir_en. " +
+  "Cita las direcciones de donde sacas la información. " +
   "Trabaja en pasos cortos y cuenta al usuario qué hiciste y qué encontraste. " +
   "Si no sabes algo, un comando falla o no puedes hacerlo, dilo en vez de inventar. " +
-  "Antes de borrar archivos, enviar algo o pagar, pregunta al usuario y espera su respuesta. " +
+  "Borrar, enviar o pagar siempre requiere la aprobación del usuario: la app se la pide sola; si la rechaza, no insistas. " +
   "Usa sudo solo si es imprescindible: el usuario tendrá que escribir su contraseña.";
 
 interface Llamada { id: string; nombre: string; argumentos: string }
@@ -32,7 +35,7 @@ type Mensaje =
   | { de: "herramienta"; id: string; nombre: string; argumentos: string; salida: string; codigo: number; t: number };
 type Estado =
   | { fase: "cargando" | "listo" | "escribiendo" }
-  | { fase: "ejecutando" | "esperando-clave" | "error"; detalle: string };
+  | { fase: "ejecutando" | "esperando-clave" | "esperando-aprobacion" | "error"; detalle: string };
 
 const archivoHistorial = () => path.join(app.getPath("userData"), "conversaciones", "qwen.json");
 let historial: Mensaje[] = [];
@@ -66,7 +69,8 @@ function iniciarServidor() {
   const log = fs.openSync(path.join(app.getPath("userData"), "llama-server.log"), "w");
   servidor = spawn(SERVIDOR, [
     "-m", MODELO, "--host", "127.0.0.1", "--port", String(PUERTO), "--api-key", CLAVE,
-    "-c", "8192", "-np", "1",
+    "-c", "16384", "-np", "1",
+    "-ctk", "q8_0", "-ctv", "q8_0", // caché en 8 bits: 16k de contexto (páginas web) casi sin coste de VRAM
     "-fitt", "256", // margen de VRAM bajo: con el de 1 GB por defecto, en 8 GB quedan capas en CPU y va a la mitad de velocidad
     "--reasoning", "off", "--no-webui",
   ], { stdio: ["ignore", log, log] });
@@ -150,6 +154,39 @@ async function turno(interfaz: Electron.WebContents) {
   return { texto: texto.trim(), llamadas: llamadas.filter((l) => l?.nombre).map((l, i) => ({ ...l, id: l.id || `llamada-${Date.now()}-${i}` })) };
 }
 
+// Aprobación de acciones delicadas: la interfaz muestra la tarjeta y responde con el id.
+const aprobaciones = new Map<string, (si: boolean) => void>();
+function pedirAprobacion(interfaz: Electron.WebContents, descripcion: string): Promise<boolean> {
+  const id = randomBytes(8).toString("hex");
+  cambiarEstado({ fase: "esperando-aprobacion", detalle: descripcion });
+  interfaz.send("aprobacion", { id, descripcion });
+  return new Promise((resolver) => aprobaciones.set(id, resolver));
+}
+ipcMain.handle("aprobar", (_e, id: unknown, si: unknown) => {
+  aprobaciones.get(String(id))?.(si === true);
+  aprobaciones.delete(String(id));
+});
+
+// Vista en vivo: solo se transmite mientras la interfaz la pide.
+ipcMain.handle("pantalla:ver", async (ev, ver: unknown) => {
+  try {
+    if (ver === true) await navegador.transmitir((f) => ev.sender.send("pantalla:fotograma", f));
+    else await navegador.detenerTransmision();
+    return {};
+  } catch (e) {
+    return { error: (e as Error).message.split("\n")[0] };
+  }
+});
+ipcMain.handle("pantalla:control", (_e, activo: unknown) => navegador.tomarControl(activo === true));
+ipcMain.handle("pantalla:entrada", (_e, e: unknown) => {
+  const x = e as Record<string, unknown>;
+  const num = (v: unknown) => typeof v === "number" && Number.isFinite(v);
+  const str = (v: unknown, max: number) => typeof v === "string" && v.length > 0 && v.length <= max;
+  if (x?.tipo === "clic" && num(x.x) && num(x.y)) return navegador.entradaUsuario({ tipo: "clic", x: x.x as number, y: x.y as number });
+  if (x?.tipo === "rueda" && num(x.dy)) return navegador.entradaUsuario({ tipo: "rueda", dy: x.dy as number });
+  if (x?.tipo === "tecla" && str(x.tecla, 40)) return navegador.entradaUsuario({ tipo: "tecla", tecla: x.tecla as string });
+});
+
 ipcMain.handle("historial", () => historial);
 ipcMain.handle("estado", () => estado);
 ipcMain.handle("enviar", async (ev, entrada: unknown) => {
@@ -166,7 +203,11 @@ ipcMain.handle("enviar", async (ev, entrada: unknown) => {
       guardarHistorial();
       if (!llamadas.length) return {};
       for (const l of llamadas) {
-        const r = await ejecutarHerramienta(CARPETA, l.nombre, l.argumentos, (fase, detalle) => cambiarEstado({ fase, detalle }));
+        const r = await ejecutarHerramienta(
+          { carpeta: CARPETA, avisar: (fase, detalle) => cambiarEstado({ fase, detalle }), aprobar: (d) => pedirAprobacion(ev.sender, d) },
+          l.nombre,
+          l.argumentos,
+        );
         historial.push({ de: "herramienta", ...l, ...r, t: Date.now() });
         guardarHistorial();
       }
@@ -211,6 +252,7 @@ app.on("second-instance", () => {
 
 app.whenReady().then(() => {
   if (!primera) return;
+  navegador.configurarNavegador({ ia: IA, carpeta: CARPETA, datos: app.getPath("userData") });
   leerHistorial();
   iniciarServidor();
   crearVentana();
@@ -219,4 +261,5 @@ app.on("window-all-closed", () => app.quit());
 app.on("will-quit", () => {
   saliendo = true;
   servidor?.kill();
+  void navegador.cerrarNavegador(); // la caja muere igualmente con la app (--die-with-parent)
 });
