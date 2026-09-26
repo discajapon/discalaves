@@ -9,6 +9,7 @@
   --burbuja-mia: #111111;
   --sobre-oscuro: #FFFFFF;
   --notificacion: #E5484D;
+  --notificacion-texto: #C4262B; /* versión oscura del rojo para texto: ≥4.5:1 sobre blanco */
 
   --acento-turquesa: #4DB6A5;
   --acento-naranja: #F0A030;
@@ -330,3 +331,17 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
   cursor: pointer;
 }
 .boton.secundario { background: var(--gris-suave); color: var(--tinta); }
+
+/* Conversación con qwen */
+.cab-titulo { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.cab-titulo .nombre { line-height: 1.2; }
+.cab-estado { font-size: var(--texto-chico); color: var(--secundario); }
+.cab-estado[data-fase="error"] { color: var(--notificacion-texto); }
+.burbuja p { white-space: pre-wrap; overflow-wrap: anywhere; }
+.aviso { color: var(--notificacion-texto); }
+.pensando::after { content: "…"; animation: latido 1s ease-in-out infinite; }
+@keyframes latido { 50% { opacity: 0.3; } }
+@media (prefers-reduced-motion: reduce) { .pensando::after { animation: none; } }
+.redactor:has(input:placeholder-shown) .icono-enviar,
+.redactor:not(:has(input:placeholder-shown)) .icono-micro { display: none; }
+.microfono:disabled { opacity: 0.4; cursor: default; }
