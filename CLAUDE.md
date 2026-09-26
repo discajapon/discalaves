@@ -23,7 +23,7 @@ nombre o identidad del proyecto.
 ## Estado actual
 
 En diseño. Hay un prototipo en `app/` (Electron + TypeScript, sin framework
-de UI) con un solo contacto, **qwen**, con el que se conversa de verdad:
+de UI) con un contacto principal, **qwen**, con el que se conversa de verdad:
 el proceso principal (`app/src/main.ts`) lanza `llama-server` (llama.cpp,
 API compatible con OpenAI) en `127.0.0.1:8089` con una clave aleatoria por
 sesión, y la interfaz habla con él solo por IPC (`app/src/preload.ts`), con
@@ -44,9 +44,21 @@ empleado). Arranque: `cd app && npm install && npm start`.
   `-fitt 256` (con el margen por defecto de 1 GB, en 8 GB de VRAM quedaban
   capas en CPU: ~13 tok/s frente a ~32 tok/s). Log en
   `~/.config/discalaves/llama-server.log`.
-- Historial: `~/.config/discalaves/conversaciones/qwen.json`; al modelo se
-  le envían los últimos ~32 000 caracteres, siempre empezando en un mensaje
-  del usuario.
+- Historial: una conversación por IA en `~/.config/discalaves/conversaciones/`
+  (`<id>.json`, más `indice.json` con la lista); al modelo se le envían los
+  últimos ~32 000 caracteres (~10 000 con Ollama, que recorta a ~4k tokens por
+  defecto), siempre empezando en un mensaje del usuario.
+- Otras IAs vía **Ollama** (si el usuario lo tiene instalado): el botón + del
+  lateral abre un menú con qwen y los modelos de `127.0.0.1:11434`
+  (`/api/tags`; `/api/show` dice si admiten herramientas). Elegir uno abre su
+  conversación (una por IA) y habla con su API compatible con OpenAI. Los
+  modelos sin herramientas se marcan "solo chat" en negrita y reciben un
+  mensaje de sistema que les prohíbe fingir que navegan o ejecutan comandos.
+  Limitaciones: los modelos de Ollama con herramientas usan la misma caja y
+  navegador que qwen (`/home/qwen`); solo una conversación trabaja a la vez
+  (las demás reciben "está trabajando; espera"). Con qwen cargado, Ollama no
+  tuvo RAM para gemma3:4b (necesitaba 3,9 GiB, había 2,2): la app lo explica
+  en el hilo.
 - Computadora provisional: una caja **bubblewrap** (no el contenedor
   endurecido decidido). Ve `/usr` y `/etc` en solo lectura, su carpeta
   `IA-discalves/trabajo/qwen` como `/home/qwen`, sin las carpetas del
@@ -140,7 +152,7 @@ propia.
 - **OpenClaw con modelos pequeños:** verificar que funcione con modelos
   locales pequeños y medir el peso de su runtime. Si falla, se hará un bucle
   de agente propio. Lo investiga otra sesión.
-- **Riesgo abierto:** consumo de RAM del sistema con varios escritorios y
+- **Riesgo abierto (ya observado con Ollama + qwen):** consumo de RAM del sistema con varios escritorios y
   navegadores a la vez.
 
 ## Criterios de "listo" de la v1
