@@ -2,16 +2,19 @@ import { contextBridge, ipcRenderer } from "electron";
 
 // Único puente entre la interfaz (sin acceso a Node) y el proceso principal.
 contextBridge.exposeInMainWorld("discalaves", {
-  historial: () => ipcRenderer.invoke("historial"),
-  estado: () => ipcRenderer.invoke("estado"),
-  enviar: (texto: string) => ipcRenderer.invoke("enviar", texto),
+  conversaciones: () => ipcRenderer.invoke("conversaciones"),
+  modelos: () => ipcRenderer.invoke("modelos"),
+  nuevaConversacion: (proveedor: string, modelo: string) => ipcRenderer.invoke("nueva-conversacion", proveedor, modelo),
+  historial: (id: string) => ipcRenderer.invoke("historial", id),
+  estado: (id: string) => ipcRenderer.invoke("estado", id),
+  enviar: (id: string, texto: string) => ipcRenderer.invoke("enviar", id, texto),
   aprobar: (id: string, si: boolean) => ipcRenderer.invoke("aprobar", id, si),
   verPantalla: (ver: boolean) => ipcRenderer.invoke("pantalla:ver", ver),
   controlPantalla: (activo: boolean) => ipcRenderer.invoke("pantalla:control", activo),
   entradaPantalla: (entrada: unknown) => ipcRenderer.invoke("pantalla:entrada", entrada),
   alCambiarEstado: (f: (estado: unknown) => void) => ipcRenderer.on("estado", (_e, estado) => f(estado)),
-  alRecibirTrozo: (f: (texto: string) => void) => ipcRenderer.on("trozo", (_e, texto) => f(texto)),
-  alPaso: (f: () => void) => ipcRenderer.on("paso", () => f()),
+  alRecibirTrozo: (f: (trozo: unknown) => void) => ipcRenderer.on("trozo", (_e, trozo) => f(trozo)),
+  alPaso: (f: (id: string) => void) => ipcRenderer.on("paso", (_e, id) => f(id)),
   alAprobacion: (f: (p: unknown) => void) => ipcRenderer.on("aprobacion", (_e, p) => f(p)),
   alFotograma: (f: (fotograma: unknown) => void) => ipcRenderer.on("pantalla:fotograma", (_e, fotograma) => f(fotograma)),
 });
