@@ -27,8 +27,10 @@ de UI) con un solo contacto, **qwen**, con el que se conversa de verdad:
 el proceso principal (`app/src/main.ts`) lanza `llama-server` (llama.cpp,
 API compatible con OpenAI) en `127.0.0.1:8089` con una clave aleatoria por
 sesión, y la interfaz habla con él solo por IPC (`app/src/preload.ts`), con
-respuestas en streaming. Todavía no hay agentes, herramientas, contenedores
-ni varios empleados. Arranque: `cd app && npm install && npm start`.
+respuestas en streaming. qwen ya usa herramientas (bucle de agente propio en
+`main.ts`, máximo 8 pasos por mensaje; ver `app/src/herramientas.ts`):
+`terminal` y `escribir_archivo`. Todavía no hay escritorio, navegador ni
+varios empleados. Arranque: `cd app && npm install && npm start`.
 
 - Runtime y modelo, fuera del repositorio, en `~/Documents/IA-discalves`
   (cambiable con la variable `DISCALAVES_IA`): `llama.cpp/` (binarios
@@ -39,8 +41,20 @@ ni varios empleados. Arranque: `cd app && npm install && npm start`.
   `-fitt 256` (con el margen por defecto de 1 GB, en 8 GB de VRAM quedaban
   capas en CPU: ~13 tok/s frente a ~32 tok/s). Log en
   `~/.config/discalaves/llama-server.log`.
-- Historial: `~/.config/discalaves/conversaciones/qwen.json`; se envían al
-  modelo los últimos 20 mensajes.
+- Historial: `~/.config/discalaves/conversaciones/qwen.json`; al modelo se
+  le envían los últimos ~16 000 caracteres, siempre empezando en un mensaje
+  del usuario.
+- Computadora provisional: una caja **bubblewrap** (no el contenedor
+  endurecido decidido). Ve `/usr` y `/etc` en solo lectura, su carpeta
+  `IA-discalves/trabajo/qwen` como `/home/qwen`, sin las carpetas del
+  usuario, con internet. Limitación conocida: comparte la red del equipo,
+  incluida la red local. `npm run prueba` comprueba el aislamiento.
+- `sudo` (decisión del usuario, 2026-09-25): un comando que empieza por
+  `sudo` sale de la caja y corre en el sistema real mediante `pkexec`, que
+  muestra el diálogo de GNOME para la contraseña; ni la app ni el modelo la
+  ven. Es la única vía para acciones de administrador.
+- Aprobación de acciones delicadas (borrar, enviar, pagar): por ahora solo
+  la pide el prompt del sistema; falta hacerla obligatoria en el código.
 
 La interfaz se escribe como HTML/CSS/TS estándar para poder servirla como web
 local (y en el celular) más adelante; Electron es solo la ventana. Los tokens
