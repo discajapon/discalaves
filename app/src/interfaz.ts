@@ -5,7 +5,8 @@ type MensajeChat =
   | { de: "herramienta"; nombre: string; argumentos: string; salida: string; codigo: number; t: number };
 type EstadoQwen =
   | { fase: "cargando" | "listo" | "escribiendo" }
-  | { fase: "ejecutando" | "esperando-clave" | "error"; detalle: string };
+  | { fase: "ejecutando" | "esperando-clave" | "esperando-aprobacion" | "error"; detalle: string };
+interface Fotograma { datos: string; ancho: number; alto: number; url: string }
 declare const discalaves: {
   historial(): Promise<MensajeChat[]>;
   estado(): Promise<EstadoQwen>;
@@ -13,6 +14,12 @@ declare const discalaves: {
   alCambiarEstado(f: (e: EstadoQwen) => void): void;
   alRecibirTrozo(f: (t: string) => void): void;
   alPaso(f: () => void): void;
+  aprobar(id: string, si: boolean): Promise<void>;
+  alAprobacion(f: (p: { id: string; descripcion: string }) => void): void;
+  verPantalla(ver: boolean): Promise<{ error?: string }>;
+  controlPantalla(activo: boolean): Promise<void>;
+  entradaPantalla(e: object): Promise<void>;
+  alFotograma(f: (f: Fotograma) => void): void;
 };
 
 const CONTACTO = { nombre: "qwen", acento: "violeta" };
@@ -23,6 +30,7 @@ const TEXTO_ESTADO: Record<EstadoQwen["fase"], string> = {
   escribiendo: "escribiendo…",
   ejecutando: "ejecutando",
   "esperando-clave": "esperando tu contraseña para",
+  "esperando-aprobacion": "esperando tu aprobación para",
   error: "sin conexión",
 };
 
@@ -84,7 +92,8 @@ function resumen(m: MensajeChat): string {
 function descripcion(m: { nombre: string; argumentos: string }): string {
   try {
     const a = JSON.parse(m.argumentos);
-    return m.nombre === "terminal" ? a.comando : m.nombre === "escribir_archivo" ? a.ruta : m.argumentos;
+    if (m.nombre === "escribir_en") return `${a.campo}: ${a.texto}${a.enviar ? " ⏎" : ""}`;
+    return a.comando ?? a.ruta ?? a.consulta ?? a.url ?? a.texto ?? "";
   } catch {
     return m.argumentos;
   }
@@ -185,6 +194,92 @@ document.getElementById("redactor")!.addEventListener("submit", async (ev) => {
   await recargar();
   if (error) aviso(error);
   entrada.focus();
+});
+
+// Acción delicada: qwen espera a que el usuario la permita o la rechace.
+discalaves.alAprobacion(({ id, descripcion }) => {
+  const fila = crear("div", "mensaje");
+  const t = crear("div", "burbuja aprobacion");
+  t.append(crear("p", "", "qwen quiere "), crear("strong", "", descripcion));
+  const acciones = crear("div", "acciones");
+  const responder = (si: boolean) => {
+    void discalaves.aprobar(id, si);
+    acciones.replaceChildren(crear("span", "decision", si ? "✓ permitido" : "✗ rechazado"));
+  };
+  const no = crear("button", "boton secundario", "no");
+  const si = crear("button", "boton", "permitir");
+  no.addEventListener("click", () => responder(false));
+  si.addEventListener("click", () => responder(true));
+  acciones.append(no, si);
+  t.append(acciones);
+  fila.append(t);
+  hilo.append(fila);
+  hilo.scrollTop = hilo.scrollHeight;
+  si.focus();
+});
+
+// ---- Pantalla en vivo: solo se transmite mientras está abierta ----
+const panel = document.querySelector(".panel")!;
+const pantalla = document.getElementById("pantalla")!;
+const imgPantalla = document.getElementById("pantalla-img") as HTMLImageElement;
+const botonVer = document.getElementById("ver-pantalla")!;
+const botonControl = document.getElementById("tomar-control")!;
+let tamPagina = { ancho: 1280, alto: 800 };
+
+discalaves.alFotograma((f) => {
+  if (pantalla.hidden) return;
+  tamPagina = { ancho: f.ancho, alto: f.alto };
+  imgPantalla.src = `data:image/jpeg;base64,${f.datos}`;
+  document.getElementById("pantalla-url")!.textContent = f.url === "about:blank" ? "qwen todavía no abrió ninguna página" : f.url;
+});
+
+async function mostrarPantalla(ver: boolean) {
+  pantalla.hidden = !ver;
+  panel.classList.toggle("viendo", ver);
+  botonVer.setAttribute("aria-pressed", String(ver));
+  if (!ver) controlar(false);
+  const { error } = await discalaves.verPantalla(ver);
+  if (error) {
+    aviso(`no pude abrir su pantalla: ${error}`);
+    mostrarPantalla(false);
+  }
+}
+
+function controlar(activo: boolean) {
+  void discalaves.controlPantalla(activo);
+  botonControl.setAttribute("aria-pressed", String(activo));
+  botonControl.textContent = activo ? "devolver el control" : "tomar el control";
+  imgPantalla.classList.toggle("controlando", activo);
+  if (activo) imgPantalla.focus();
+}
+
+// Posición del ratón sobre la imgPantalla (object-fit: contain) → píxeles de la página.
+function aPagina(ev: MouseEvent) {
+  const r = imgPantalla.getBoundingClientRect();
+  const escalaImg = Math.min(r.width / tamPagina.ancho, r.height / tamPagina.alto);
+  const x = (ev.clientX - r.left - (r.width - tamPagina.ancho * escalaImg) / 2) / escalaImg;
+  const y = (ev.clientY - r.top - (r.height - tamPagina.alto * escalaImg) / 2) / escalaImg;
+  return x >= 0 && y >= 0 && x <= tamPagina.ancho && y <= tamPagina.alto ? { x, y } : null;
+}
+
+const enControl = () => botonControl.getAttribute("aria-pressed") === "true";
+botonVer.addEventListener("click", () => mostrarPantalla(pantalla.hidden !== false));
+botonControl.addEventListener("click", () => controlar(!enControl()));
+imgPantalla.addEventListener("click", (ev) => {
+  const p = enControl() && aPagina(ev);
+  if (p) void discalaves.entradaPantalla({ tipo: "clic", ...p });
+});
+imgPantalla.addEventListener("wheel", (ev) => {
+  if (!enControl()) return;
+  ev.preventDefault();
+  void discalaves.entradaPantalla({ tipo: "rueda", dy: ev.deltaY });
+});
+imgPantalla.addEventListener("keydown", (ev) => {
+  if (!enControl() || ev.key === "Dead") return;
+  ev.preventDefault();
+  const tecla = ev.key === " " ? "Space" : ev.key;
+  const mods = [ev.ctrlKey && "Control", ev.altKey && "Alt", ev.metaKey && "Meta"].filter(Boolean).join("+");
+  void discalaves.entradaPantalla({ tipo: "tecla", tecla: mods ? `${mods}+${tecla}` : tecla });
 });
 
 document.getElementById("cab-avatar")!.replaceChildren(avatarQwen());

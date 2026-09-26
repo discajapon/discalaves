@@ -47,10 +47,18 @@
           <h1 id="cab-nombre" class="nombre"></h1>
           <span id="cab-estado" class="cab-estado" role="status"></span>
         </div>
-        <button class="icono" type="button" aria-label="Ver su escritorio" title="Ver su escritorio (próximamente)">
+        <button id="ver-pantalla" class="icono" type="button" aria-label="Ver su pantalla" aria-pressed="false" title="Ver su pantalla en vivo">
           <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>
         </button>
       </header>
+
+      <section id="pantalla" class="pantalla vidrio" aria-label="Pantalla de qwen" hidden>
+        <div class="pantalla-barra">
+          <span id="pantalla-url" class="pantalla-url"></span>
+          <button id="tomar-control" type="button" class="boton secundario" aria-pressed="false">tomar el control</button>
+        </div>
+        <img id="pantalla-img" alt="Navegador de qwen en vivo" tabindex="0" draggable="false">
+      </section>
 
       <section id="hilo" class="hilo" aria-label="Mensajes"></section>
 
