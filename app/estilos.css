@@ -37,6 +37,8 @@
   --texto: 15px;
   --texto-chico: 12px; /* ≈ 0.8 × cuerpo */
   --avatar: 36px;
+  --encuadre: 176px;
+  --velo: rgb(0 0 0 / 0.35);
   --cabecera-alto: 60px;
 }
 
@@ -171,9 +173,15 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
   align-items: center;
   gap: var(--e3);
   padding: var(--e3) var(--e2) var(--e1);
+  border: 0;
   border-top: 1px solid var(--borde);
   margin-top: var(--e2);
+  width: 100%;
+  background: none;
+  text-align: left;
+  cursor: pointer;
 }
+.usuario:hover .nombre { text-decoration: underline; }
 .iniciales {
   display: grid;
   place-items: center;
@@ -184,6 +192,7 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
   color: var(--sobre-oscuro);
   font-size: 13px;
   font-weight: 600;
+  background-size: cover;
 }
 
 /* Panel derecho: el hilo corre por debajo de la cabecera y del cuadro de texto flotantes. */
@@ -270,3 +279,54 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 
 ::-webkit-scrollbar { width: 8px; }
 ::-webkit-scrollbar-thumb { background: var(--borde); border-radius: var(--radio-total); }
+
+/* Perfil: diálogo para cambiar nombre y encuadrar la foto en un círculo. */
+.perfil {
+  width: min(360px, 100% - 2 * var(--e4));
+  margin: auto; /* el reset global quita el centrado nativo de <dialog> */
+  padding: var(--e6);
+  border: 0;
+  border-radius: var(--radio-panel);
+  background: var(--fondo);
+  color: var(--tinta);
+  box-shadow: 0 12px 40px var(--velo);
+}
+.perfil::backdrop { background: var(--velo); }
+.perfil form { display: flex; flex-direction: column; gap: var(--e4); }
+.perfil h2 { font-size: 17px; }
+.encuadre {
+  position: relative;
+  align-self: center;
+  width: var(--encuadre);
+  height: var(--encuadre);
+  border-radius: var(--radio-total);
+  overflow: hidden;
+  background: var(--gris-suave);
+  box-shadow: inset 0 0 0 1px var(--borde);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.encuadre:active { cursor: grabbing; }
+.encuadre img { position: absolute; top: 0; left: 0; max-width: none; pointer-events: none; }
+.encuadre .iniciales { width: 100%; height: 100%; font-size: 56px; }
+.zoom { display: flex; align-items: center; gap: var(--e3); color: var(--secundario); }
+.zoom input { flex: 1; accent-color: var(--burbuja-mia); }
+.campo { display: flex; flex-direction: column; gap: var(--e1); color: var(--secundario); font-size: var(--texto-chico); }
+.campo input {
+  padding: var(--e2) var(--e3);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio-fila);
+  font-size: var(--texto);
+  color: var(--tinta);
+}
+.acciones { display: flex; justify-content: flex-end; gap: var(--e2); }
+.boton {
+  padding: var(--e2) var(--e4);
+  border: 0;
+  border-radius: var(--radio-total);
+  background: var(--burbuja-mia);
+  color: var(--sobre-oscuro);
+  cursor: pointer;
+}
+.boton.secundario { background: var(--gris-suave); color: var(--tinta); }
