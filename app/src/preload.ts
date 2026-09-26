@@ -7,4 +7,5 @@ contextBridge.exposeInMainWorld("discalaves", {
   enviar: (texto: string) => ipcRenderer.invoke("enviar", texto),
   alCambiarEstado: (f: (estado: unknown) => void) => ipcRenderer.on("estado", (_e, estado) => f(estado)),
   alRecibirTrozo: (f: (texto: string) => void) => ipcRenderer.on("trozo", (_e, texto) => f(texto)),
+  alPaso: (f: () => void) => ipcRenderer.on("paso", () => f()),
 });

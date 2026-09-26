@@ -4,6 +4,7 @@ import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { DEFINICIONES, ejecutarHerramienta } from "./herramientas";
 
 // ponytail: rutas y puerto fijos para un solo empleado; el instalador y el gestor de modelos los definirán.
 const IA = process.env.DISCALAVES_IA ?? path.join(os.homedir(), "Documents", "IA-discalves");
@@ -11,15 +12,27 @@ const SERVIDOR = path.join(IA, "llama.cpp", "llama-server");
 const MODELO = path.join(IA, "modelos", "Qwen3.5-9B-Q4_K_M.gguf");
 const PUERTO = 8089;
 const CLAVE = randomBytes(24).toString("hex"); // sin clave, cualquier web abierta en el navegador podría usar el servidor
-const CONTEXTO_MENSAJES = 20; // ponytail: ventana fija de historial; resumir cuando las conversaciones crezcan
+const CARPETA = path.join(IA, "trabajo", "qwen"); // su computadora aislada la ve como /home/qwen
+const CONTEXTO_CARACTERES = 16000; // ponytail: ventana por tamaño (~5k tokens de 8k); resumir cuando las conversaciones crezcan
+const MAX_PASOS = 8; // honestidad con modelos pequeños: tras 8 herramientas seguidas se detiene y pregunta
 
 const SISTEMA =
-  "Eres qwen, un empleado de Discalaves que corre en la computadora del usuario. " +
-  "Responde en el idioma del usuario, de forma breve y clara. Si no sabes algo o no puedes hacerlo, dilo. " +
-  "Todavía no tienes acceso a internet, archivos ni herramientas: por ahora solo puedes conversar.";
+  "Eres qwen, un empleado de Discalaves que trabaja en la computadora del usuario. " +
+  "Responde en el idioma del usuario, de forma breve y clara. " +
+  "Tienes una computadora aislada con terminal e internet (herramientas terminal y escribir_archivo); tu carpeta es /home/qwen. " +
+  "Trabaja en pasos cortos y cuenta al usuario qué hiciste y qué encontraste. " +
+  "Si no sabes algo, un comando falla o no puedes hacerlo, dilo en vez de inventar. " +
+  "Antes de borrar archivos, enviar algo o pagar, pregunta al usuario y espera su respuesta. " +
+  "Usa sudo solo si es imprescindible: el usuario tendrá que escribir su contraseña.";
 
-interface Mensaje { de: "yo" | "qwen"; texto: string; t: number }
-type Estado = { fase: "cargando" | "listo" | "escribiendo" } | { fase: "error"; detalle: string };
+interface Llamada { id: string; nombre: string; argumentos: string }
+type Mensaje =
+  | { de: "yo"; texto: string; t: number }
+  | { de: "qwen"; texto: string; t: number; llamadas?: Llamada[] }
+  | { de: "herramienta"; id: string; nombre: string; argumentos: string; salida: string; codigo: number; t: number };
+type Estado =
+  | { fase: "cargando" | "listo" | "escribiendo" }
+  | { fase: "ejecutando" | "esperando-clave" | "error"; detalle: string };
 
 const archivoHistorial = () => path.join(app.getPath("userData"), "conversaciones", "qwen.json");
 let historial: Mensaje[] = [];
@@ -70,7 +83,12 @@ function iniciarServidor() {
   esperar();
 }
 
-async function* trozos(respuesta: Response) {
+interface Delta {
+  content?: string;
+  tool_calls?: { index: number; id?: string; function?: { name?: string; arguments?: string } }[];
+}
+
+async function* deltas(respuesta: Response): AsyncGenerator<Delta> {
   const lector = respuesta.body!.pipeThrough(new TextDecoderStream()).getReader();
   let resto = "";
   for (;;) {
@@ -80,10 +98,56 @@ async function* trozos(respuesta: Response) {
     resto = lineas.pop()!;
     for (const l of lineas) {
       if (!l.startsWith("data: ") || l === "data: [DONE]") continue;
-      const t = JSON.parse(l.slice(6)).choices?.[0]?.delta?.content;
-      if (t) yield t as string;
+      const d = JSON.parse(l.slice(6)).choices?.[0]?.delta;
+      if (d) yield d;
     }
   }
+}
+
+// Últimos mensajes que caben, empezando siempre en un mensaje del usuario para no partir
+// una llamada a herramienta de su resultado.
+function contexto() {
+  let inicio = 0, caracteres = 0;
+  for (let i = historial.length - 1; i >= 0; i--) {
+    caracteres += JSON.stringify(historial[i]).length;
+    if (historial[i].de !== "yo") continue;
+    inicio = i;
+    if (caracteres > CONTEXTO_CARACTERES) break;
+  }
+  return historial.slice(inicio).map((m) => {
+    if (m.de === "yo") return { role: "user", content: m.texto };
+    if (m.de === "herramienta") return { role: "tool", tool_call_id: m.id, content: `código de salida ${m.codigo}\n${m.salida}` };
+    return {
+      role: "assistant",
+      content: m.texto,
+      ...(m.llamadas && { tool_calls: m.llamadas.map((l) => ({ id: l.id, type: "function", function: { name: l.nombre, arguments: l.argumentos } })) }),
+    };
+  });
+}
+
+// Un turno del modelo: el texto se reenvía a la interfaz mientras llega; las llamadas se acumulan.
+async function turno(interfaz: Electron.WebContents) {
+  const r = await fetch(`http://127.0.0.1:${PUERTO}/v1/chat/completions`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${CLAVE}`, "content-type": "application/json" },
+    body: JSON.stringify({ stream: true, tools: DEFINICIONES, messages: [{ role: "system", content: SISTEMA }, ...contexto()] }),
+  });
+  if (!r.ok) throw new Error(`el servidor respondió ${r.status}: ${(await r.text()).slice(0, 200)}`);
+  let texto = "";
+  const llamadas: Llamada[] = [];
+  for await (const d of deltas(r)) {
+    if (d.content) {
+      texto += d.content;
+      interfaz.send("trozo", d.content);
+    }
+    for (const tc of d.tool_calls ?? []) {
+      const l = (llamadas[tc.index] ??= { id: "", nombre: "", argumentos: "" });
+      if (tc.id) l.id = tc.id;
+      l.nombre += tc.function?.name ?? "";
+      l.argumentos += tc.function?.arguments ?? "";
+    }
+  }
+  return { texto: texto.trim(), llamadas: llamadas.filter((l) => l?.nombre).map((l, i) => ({ ...l, id: l.id || `llamada-${Date.now()}-${i}` })) };
 }
 
 ipcMain.handle("historial", () => historial);
@@ -94,33 +158,27 @@ ipcMain.handle("enviar", async (ev, entrada: unknown) => {
 
   historial.push({ de: "yo", texto, t: Date.now() });
   guardarHistorial();
-  cambiarEstado({ fase: "escribiendo" });
-  let respuesta = "";
   try {
-    const r = await fetch(`http://127.0.0.1:${PUERTO}/v1/chat/completions`, {
-      method: "POST",
-      headers: { authorization: `Bearer ${CLAVE}`, "content-type": "application/json" },
-      body: JSON.stringify({
-        stream: true,
-        messages: [
-          { role: "system", content: SISTEMA },
-          ...historial.slice(-CONTEXTO_MENSAJES).map((m) => ({ role: m.de === "yo" ? "user" : "assistant", content: m.texto })),
-        ],
-      }),
-    });
-    if (!r.ok) throw new Error(`el servidor respondió ${r.status}`);
-    for await (const t of trozos(r)) {
-      respuesta += t;
-      ev.sender.send("trozo", t);
+    for (let paso = 0; paso < MAX_PASOS; paso++) {
+      cambiarEstado({ fase: "escribiendo" });
+      const { texto, llamadas } = await turno(ev.sender);
+      if (texto || llamadas.length) historial.push({ de: "qwen", texto, t: Date.now(), ...(llamadas.length && { llamadas }) });
+      guardarHistorial();
+      if (!llamadas.length) return {};
+      for (const l of llamadas) {
+        const r = await ejecutarHerramienta(CARPETA, l.nombre, l.argumentos, (fase, detalle) => cambiarEstado({ fase, detalle }));
+        historial.push({ de: "herramienta", ...l, ...r, t: Date.now() });
+        guardarHistorial();
+      }
+      ev.sender.send("paso");
     }
+    historial.push({ de: "qwen", texto: `me detuve después de ${MAX_PASOS} pasos para que revises cómo va. ¿sigo?`, t: Date.now() });
+    guardarHistorial();
     return {};
   } catch (e) {
     return { error: `no pude obtener respuesta: ${(e as Error).message}` };
   } finally {
-    // Aunque falle a medias, lo recibido se guarda para no perderlo.
-    if (respuesta.trim()) historial.push({ de: "qwen", texto: respuesta.trim(), t: Date.now() });
-    guardarHistorial();
-    if ((estado as Estado).fase === "escribiendo") cambiarEstado({ fase: "listo" }); // pudo pasar a "error" mientras tanto
+    if ((estado as Estado).fase !== "error") cambiarEstado({ fase: "listo" });
   }
 });
 
