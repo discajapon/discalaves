@@ -1,15 +1,30 @@
-// Dibuja la lista de conversaciones y el hilo activo a partir de datos.ts.
+// Conversación con el único empleado por ahora: qwen, servido por llama-server local (ver main.ts).
 
-const ICONOS: Record<Glifo, string> = {
-  buscar: '<circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/>',
-  pluma: '<path d="M4 20l4-1 11-11-3-3L5 16z"/>',
-  grafica: '<path d="M5 19v-8M12 19V5M19 19v-6"/>',
-  sobre: '<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M3 7l9 6 9-6"/>',
-  lista: '<path d="M4 7l2 2 3-3M4 16l2 2 3-3M13 8h7M13 17h7"/>',
+interface MensajeChat { de: "yo" | "qwen"; texto: string; t: number }
+type EstadoQwen = { fase: "cargando" | "listo" | "escribiendo" } | { fase: "error"; detalle: string };
+declare const discalaves: {
+  historial(): Promise<MensajeChat[]>;
+  estado(): Promise<EstadoQwen>;
+  enviar(texto: string): Promise<{ error?: string }>;
+  alCambiarEstado(f: (e: EstadoQwen) => void): void;
+  alRecibirTrozo(f: (t: string) => void): void;
 };
 
-const porId = new Map(EMPLEADOS.map((e) => [e.id, e]));
-let activa = CONVERSACIONES[0].id;
+const CONTACTO = { nombre: "qwen", acento: "violeta" };
+const GLIFO_QWEN = '<path d="M5 5h14v10H10l-5 4z"/>';
+const TEXTO_ESTADO: Record<EstadoQwen["fase"], string> = {
+  cargando: "cargando el modelo…",
+  listo: "en línea · local",
+  escribiendo: "escribiendo…",
+  error: "sin conexión",
+};
+
+let mensajes: MensajeChat[] = [];
+let estadoQwen: EstadoQwen = { fase: "cargando" };
+let burbujaEnCurso: HTMLElement | null = null;
+
+const hilo = document.getElementById("hilo")!;
+const entrada = document.getElementById("entrada") as HTMLInputElement;
 
 function crear(etiqueta: string, clase = "", texto = ""): HTMLElement {
   const el = document.createElement(etiqueta);
@@ -18,90 +33,120 @@ function crear(etiqueta: string, clase = "", texto = ""): HTMLElement {
   return el;
 }
 
-function avatar(miembros: string[]): HTMLElement {
-  const grupo = crear("span", miembros.length > 1 ? "avatares grupo" : "avatares");
-  for (const id of miembros) {
-    const e = porId.get(id)!;
-    const a = crear("span", "avatar");
-    a.style.setProperty("--acento", `var(--acento-${e.acento})`);
-    a.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${ICONOS[e.glifo]}</svg>`;
-    grupo.append(a);
-  }
+function avatarQwen(): HTMLElement {
+  const grupo = crear("span", "avatares");
+  const a = crear("span", "avatar");
+  a.style.setProperty("--acento", `var(--acento-${CONTACTO.acento})`);
+  a.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${GLIFO_QWEN}</svg>`;
+  grupo.append(a);
   return grupo;
 }
 
-function ultimaLinea(c: Conversacion): string {
-  const m = [...c.mensajes].reverse().find((m) => !("separador" in m));
-  if (!m || "separador" in m) return "";
-  const texto = m.texto ?? m.checks!.map((k) => `✓ ${k.etiqueta}`).join("  ");
-  const quien = m.de === "yo" ? "tú: " : c.miembros.length > 1 ? `${porId.get(m.de)!.nombre}: ` : "";
-  return quien + texto;
+const hora = (t: number) => new Date(t).toLocaleTimeString("es", { hour: "numeric", minute: "2-digit" });
+
+function etiquetaDia(t: number): string {
+  const dias = Math.round((new Date().setHours(0, 0, 0, 0) - new Date(t).setHours(0, 0, 0, 0)) / 864e5);
+  const dia = dias === 0 ? "Hoy" : dias === 1 ? "Ayer" : new Date(t).toLocaleDateString("es", { day: "numeric", month: "short" });
+  return `${dia} ${hora(t)}`;
+}
+
+function horaCorta(t: number): string {
+  const d = new Date(t);
+  if (d.toDateString() === new Date().toDateString()) return hora(t);
+  return d.toLocaleDateString("es", { day: "numeric", month: "short" });
 }
 
 function dibujarLista() {
-  const lista = document.getElementById("lista")!;
-  lista.replaceChildren();
-  for (const c of CONVERSACIONES) {
-    const fila = crear("button", "fila");
-    fila.setAttribute("aria-current", String(c.id === activa));
-    const av = avatar(c.miembros);
-    if (c.noLeido) av.append(crear("span", "punto", ""));
-    const cuerpo = crear("span", "fila-cuerpo");
-    const arriba = crear("span", "fila-arriba");
-    arriba.append(crear("span", "nombre", c.nombre), crear("span", "hora", c.hora));
-    cuerpo.append(arriba, crear("span", "vista", ultimaLinea(c)));
-    fila.append(av, cuerpo);
-    fila.addEventListener("click", () => {
-      activa = c.id;
-      c.noLeido = false;
-      dibujarLista();
-      dibujarHilo();
-    });
-    lista.append(fila);
-  }
+  const ultimo = mensajes.at(-1);
+  const fila = crear("button", "fila");
+  fila.setAttribute("aria-current", "true");
+  const cuerpo = crear("span", "fila-cuerpo");
+  const arriba = crear("span", "fila-arriba");
+  arriba.append(crear("span", "nombre", CONTACTO.nombre), crear("span", "hora", ultimo ? horaCorta(ultimo.t) : ""));
+  const vista = estadoQwen.fase === "escribiendo" ? "escribiendo…" : ultimo ? (ultimo.de === "yo" ? "tú: " : "") + ultimo.texto : "sin mensajes";
+  cuerpo.append(arriba, crear("span", "vista", vista));
+  fila.append(avatarQwen(), cuerpo);
+  document.getElementById("lista")!.replaceChildren(fila);
+}
+
+function burbuja(de: MensajeChat["de"], texto: string): HTMLElement {
+  const fila = crear("div", de === "yo" ? "mensaje mio" : "mensaje");
+  const b = crear("div", "burbuja");
+  // ponytail: del markdown del modelo solo se interpretan las **negritas**; el resto se ve tal cual.
+  const p = crear("p");
+  texto.split(/\*\*(.+?)\*\*/).forEach((parte, i) => p.append(i % 2 ? crear("strong", "", parte) : parte));
+  b.append(p);
+  fila.append(b);
+  return fila;
+}
+
+function aviso(texto: string) {
+  hilo.append(crear("p", "separador aviso", texto));
+  hilo.scrollTop = hilo.scrollHeight;
 }
 
 function dibujarHilo() {
-  const c = CONVERSACIONES.find((c) => c.id === activa)!;
-  const cab = document.getElementById("cab-avatar")!;
-  cab.replaceChildren(avatar(c.miembros));
-  document.getElementById("cab-nombre")!.textContent = c.nombre;
-  (document.getElementById("entrada") as HTMLInputElement).placeholder = `Mensaje a ${c.nombre}`;
-
-  const hilo = document.getElementById("hilo")!;
   hilo.replaceChildren();
-  let anterior = "";
-  for (const m of c.mensajes) {
-    if ("separador" in m) {
-      hilo.append(crear("p", "separador", m.separador));
-      anterior = "";
-      continue;
-    }
-    const mio = m.de === "yo";
-    const fila = crear("div", mio ? "mensaje mio" : "mensaje");
-    if (!mio && c.miembros.length > 1 && m.de !== anterior) fila.append(crear("span", "autor", porId.get(m.de)!.nombre));
-    const burbuja = crear("div", "burbuja");
-    if (m.texto) burbuja.append(crear("p", "", m.texto));
-    if (m.checks) {
-      const ul = crear("ul", "checks");
-      for (const k of m.checks) {
-        const li = crear("li", "", "✓ ");
-        li.append(crear("strong", "", k.etiqueta), ` → ${k.detalle}`);
-        ul.append(li);
-      }
-      burbuja.append(ul);
-    }
-    if (m.reaccion) burbuja.append(crear("span", "reaccion", m.reaccion));
-    fila.append(burbuja);
-    hilo.append(fila);
-    anterior = m.de;
+  if (!mensajes.length) hilo.append(crear("p", "separador", "escríbele a qwen para empezar. corre en tu computadora: nada sale de ella."));
+  let anterior = 0;
+  for (const m of mensajes) {
+    if (m.t - anterior > 60 * 60 * 1000) hilo.append(crear("p", "separador", etiquetaDia(m.t)));
+    hilo.append(burbuja(m.de, m.texto));
+    anterior = m.t;
   }
   hilo.scrollTop = hilo.scrollHeight;
 }
 
-document.getElementById("usuario-iniciales")!.textContent = USUARIO.iniciales;
-document.getElementById("usuario-nombre")!.textContent = USUARIO.nombre;
-// ponytail: el cuadro de texto aún no envía nada; se conecta cuando existan los agentes.
-document.getElementById("redactor")!.addEventListener("submit", (ev) => ev.preventDefault());
-dibujarLista();
-dibujarHilo();
+function dibujarEstado() {
+  const el = document.getElementById("cab-estado")!;
+  el.textContent = estadoQwen.fase === "error" ? `${TEXTO_ESTADO.error}: ${estadoQwen.detalle}` : TEXTO_ESTADO[estadoQwen.fase];
+  el.dataset.fase = estadoQwen.fase;
+  (document.getElementById("enviar") as HTMLButtonElement).disabled = estadoQwen.fase !== "listo";
+}
+
+async function recargar() {
+  mensajes = await discalaves.historial();
+  dibujarLista();
+  dibujarHilo();
+}
+
+discalaves.alCambiarEstado((e) => {
+  estadoQwen = e;
+  dibujarEstado();
+  dibujarLista();
+});
+
+discalaves.alRecibirTrozo((t) => {
+  if (!burbujaEnCurso) return;
+  burbujaEnCurso.classList.remove("pensando");
+  burbujaEnCurso.textContent += t;
+  hilo.scrollTop = hilo.scrollHeight;
+});
+
+document.getElementById("redactor")!.addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const texto = entrada.value.trim();
+  if (!texto || estadoQwen.fase !== "listo") return;
+  entrada.value = "";
+  hilo.append(burbuja("yo", texto));
+  const respuesta = burbuja("qwen", "");
+  burbujaEnCurso = respuesta.querySelector("p")!;
+  burbujaEnCurso.classList.add("pensando");
+  hilo.append(respuesta);
+  hilo.scrollTop = hilo.scrollHeight;
+
+  const { error } = await discalaves.enviar(texto);
+  burbujaEnCurso = null;
+  await recargar();
+  if (error) aviso(error);
+  entrada.focus();
+});
+
+document.getElementById("cab-avatar")!.replaceChildren(avatarQwen());
+document.getElementById("cab-nombre")!.textContent = CONTACTO.nombre;
+entrada.placeholder = `Mensaje a ${CONTACTO.nombre}`;
+discalaves.estado().then((e) => {
+  estadoQwen = e;
+  dibujarEstado();
+});
+recargar();
