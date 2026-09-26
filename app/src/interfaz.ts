@@ -286,6 +286,50 @@ discalaves.alAprobacion(async ({ id, conversacion, descripcion }) => {
   si.focus();
 });
 
+// ---- Menú del +: IAs instaladas (qwen incluido y los modelos de Ollama) ----
+const menuIA = document.getElementById("menu-ia")!;
+
+function opcionIA(m: Modelo): HTMLElement {
+  const b = crear("button", "opcion-ia");
+  b.setAttribute("type", "button");
+  const nombre = m.proveedor === "qwen" ? "qwen" : m.modelo.replace(/:latest$/, "");
+  const abierta = conversaciones.some((c) => c.proveedor === m.proveedor && (c.proveedor === "qwen" || c.modelo === m.modelo));
+  const arriba = crear("span", "fila-arriba");
+  arriba.append(crear("span", "nombre", nombre), crear("span", "detalle", abierta ? "abierta" : ""));
+  b.append(arriba, crear("span", "detalle", m.detalle));
+  if (!m.herramientas) b.append(crear("strong", "solo-chat", "solo chat: sin navegador, terminal ni archivos"));
+  b.addEventListener("click", async () => {
+    const r = await discalaves.nuevaConversacion(m.proveedor, m.modelo);
+    menuIA.hidePopover();
+    if (r.error) return aviso(r.error);
+    await seleccionar(r.id!);
+  });
+  return b;
+}
+
+async function llenarMenuIA() {
+  menuIA.replaceChildren(crear("p", "detalle", "buscando modelos…"));
+  const { modelos, ollama } = await discalaves.modelos();
+  const incluidos = modelos.filter((m) => m.proveedor === "qwen");
+  const deOllama = modelos.filter((m) => m.proveedor === "ollama");
+  menuIA.replaceChildren(crear("p", "menu-titulo", "incluido"), ...incluidos.map(opcionIA), crear("p", "menu-titulo", "Ollama"));
+  if (!ollama) menuIA.append(crear("p", "detalle", "Ollama no responde en este equipo; ¿está en marcha?"));
+  else if (!deOllama.length) menuIA.append(crear("p", "detalle", "no hay modelos instalados (ollama pull …)"));
+  else menuIA.append(...deOllama.map(opcionIA));
+  menuIA.querySelector("button")?.focus();
+}
+
+menuIA.addEventListener("toggle", (ev) => {
+  if ((ev as ToggleEvent).newState === "open") void llenarMenuIA();
+});
+menuIA.addEventListener("keydown", (ev) => {
+  if (ev.key !== "ArrowDown" && ev.key !== "ArrowUp") return;
+  ev.preventDefault();
+  const opciones = [...menuIA.querySelectorAll("button")];
+  const i = opciones.indexOf(document.activeElement as HTMLButtonElement);
+  opciones[(i + (ev.key === "ArrowDown" ? 1 : -1) + opciones.length) % opciones.length]?.focus();
+});
+
 // ---- Pantalla en vivo: solo se transmite mientras está abierta ----
 const panel = document.querySelector(".panel")!;
 const pantalla = document.getElementById("pantalla")!;
