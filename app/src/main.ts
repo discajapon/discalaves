@@ -143,7 +143,16 @@ function crearVentana() {
   ventana.loadFile(path.join(__dirname, "..", "index.html"));
 }
 
+// Una sola instancia: una segunda no podría usar el puerto de llama-server.
+const primera = app.requestSingleInstanceLock();
+if (!primera) app.quit();
+app.on("second-instance", () => {
+  if (ventana?.isMinimized()) ventana.restore();
+  ventana?.focus();
+});
+
 app.whenReady().then(() => {
+  if (!primera) return;
   leerHistorial();
   iniciarServidor();
   crearVentana();
