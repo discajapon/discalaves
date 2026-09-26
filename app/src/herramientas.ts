@@ -121,8 +121,9 @@ async function delicado(nombre: string, args: Record<string, unknown>): Promise<
   return null;
 }
 
+const NAVEGADOR = { buscar_web: 1, abrir_pagina: 1, ver_pagina: 1, hacer_clic: 1, escribir_en: 1 };
+
 async function ejecutarNavegador(nombre: string, t: (k: string) => string, enviar: boolean): Promise<string | null> {
-  if (navegador.controlUsuario) return "el usuario tomó el control de tu navegador; espera a que lo devuelva o pregúntale.";
   if (nombre === "buscar_web" && t("consulta")) return navegador.buscarWeb(t("consulta"));
   if (nombre === "abrir_pagina" && t("url")) return navegador.abrirPagina(t("url"));
   if (nombre === "ver_pagina") return navegador.verPagina();
@@ -152,6 +153,9 @@ export async function ejecutarHerramienta(ctx: Contexto, nombre: string, argumen
     const script = 'mkdir -p -- "$(dirname -- "$1")" && cat > "$1" && echo "guardado: $1 ($(wc -c < "$1") bytes)"';
     const contenido = typeof args.contenido === "string" ? args.contenido : "";
     return ejecutar("bwrap", caja(carpeta, ["/bin/bash", "-c", script, "escribir", texto("ruta")]), TIEMPO_CAJA, contenido);
+  }
+  if (nombre in NAVEGADOR && navegador.controlUsuario) {
+    return { salida: "el usuario tomó el control de tu navegador; espera a que lo devuelva o pregúntale.", codigo: 1 };
   }
   try {
     avisar("ejecutando", `${nombre.replace("_", " ")} ${texto("consulta") || texto("url") || texto("texto") || texto("campo")}`.trim());
