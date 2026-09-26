@@ -35,6 +35,7 @@
   --e8: 32px;
 
   --fuente: "Inter", "Cantarell", "Noto Sans", system-ui, sans-serif;
+  --fuente-mono: "JetBrains Mono", "DejaVu Sans Mono", ui-monospace, monospace;
   --texto: 15px;
   --texto-chico: 12px; /* ≈ 0.8 × cuerpo */
   --avatar: 36px;
@@ -345,3 +346,18 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 .redactor:has(input:placeholder-shown) .icono-enviar,
 .redactor:not(:has(input:placeholder-shown)) .icono-micro { display: none; }
 .microfono:disabled { opacity: 0.4; cursor: default; }
+
+/* Pasos de herramientas */
+.herramienta { font-size: 13px; }
+.herramienta summary { cursor: pointer; list-style: none; overflow-wrap: anywhere; }
+.herramienta summary::-webkit-details-marker { display: none; }
+.herramienta code, .herramienta pre { font-family: var(--fuente-mono); }
+.herramienta pre {
+  margin-top: var(--e2);
+  max-height: 240px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: var(--texto-chico);
+}
+.herramienta.fallo summary { color: var(--notificacion-texto); }
