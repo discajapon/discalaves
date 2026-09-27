@@ -1,20 +1,21 @@
-// Comprueba el aislamiento de las herramientas de qwen (sin modelo ni sudo): npm run prueba
+// Comprueba el aislamiento de las herramientas de las IAs (sin modelo ni sudo): npm run prueba
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { ejecutarHerramienta } from "./herramientas";
+import { navegadorDe } from "./navegador";
 
 async function main() {
   const carpeta = fs.mkdtempSync(path.join(os.tmpdir(), "discalaves-prueba-"));
   const fuera = path.join(os.homedir(), `.discalaves-no-debe-existir-${process.pid}`);
   let pedidas = 0;
-  const ctx = { carpeta, avisar: () => {}, aprobar: async () => (pedidas++, false) };
+  const ctx = { carpeta, usuario: "prueba", navegador: navegadorDe(carpeta, "prueba"), avisar: () => {}, aprobar: async () => (pedidas++, false) };
   const correr = (nombre: string, args: object) => ejecutarHerramienta(ctx, nombre, JSON.stringify(args));
 
   let r = await correr("terminal", { comando: "echo hola && pwd" });
   assert.equal(r.codigo, 0);
-  assert.match(r.salida, /hola\n\/home\/qwen/);
+  assert.match(r.salida, /hola\n\/home\/prueba/);
 
   r = await correr("terminal", { comando: `ls ${os.homedir()}` });
   assert.notEqual(r.codigo, 0, "la caja no debe ver la carpeta personal");
@@ -35,6 +36,15 @@ async function main() {
 
   r = await correr("terminal", { comando: "exit 3" });
   assert.equal(r.codigo, 3);
+
+  // Otra IA tiene su propia computadora: otro /home y sin ver los archivos de la primera.
+  const carpeta2 = fs.mkdtempSync(path.join(os.tmpdir(), "discalaves-prueba-"));
+  const ctx2 = { ...ctx, carpeta: carpeta2, usuario: "otra", navegador: navegadorDe(carpeta2, "otra") };
+  r = await ejecutarHerramienta(ctx2, "terminal", JSON.stringify({ comando: "pwd; ls /home; cat /home/prueba/informes/a.md" }));
+  assert.match(r.salida, /^\/home\/otra\notra\n/, r.salida);
+  assert.notEqual(r.codigo, 0, "una IA no debe ver la carpeta de otra");
+  assert.notEqual(ctx.navegador, ctx2.navegador, "cada IA debe tener su propio navegador");
+  fs.rmSync(carpeta2, { recursive: true, force: true });
 
   fs.rmSync(carpeta, { recursive: true, force: true });
   console.log("herramientas: ok");

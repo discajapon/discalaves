@@ -5,7 +5,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { DEFINICIONES, ejecutarHerramienta } from "./herramientas";
-import * as navegador from "./navegador";
+import { cerrarNavegadores, configurarNavegador, navegadorDe, type Navegador } from "./navegador";
 
 // ponytail: rutas y puerto fijos para un solo empleado; el instalador y el gestor de modelos los definirán.
 const IA = process.env.DISCALAVES_IA ?? path.join(os.homedir(), "Documents", "IA-discalves");
@@ -13,7 +13,6 @@ const SERVIDOR = path.join(IA, "llama.cpp", "llama-server");
 const MODELO = path.join(IA, "modelos", "Qwen3.5-9B-Q4_K_M.gguf");
 const PUERTO = 8089;
 const CLAVE = randomBytes(24).toString("hex"); // sin clave, cualquier web abierta en el navegador podría usar el servidor
-const CARPETA = path.join(IA, "trabajo", "qwen"); // su computadora aislada la ve como /home/qwen
 const CONTEXTO_CARACTERES = 32000; // ponytail: ventana por tamaño (~9k tokens de 16k); resumir cuando las conversaciones crezcan
 const MAX_PASOS = 8; // honestidad con modelos pequeños: tras 8 herramientas seguidas se detiene y pregunta
 const OLLAMA = "http://127.0.0.1:11434"; // ponytail: dirección por defecto de Ollama; configurable cuando exista el gestor de modelos
@@ -24,10 +23,19 @@ interface Conversacion { id: string; nombre: string; proveedor: "qwen" | "ollama
 interface Modelo { proveedor: "qwen" | "ollama"; modelo: string; detalle: string; herramientas: boolean }
 const QWEN: Conversacion = { id: "qwen", nombre: "qwen", proveedor: "qwen", modelo: "Qwen3.5-9B", herramientas: true };
 
-const sistemaConHerramientas = (nombre: string) =>
+// Computadora propia de cada IA: carpeta IA-discalves/trabajo/<usuario>, vista dentro de su caja
+// como /home/<usuario>, y su navegador (se abre la primera vez que lo usa).
+function computadora(c: Conversacion) {
+  let usuario = c.id === QWEN.id ? "qwen" : c.nombre.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 32) || "ia";
+  if (c.id !== QWEN.id && usuario === "qwen") usuario = "qwen-ollama"; // un modelo de Ollama llamado qwen no comparte con el incluido
+  const carpeta = path.join(IA, "trabajo", usuario);
+  return { usuario, carpeta, navegador: navegadorDe(carpeta, usuario) };
+}
+
+const sistemaConHerramientas = (nombre: string, usuario: string) =>
   `Eres ${nombre}, un empleado de Discalaves que trabaja en la computadora del usuario. ` +
   "Responde en el idioma del usuario, de forma breve y clara. " +
-  "Tienes una computadora aislada con terminal, navegador e internet; tu carpeta es /home/qwen. " +
+  `Tienes tu propia computadora aislada con terminal, navegador e internet; tu carpeta es /home/${usuario}. ` +
   "Para investigar en la web: buscar_web, luego abrir_pagina con las direcciones más útiles; para formularios: ver_pagina, hacer_clic y escribir_en. " +
   "Cita las direcciones de donde sacas la información. " +
   "Trabaja en pasos cortos y cuenta al usuario qué hiciste y qué encontraste. " +
@@ -205,7 +213,7 @@ function contexto(c: Conversacion) {
 // Un turno del modelo: el texto se reenvía a la interfaz mientras llega; las llamadas se acumulan.
 async function turno(c: Conversacion, interfaz: Electron.WebContents) {
   const url = c.proveedor === "qwen" ? `http://127.0.0.1:${PUERTO}/v1/chat/completions` : `${OLLAMA}/v1/chat/completions`;
-  const sistema = c.herramientas ? sistemaConHerramientas(c.nombre) : sistemaSoloChat(c.nombre);
+  const sistema = c.herramientas ? sistemaConHerramientas(c.nombre, computadora(c).usuario) : sistemaSoloChat(c.nombre);
   const r = await fetch(url, {
     method: "POST",
     headers: { authorization: `Bearer ${CLAVE}`, "content-type": "application/json" },
@@ -258,18 +266,30 @@ ipcMain.handle("aprobar", (_e, id: unknown, si: unknown) => {
   aprobaciones.delete(String(id));
 });
 
-// Vista en vivo: solo se transmite mientras la interfaz la pide.
-ipcMain.handle("pantalla:ver", async (ev, ver: unknown) => {
+// Vista en vivo: solo se transmite mientras la interfaz la pide, y solo la pantalla de una IA a la vez.
+let mirando: Navegador | undefined;
+const navegadorConHerramientas = (id: unknown) => {
+  const c = buscar(id);
+  return c?.herramientas ? computadora(c).navegador : undefined;
+};
+ipcMain.handle("pantalla:ver", async (ev, id: unknown, ver: unknown) => {
   try {
-    if (ver === true) await navegador.transmitir((f) => ev.sender.send("pantalla:fotograma", f));
-    else await navegador.detenerTransmision();
+    await mirando?.detenerTransmision();
+    mirando = undefined;
+    const n = navegadorConHerramientas(id);
+    if (ver === true && n) {
+      mirando = n;
+      await n.transmitir((f) => ev.sender.send("pantalla:fotograma", { ...f, id }));
+    }
     return {};
   } catch (e) {
     return { error: (e as Error).message.split("\n")[0] };
   }
 });
-ipcMain.handle("pantalla:control", (_e, activo: unknown) => navegador.tomarControl(activo === true));
-ipcMain.handle("pantalla:entrada", (_e, e: unknown) => {
+ipcMain.handle("pantalla:control", (_e, id: unknown, activo: unknown) => navegadorConHerramientas(id)?.tomarControl(activo === true));
+ipcMain.handle("pantalla:entrada", (_e, id: unknown, e: unknown) => {
+  const navegador = navegadorConHerramientas(id);
+  if (!navegador) return;
   const x = e as Record<string, unknown>;
   const num = (v: unknown) => typeof v === "number" && Number.isFinite(v);
   const str = (v: unknown, max: number) => typeof v === "string" && v.length > 0 && v.length <= max;
@@ -326,7 +346,7 @@ ipcMain.handle("enviar", async (ev, id: unknown, entrada: unknown) => {
       if (!llamadas.length) return {};
       for (const l of llamadas) {
         const r = await ejecutarHerramienta(
-          { carpeta: CARPETA, avisar: (fase, detalle) => cambiarEstado(c, { fase, detalle }), aprobar: (d) => pedirAprobacion(c, ev.sender, d) },
+          { ...computadora(c), avisar: (fase, detalle) => cambiarEstado(c, { fase, detalle }), aprobar: (d) => pedirAprobacion(c, ev.sender, d) },
           l.nombre,
           l.argumentos,
         );
@@ -376,7 +396,7 @@ app.on("second-instance", () => {
 
 app.whenReady().then(() => {
   if (!primera) return;
-  navegador.configurarNavegador({ ia: IA, carpeta: CARPETA, datos: app.getPath("userData") });
+  configurarNavegador({ ia: IA, datos: app.getPath("userData") });
   leerConversaciones();
   iniciarServidor();
   crearVentana();
@@ -385,5 +405,5 @@ app.on("window-all-closed", () => app.quit());
 app.on("will-quit", () => {
   saliendo = true;
   servidor?.kill();
-  void navegador.cerrarNavegador(); // la caja muere igualmente con la app (--die-with-parent)
+  void cerrarNavegadores(); // las cajas mueren igualmente con la app (--die-with-parent)
 });

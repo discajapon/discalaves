@@ -1,11 +1,11 @@
-// Herramientas de qwen. Todo corre dentro de una caja bubblewrap (sin ver las carpetas del usuario,
+// Herramientas de cada IA. Todo corre dentro de una caja bubblewrap (sin ver las carpetas del usuario,
 // con internet) salvo los comandos que empiezan por "sudo": esos corren en el sistema real y solo
 // después de que el usuario escriba su contraseña en el diálogo de GNOME (pkexec/polkit). La
 // contraseña nunca pasa por la app ni por el modelo.
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import { caja } from "./caja";
-import * as navegador from "./navegador";
+import type { Navegador } from "./navegador";
 
 const MAX_SALIDA = 3000; // caracteres de salida que ve el modelo
 const TIEMPO_CAJA = 120_000;
@@ -17,7 +17,7 @@ export const DEFINICIONES = [
     function: {
       name: "terminal",
       description:
-        "Ejecuta un comando bash en tu computadora aislada: carpeta /home/qwen, con internet, sin acceso a los archivos del usuario. " +
+        "Ejecuta un comando bash en tu computadora aislada: tu carpeta de inicio (~), con internet, sin acceso a los archivos del usuario. " +
         "Devuelve la salida y el código de salida. Si de verdad necesitas permisos de administrador (por ejemplo instalar un paquete " +
         "con apt), empieza el comando con sudo: el usuario tendrá que escribir su contraseña y el comando correrá en su sistema real.",
       parameters: {
@@ -31,11 +31,11 @@ export const DEFINICIONES = [
     type: "function",
     function: {
       name: "escribir_archivo",
-      description: "Crea o reemplaza un archivo de texto en tu carpeta /home/qwen. Úsalo para dejar informes o notas.",
+      description: "Crea o reemplaza un archivo de texto en tu carpeta de inicio (~). Úsalo para dejar informes o notas.",
       parameters: {
         type: "object",
         properties: {
-          ruta: { type: "string", description: "ruta relativa a /home/qwen, por ejemplo: informes/resumen.md" },
+          ruta: { type: "string", description: "ruta relativa a tu carpeta de inicio, por ejemplo: informes/resumen.md" },
           contenido: { type: "string" },
         },
         required: ["ruta", "contenido"],
@@ -67,7 +67,9 @@ function herramienta(name: string, description: string, properties: Record<strin
 export interface Resultado { salida: string; codigo: number }
 export type Aviso = (fase: "ejecutando" | "esperando-clave", detalle: string) => void;
 export interface Contexto {
-  carpeta: string;
+  carpeta: string; // su /home en la caja
+  usuario: string; // nombre dentro de la caja: /home/<usuario>
+  navegador: Navegador; // el suyo, no compartido con otras IAs
   avisar: Aviso;
   aprobar: (descripcion: string) => Promise<boolean>; // el usuario decide en la interfaz
 }
@@ -95,11 +97,11 @@ function ejecutar(programa: string, argumentos: string[], tiempo: number, entrad
   });
 }
 
-async function terminal(carpeta: string, comando: string, avisar: Aviso): Promise<Resultado> {
+async function terminal({ carpeta, usuario, avisar }: Contexto, comando: string): Promise<Resultado> {
   const sudo = comando.match(/^\s*sudo\s+(?:-\S+\s+)*(.+)$/s);
   if (!sudo) {
     avisar("ejecutando", comando);
-    return ejecutar("bwrap", caja(carpeta, ["/bin/bash", "-c", comando]), TIEMPO_CAJA);
+    return ejecutar("bwrap", caja(carpeta, ["/bin/bash", "-c", comando], [], usuario), TIEMPO_CAJA);
   }
   avisar("esperando-clave", sudo[1]);
   // pkexec muestra el comando completo en el diálogo, así el usuario ve qué está autorizando.
@@ -111,7 +113,7 @@ async function terminal(carpeta: string, comando: string, avisar: Aviso): Promis
   return r;
 }
 
-async function delicado(nombre: string, args: Record<string, unknown>): Promise<string | null> {
+async function delicado(navegador: Navegador, nombre: string, args: Record<string, unknown>): Promise<string | null> {
   const t = (k: string) => String(args[k] ?? "");
   if (nombre === "terminal" && BORRADO.test(t("comando"))) return `borrar con: ${t("comando")}`;
   if (nombre === "hacer_clic" && DELICADO.test(t("texto"))) return `hacer clic en "${t("texto")}" en ${await navegador.urlActual()}`;
@@ -123,7 +125,7 @@ async function delicado(nombre: string, args: Record<string, unknown>): Promise<
 
 const NAVEGADOR = { buscar_web: 1, abrir_pagina: 1, ver_pagina: 1, hacer_clic: 1, escribir_en: 1 };
 
-async function ejecutarNavegador(nombre: string, t: (k: string) => string, enviar: boolean): Promise<string | null> {
+async function ejecutarNavegador(navegador: Navegador, nombre: string, t: (k: string) => string, enviar: boolean): Promise<string | null> {
   if (nombre === "buscar_web" && t("consulta")) return navegador.buscarWeb(t("consulta"));
   if (nombre === "abrir_pagina" && t("url")) return navegador.abrirPagina(t("url"));
   if (nombre === "ver_pagina") return navegador.verPagina();
@@ -133,7 +135,7 @@ async function ejecutarNavegador(nombre: string, t: (k: string) => string, envia
 }
 
 export async function ejecutarHerramienta(ctx: Contexto, nombre: string, argumentosJson: string): Promise<Resultado> {
-  const { carpeta, avisar } = ctx;
+  const { carpeta, usuario, avisar, navegador } = ctx;
   fs.mkdirSync(carpeta, { recursive: true });
   let args: Record<string, unknown>;
   try {
@@ -143,23 +145,23 @@ export async function ejecutarHerramienta(ctx: Contexto, nombre: string, argumen
   }
   const texto = (k: string) => (typeof args[k] === "string" ? (args[k] as string).trim() : "");
 
-  const accion = await delicado(nombre, args);
+  const accion = await delicado(navegador, nombre, args);
   if (accion && !(await ctx.aprobar(accion))) return { salida: "el usuario no lo permitió; no se hizo nada", codigo: 1 };
 
-  if (nombre === "terminal" && texto("comando")) return terminal(carpeta, texto("comando"), avisar);
+  if (nombre === "terminal" && texto("comando")) return terminal(ctx, texto("comando"));
   if (nombre === "escribir_archivo" && texto("ruta")) {
     avisar("ejecutando", `escribir ${texto("ruta")}`);
     // Se escribe desde dentro de la caja: así un enlace simbólico creado por el modelo no puede sacar el archivo fuera.
     const script = 'mkdir -p -- "$(dirname -- "$1")" && cat > "$1" && echo "guardado: $1 ($(wc -c < "$1") bytes)"';
     const contenido = typeof args.contenido === "string" ? args.contenido : "";
-    return ejecutar("bwrap", caja(carpeta, ["/bin/bash", "-c", script, "escribir", texto("ruta")]), TIEMPO_CAJA, contenido);
+    return ejecutar("bwrap", caja(carpeta, ["/bin/bash", "-c", script, "escribir", texto("ruta")], [], usuario), TIEMPO_CAJA, contenido);
   }
   if (nombre in NAVEGADOR && navegador.controlUsuario) {
     return { salida: "el usuario tomó el control de tu navegador; espera a que lo devuelva o pregúntale.", codigo: 1 };
   }
   try {
     avisar("ejecutando", `${nombre.replace("_", " ")} ${texto("consulta") || texto("url") || texto("texto") || texto("campo")}`.trim());
-    const salida = await ejecutarNavegador(nombre, texto, args.enviar === true);
+    const salida = await ejecutarNavegador(navegador, nombre, texto, args.enviar === true);
     if (salida !== null) return { salida, codigo: 0 };
   } catch (e) {
     return { salida: `error del navegador: ${(e as Error).message.split("\n")[0]}`, codigo: 1 };

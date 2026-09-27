@@ -1,4 +1,4 @@
-// Navegador de qwen: Chromium sin ventana dentro de la misma caja bubblewrap que la terminal,
+// Navegador de cada IA: Chromium sin ventana dentro de su propia caja bubblewrap (la misma que su terminal),
 // controlado por la estructura de la página (árbol de accesibilidad) con playwright-core, no por
 // píxeles. La pantalla se transmite a la interfaz solo mientras el usuario la está mirando.
 import fs from "node:fs";
@@ -14,13 +14,9 @@ const AGENTE = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like 
 
 export interface Fotograma { datos: string; ancho: number; alto: number; url: string }
 
-let opciones: { ia: string; carpeta: string; datos: string } | undefined;
-let contexto: Promise<BrowserContext> | undefined;
-let pagina: Page | undefined;
-let transmision: { cdp: CDPSession; enviar: (f: Fotograma) => void } | undefined;
-export let controlUsuario = false;
+let opciones: { ia: string; datos: string } | undefined;
 
-export function configurarNavegador(o: { ia: string; carpeta: string; datos: string }) {
+export function configurarNavegador(o: { ia: string; datos: string }) {
   opciones = o;
 }
 
@@ -31,51 +27,17 @@ function ejecutableChromium(dir: string): string {
 }
 
 // Playwright lanza este script en lugar de Chromium: así el navegador arranca dentro de la caja.
-function escribirEnvoltorio(): string {
-  const { ia, carpeta, datos } = opciones!;
+function escribirEnvoltorio(carpeta: string, usuario: string): string {
+  const { ia, datos } = opciones!;
   const dirNavegador = path.join(ia, "navegador");
   const comillas = (a: string) => `'${a.replace(/'/g, `'\\''`)}'`;
   const args = caja(carpeta, [ejecutableChromium(dirNavegador)], [
     "--bind", carpeta, carpeta, // el perfil del navegador vive en su carpeta, con la misma ruta que ve Playwright
     "--ro-bind", dirNavegador, dirNavegador,
-  ]);
-  const archivo = path.join(datos, "navegador-en-caja.sh");
+  ], usuario);
+  const archivo = path.join(datos, `navegador-en-caja-${usuario}.sh`);
   fs.writeFileSync(archivo, `#!/bin/sh\nexec bwrap ${args.map(comillas).join(" ")} "$@"\n`, { mode: 0o700 });
   return archivo;
-}
-
-async function abrirContexto(): Promise<BrowserContext> {
-  const ctx = await chromium.launchPersistentContext(path.join(opciones!.carpeta, ".navegador"), {
-    executablePath: escribirEnvoltorio(),
-    headless: true,
-    viewport: { width: ANCHO, height: ALTO },
-    userAgent: AGENTE,
-    locale: "es-ES",
-  });
-  pagina = ctx.pages()[0] ?? (await ctx.newPage());
-  // Si una página abre otra pestaña, qwen (y la transmisión) pasan a la nueva.
-  ctx.on("page", (p) => {
-    pagina = p;
-    if (transmision) void transmitir(transmision.enviar);
-  });
-  ctx.on("close", () => {
-    contexto = undefined;
-    pagina = undefined;
-  });
-  return ctx;
-}
-
-async function paginaActual(): Promise<Page> {
-  contexto ??= abrirContexto().catch((e) => {
-    contexto = undefined;
-    throw e;
-  });
-  await contexto;
-  return pagina!;
-}
-
-export async function cerrarNavegador() {
-  await (await contexto)?.close().catch(() => {});
 }
 
 // ---- Herramientas para el modelo ----
@@ -112,110 +74,167 @@ function desenvolverBing(url: string): string {
   }
 }
 
-export async function buscarWeb(consulta: string): Promise<string> {
-  const p = await paginaActual();
-  await p.goto(`https://www.bing.com/search?q=${encodeURIComponent(consulta)}&setlang=es`, { timeout: 30000 });
-  const resultados = await p.$$eval("li.b_algo", (els) =>
-    els.slice(0, 6).map((e) => ({
-      titulo: e.querySelector("h2")?.textContent?.trim() ?? "",
-      url: (e.querySelector("h2 a") as HTMLAnchorElement | null)?.href ?? "",
-      fragmento: e.querySelector(".b_caption p, p")?.textContent?.trim().slice(0, 200) ?? "",
-    })),
-  );
-  if (!resultados.length) return `sin resultados para "${consulta}" (el buscador pudo bloquear la búsqueda)`;
-  return resultados.map((r, i) => `${i + 1}. ${r.titulo}\n   ${desenvolverBing(r.url)}\n   ${r.fragmento}`).join("\n");
-}
-
-export async function abrirPagina(url: string): Promise<string> {
-  const p = await paginaActual();
-  await p.goto(/^https?:\/\//.test(url) ? url : `https://${url}`, { timeout: 30000, waitUntil: "domcontentloaded" });
-  return resumen(p, await textoPrincipal(p));
-}
-
-export async function verPagina(): Promise<string> {
-  const p = await paginaActual();
-  return resumen(p, await estructura(p));
-}
-
-export async function hacerClic(texto: string): Promise<string> {
-  const p = await paginaActual();
-  const candidatos = [
-    p.getByRole("link", { name: texto }),
-    p.getByRole("button", { name: texto }),
-    p.getByRole("tab", { name: texto }),
-    p.getByRole("menuitem", { name: texto }),
-    p.getByText(texto),
-  ];
-  for (const c of candidatos) {
-    if (!(await c.count())) continue;
-    await c.first().click({ timeout: 8000 });
-    await esperarCarga(p);
-    return `hice clic en "${texto}".\n` + (await resumen(await paginaActual(), await estructura(await paginaActual())));
-  }
-  return `no encontré ningún enlace, botón o texto "${texto}" en la página. Usa ver_pagina para ver qué hay.`;
-}
-
-export async function escribirEn(campo: string, texto: string, enviar: boolean): Promise<string> {
-  const p = await paginaActual();
-  const candidatos = [
-    p.getByRole("textbox", { name: campo }),
-    p.getByRole("searchbox", { name: campo }),
-    p.getByRole("combobox", { name: campo }),
-    p.getByPlaceholder(campo),
-    p.getByLabel(campo),
-  ];
-  for (const c of candidatos) {
-    if (!(await c.count())) continue;
-    await c.first().fill(texto, { timeout: 8000 });
-    if (enviar) {
-      await c.first().press("Enter");
-      await esperarCarga(p);
-    }
-    return `escribí en "${campo}"${enviar ? " y lo envié" : ""}.\n` + (await resumen(await paginaActual(), await estructura(await paginaActual())));
-  }
-  return `no encontré el campo "${campo}". Usa ver_pagina para ver los campos disponibles.`;
-}
-
-// ---- Vista en vivo y control del usuario ----
-
-export async function transmitir(enviar: (f: Fotograma) => void) {
-  await detenerTransmision();
-  const p = await paginaActual();
-  const cdp = await p.context().newCDPSession(p);
-  transmision = { cdp, enviar };
-  cdp.on("Page.screencastFrame", (f) => {
-    void cdp.send("Page.screencastFrameAck", { sessionId: f.sessionId }).catch(() => {});
-    enviar({ datos: f.data, ancho: f.metadata.deviceWidth, alto: f.metadata.deviceHeight, url: p.url() });
-  });
-  await cdp.send("Page.startScreencast", { format: "jpeg", quality: 70, maxWidth: ANCHO, maxHeight: ALTO });
-}
-
-export async function detenerTransmision() {
-  const t = transmision;
-  transmision = undefined;
-  controlUsuario = false;
-  await t?.cdp.send("Page.stopScreencast").catch(() => {});
-  await t?.cdp.detach().catch(() => {});
-}
-
-export function tomarControl(activo: boolean) {
-  controlUsuario = activo && !!transmision;
-}
-
 export type Entrada =
   | { tipo: "clic"; x: number; y: number }
   | { tipo: "rueda"; dy: number }
   | { tipo: "tecla"; tecla: string };
 
-// Entradas del usuario cuando tomó el control. Coordenadas ya en píxeles de la página.
-export async function entradaUsuario(e: Entrada) {
-  if (!controlUsuario || !pagina) return;
-  const p = pagina;
-  if (e.tipo === "clic") await p.mouse.click(e.x, e.y);
-  else if (e.tipo === "rueda") await p.mouse.wheel(0, e.dy);
-  else await p.keyboard.press(e.tecla).catch(() => {}); // una tecla desconocida no debe romper nada
+// Un navegador por IA: perfil, pestañas y pantalla propios, en su carpeta (su /home).
+export class Navegador {
+  private contexto: Promise<BrowserContext> | undefined;
+  private pagina: Page | undefined;
+  private transmision: { cdp: CDPSession; enviar: (f: Fotograma) => void } | undefined;
+  controlUsuario = false;
+
+  constructor(readonly carpeta: string, readonly usuario: string) {}
+
+  private async abrirContexto(): Promise<BrowserContext> {
+    const ctx = await chromium.launchPersistentContext(path.join(this.carpeta, ".navegador"), {
+      executablePath: escribirEnvoltorio(this.carpeta, this.usuario),
+      headless: true,
+      viewport: { width: ANCHO, height: ALTO },
+      userAgent: AGENTE,
+      locale: "es-ES",
+    });
+    this.pagina = ctx.pages()[0] ?? (await ctx.newPage());
+    // Si una página abre otra pestaña, la IA (y la transmisión) pasan a la nueva.
+    ctx.on("page", (p) => {
+      this.pagina = p;
+      if (this.transmision) void this.transmitir(this.transmision.enviar);
+    });
+    ctx.on("close", () => {
+      this.contexto = undefined;
+      this.pagina = undefined;
+    });
+    return ctx;
+  }
+
+  private async paginaActual(): Promise<Page> {
+    this.contexto ??= this.abrirContexto().catch((e) => {
+      this.contexto = undefined;
+      throw e;
+    });
+    await this.contexto;
+    return this.pagina!;
+  }
+
+  async cerrar() {
+    await (await this.contexto)?.close().catch(() => {});
+  }
+
+  async buscarWeb(consulta: string): Promise<string> {
+    const p = await this.paginaActual();
+    await p.goto(`https://www.bing.com/search?q=${encodeURIComponent(consulta)}&setlang=es`, { timeout: 30000 });
+    const resultados = await p.$$eval("li.b_algo", (els) =>
+      els.slice(0, 6).map((e) => ({
+        titulo: e.querySelector("h2")?.textContent?.trim() ?? "",
+        url: (e.querySelector("h2 a") as HTMLAnchorElement | null)?.href ?? "",
+        fragmento: e.querySelector(".b_caption p, p")?.textContent?.trim().slice(0, 200) ?? "",
+      })),
+    );
+    if (!resultados.length) return `sin resultados para "${consulta}" (el buscador pudo bloquear la búsqueda)`;
+    return resultados.map((r, i) => `${i + 1}. ${r.titulo}\n   ${desenvolverBing(r.url)}\n   ${r.fragmento}`).join("\n");
+  }
+
+  async abrirPagina(url: string): Promise<string> {
+    const p = await this.paginaActual();
+    await p.goto(/^https?:\/\//.test(url) ? url : `https://${url}`, { timeout: 30000, waitUntil: "domcontentloaded" });
+    return resumen(p, await textoPrincipal(p));
+  }
+
+  async verPagina(): Promise<string> {
+    const p = await this.paginaActual();
+    return resumen(p, await estructura(p));
+  }
+
+  async hacerClic(texto: string): Promise<string> {
+    const p = await this.paginaActual();
+    const candidatos = [
+      p.getByRole("link", { name: texto }),
+      p.getByRole("button", { name: texto }),
+      p.getByRole("tab", { name: texto }),
+      p.getByRole("menuitem", { name: texto }),
+      p.getByText(texto),
+    ];
+    for (const c of candidatos) {
+      if (!(await c.count())) continue;
+      await c.first().click({ timeout: 8000 });
+      await esperarCarga(p);
+      return `hice clic en "${texto}".\n` + (await resumen(await this.paginaActual(), await estructura(await this.paginaActual())));
+    }
+    return `no encontré ningún enlace, botón o texto "${texto}" en la página. Usa ver_pagina para ver qué hay.`;
+  }
+
+  async escribirEn(campo: string, texto: string, enviar: boolean): Promise<string> {
+    const p = await this.paginaActual();
+    const candidatos = [
+      p.getByRole("textbox", { name: campo }),
+      p.getByRole("searchbox", { name: campo }),
+      p.getByRole("combobox", { name: campo }),
+      p.getByPlaceholder(campo),
+      p.getByLabel(campo),
+    ];
+    for (const c of candidatos) {
+      if (!(await c.count())) continue;
+      await c.first().fill(texto, { timeout: 8000 });
+      if (enviar) {
+        await c.first().press("Enter");
+        await esperarCarga(p);
+      }
+      return `escribí en "${campo}"${enviar ? " y lo envié" : ""}.\n` + (await resumen(await this.paginaActual(), await estructura(await this.paginaActual())));
+    }
+    return `no encontré el campo "${campo}". Usa ver_pagina para ver los campos disponibles.`;
+  }
+
+  // ---- Vista en vivo y control del usuario ----
+
+  async transmitir(enviar: (f: Fotograma) => void) {
+    await this.detenerTransmision();
+    const p = await this.paginaActual();
+    const cdp = await p.context().newCDPSession(p);
+    this.transmision = { cdp, enviar };
+    cdp.on("Page.screencastFrame", (f) => {
+      void cdp.send("Page.screencastFrameAck", { sessionId: f.sessionId }).catch(() => {});
+      enviar({ datos: f.data, ancho: f.metadata.deviceWidth, alto: f.metadata.deviceHeight, url: p.url() });
+    });
+    await cdp.send("Page.startScreencast", { format: "jpeg", quality: 70, maxWidth: ANCHO, maxHeight: ALTO });
+  }
+
+  async detenerTransmision() {
+    const t = this.transmision;
+    this.transmision = undefined;
+    this.controlUsuario = false;
+    await t?.cdp.send("Page.stopScreencast").catch(() => {});
+    await t?.cdp.detach().catch(() => {});
+  }
+
+  tomarControl(activo: boolean) {
+    this.controlUsuario = activo && !!this.transmision;
+  }
+
+  // Entradas del usuario cuando tomó el control. Coordenadas ya en píxeles de la página.
+  async entradaUsuario(e: Entrada) {
+    if (!this.controlUsuario || !this.pagina) return;
+    const p = this.pagina;
+    if (e.tipo === "clic") await p.mouse.click(e.x, e.y);
+    else if (e.tipo === "rueda") await p.mouse.wheel(0, e.dy);
+    else await p.keyboard.press(e.tecla).catch(() => {}); // una tecla desconocida no debe romper nada
+  }
+
+  async urlActual(): Promise<string> {
+    return this.pagina?.url() ?? "(sin página abierta)";
+  }
 }
 
-export async function urlActual(): Promise<string> {
-  return pagina?.url() ?? "(sin página abierta)";
+const navegadores = new Map<string, Navegador>();
+
+// Se crea al primer uso: un Chromium ocupa RAM y solo arranca cuando la IA lo necesita.
+export function navegadorDe(carpeta: string, usuario: string): Navegador {
+  let n = navegadores.get(usuario);
+  if (!n) navegadores.set(usuario, (n = new Navegador(carpeta, usuario)));
+  return n;
+}
+
+export async function cerrarNavegadores() {
+  await Promise.all([...navegadores.values()].map((n) => n.cerrar()));
 }
