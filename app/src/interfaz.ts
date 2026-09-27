@@ -6,7 +6,7 @@ type MensajeChat =
 type EstadoQwen =
   | { fase: "cargando" | "listo" | "escribiendo" }
   | { fase: "ejecutando" | "esperando-clave" | "esperando-aprobacion" | "error"; detalle: string };
-interface Fotograma { datos: string; ancho: number; alto: number; url: string }
+interface Fotograma { id: string; datos: string; ancho: number; alto: number; url: string }
 interface Conversacion {
   id: string; nombre: string; proveedor: "qwen" | "ollama"; modelo: string; herramientas: boolean;
   estado: EstadoQwen; ultimo?: MensajeChat;
@@ -24,9 +24,9 @@ declare const discalaves: {
   alPaso(f: (id: string) => void): void;
   aprobar(id: string, si: boolean): Promise<void>;
   alAprobacion(f: (p: { id: string; conversacion: string; descripcion: string }) => void): void;
-  verPantalla(ver: boolean): Promise<{ error?: string }>;
-  controlPantalla(activo: boolean): Promise<void>;
-  entradaPantalla(e: object): Promise<void>;
+  verPantalla(id: string, ver: boolean): Promise<{ error?: string }>;
+  controlPantalla(id: string, activo: boolean): Promise<void>;
+  entradaPantalla(id: string, e: object): Promise<void>;
   alFotograma(f: (f: Fotograma) => void): void;
 };
 
@@ -186,7 +186,8 @@ function dibujarCabecera() {
   entrada.placeholder = `Mensaje a ${c.nombre}`;
   // Sin herramientas no hay computadora que mirar.
   document.getElementById("ver-pantalla")!.hidden = !c.herramientas;
-  if (!c.herramientas && !pantalla.hidden) void mostrarPantalla(false);
+  // Cada IA tiene su navegador: si la pantalla está abierta, pasa a mostrar la de esta conversación.
+  if (!pantalla.hidden) void mostrarPantalla(c.herramientas);
   dibujarEstado();
 }
 
@@ -339,10 +340,10 @@ const botonControl = document.getElementById("tomar-control")!;
 let tamPagina = { ancho: 1280, alto: 800 };
 
 discalaves.alFotograma((f) => {
-  if (pantalla.hidden) return;
+  if (pantalla.hidden || f.id !== activa) return;
   tamPagina = { ancho: f.ancho, alto: f.alto };
   imgPantalla.src = `data:image/jpeg;base64,${f.datos}`;
-  document.getElementById("pantalla-url")!.textContent = f.url === "about:blank" ? "qwen todavía no abrió ninguna página" : f.url;
+  document.getElementById("pantalla-url")!.textContent = f.url === "about:blank" ? `${actual().nombre} todavía no abrió ninguna página` : f.url;
 });
 
 async function mostrarPantalla(ver: boolean) {
@@ -350,7 +351,10 @@ async function mostrarPantalla(ver: boolean) {
   panel.classList.toggle("viendo", ver);
   botonVer.setAttribute("aria-pressed", String(ver));
   if (!ver) controlar(false);
-  const { error } = await discalaves.verPantalla(ver);
+  if (ver) imgPantalla.removeAttribute("src"); // no mostrar la pantalla de otra IA mientras llega la nueva
+  imgPantalla.alt = `Navegador de ${actual().nombre} en vivo`;
+  pantalla.setAttribute("aria-label", `Pantalla de ${actual().nombre}`);
+  const { error } = await discalaves.verPantalla(activa, ver);
   if (error) {
     aviso(`no pude abrir su pantalla: ${error}`);
     mostrarPantalla(false);
@@ -358,7 +362,7 @@ async function mostrarPantalla(ver: boolean) {
 }
 
 function controlar(activo: boolean) {
-  void discalaves.controlPantalla(activo);
+  void discalaves.controlPantalla(activa, activo);
   botonControl.setAttribute("aria-pressed", String(activo));
   botonControl.textContent = activo ? "devolver el control" : "tomar el control";
   imgPantalla.classList.toggle("controlando", activo);
@@ -379,19 +383,19 @@ botonVer.addEventListener("click", () => mostrarPantalla(pantalla.hidden !== fal
 botonControl.addEventListener("click", () => controlar(!enControl()));
 imgPantalla.addEventListener("click", (ev) => {
   const p = enControl() && aPagina(ev);
-  if (p) void discalaves.entradaPantalla({ tipo: "clic", ...p });
+  if (p) void discalaves.entradaPantalla(activa, { tipo: "clic", ...p });
 });
 imgPantalla.addEventListener("wheel", (ev) => {
   if (!enControl()) return;
   ev.preventDefault();
-  void discalaves.entradaPantalla({ tipo: "rueda", dy: ev.deltaY });
+  void discalaves.entradaPantalla(activa, { tipo: "rueda", dy: ev.deltaY });
 });
 imgPantalla.addEventListener("keydown", (ev) => {
   if (!enControl() || ev.key === "Dead") return;
   ev.preventDefault();
   const tecla = ev.key === " " ? "Space" : ev.key;
   const mods = [ev.ctrlKey && "Control", ev.altKey && "Alt", ev.metaKey && "Meta"].filter(Boolean).join("+");
-  void discalaves.entradaPantalla({ tipo: "tecla", tecla: mods ? `${mods}+${tecla}` : tecla });
+  void discalaves.entradaPantalla(activa, { tipo: "tecla", tecla: mods ? `${mods}+${tecla}` : tecla });
 });
 
 void seleccionar(activa);
