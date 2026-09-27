@@ -54,16 +54,22 @@ empleado). Arranque: `cd app && npm install && npm start`.
   conversación (una por IA) y habla con su API compatible con OpenAI. Los
   modelos sin herramientas se marcan "solo chat" en negrita y reciben un
   mensaje de sistema que les prohíbe fingir que navegan o ejecutan comandos.
-  Limitaciones: los modelos de Ollama con herramientas usan la misma caja y
-  navegador que qwen (`/home/qwen`); solo una conversación trabaja a la vez
+  Cada IA con herramientas tiene su propia computadora: carpeta
+  `IA-discalves/trabajo/<usuario>` vista como `/home/<usuario>` en su caja
+  (`computadora()` en `main.ts`) y su propio navegador (`Navegador` en
+  `navegador.ts`, que arranca en su primer uso y queda abierto hasta cerrar
+  la app: cada Chromium suma RAM). La pantalla en vivo muestra la de la
+  conversación abierta. Limitaciones: solo una conversación trabaja a la vez
   (las demás reciben "está trabajando; espera"). Con qwen cargado, Ollama no
   tuvo RAM para gemma3:4b (necesitaba 3,9 GiB, había 2,2): la app lo explica
   en el hilo.
 - Computadora provisional: una caja **bubblewrap** (no el contenedor
   endurecido decidido). Ve `/usr` y `/etc` en solo lectura, su carpeta
-  `IA-discalves/trabajo/qwen` como `/home/qwen`, sin las carpetas del
+  `IA-discalves/trabajo/<usuario>` como `/home/<usuario>`, sin las carpetas del
   usuario, con internet. Limitación conocida: comparte la red del equipo,
-  incluida la red local. `npm run prueba` comprueba el aislamiento.
+  incluida la red local. `caja()` en `caja.ts` es el único sitio que arma los
+  argumentos de bubblewrap. `npm run prueba` comprueba el aislamiento,
+  también entre dos IAs.
 - Navegador (`app/src/navegador.ts`): Chromium sin ventana
   (chrome-headless-shell de Playwright, en `IA-discalves/navegador`) dentro
   de la misma caja, controlado con `playwright-core` por el árbol de
