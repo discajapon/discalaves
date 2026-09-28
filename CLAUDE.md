@@ -31,9 +31,11 @@ respuestas en streaming. qwen ya usa herramientas (bucle de agente propio en
 `main.ts`, máximo 8 pasos por mensaje; ver `app/src/herramientas.ts`):
 `terminal`, `escribir_archivo`, `buscar_web`, `abrir_pagina`, `ver_pagina`,
 `hacer_clic` y `escribir_en`. Cumple el criterio 1 de "listo" (investiga en
-la web y deja un informe en un archivo, ~15 s). Todavía no hay escritorio
-Linux completo ni varios empleados (el criterio 2 necesita un segundo
-empleado). Arranque: `cd app && npm install && npm start`.
+la web y deja un informe en un archivo, ~30 s) desde su propia computadora
+(un contenedor Debian con escritorio). Todavía no hay varios empleados (el
+criterio 2 necesita un segundo empleado). Arranque: `cd app && npm install &&
+npm start` (requiere Docker usable sin sudo; la primera vez construye la
+imagen, ~2 min).
 
 - Runtime y modelo, fuera del repositorio, en `~/Documents/IA-discalves`
   (cambiable con la variable `DISCALAVES_IA`): `llama.cpp/` (binarios
@@ -54,34 +56,50 @@ empleado). Arranque: `cd app && npm install && npm start`.
   conversación (una por IA) y habla con su API compatible con OpenAI. Los
   modelos sin herramientas se marcan "solo chat" en negrita y reciben un
   mensaje de sistema que les prohíbe fingir que navegan o ejecutan comandos.
-  Cada IA con herramientas tiene su propia computadora: carpeta
-  `IA-discalves/trabajo/<usuario>` vista como `/home/<usuario>` en su caja
-  (`computadora()` en `main.ts`) y su propio navegador (`Navegador` en
-  `navegador.ts`, que arranca en su primer uso y queda abierto hasta cerrar
-  la app: cada Chromium suma RAM). La pantalla en vivo muestra la de la
+  Cada IA con herramientas tiene su propia computadora (contenedor, ver
+  abajo; `computadora()` en `main.ts`) con su carpeta
+  `IA-discalves/trabajo/<usuario>` como `/home/<usuario>` y su propio
+  navegador (`Navegador` en `navegador.ts`). La pantalla en vivo muestra la de la
   conversación abierta. Limitaciones: solo una conversación trabaja a la vez
   (las demás reciben "está trabajando; espera"). Con qwen cargado, Ollama no
   tuvo RAM para gemma3:4b (necesitaba 3,9 GiB, había 2,2): la app lo explica
   en el hilo.
-- Computadora provisional: una caja **bubblewrap** (no el contenedor
-  endurecido decidido). Ve `/usr` y `/etc` en solo lectura, su carpeta
-  `IA-discalves/trabajo/<usuario>` como `/home/<usuario>`, sin las carpetas del
-  usuario, con internet. Limitación conocida: comparte la red del equipo,
-  incluida la red local. `caja()` en `caja.ts` es el único sitio que arma los
-  argumentos de bubblewrap. `npm run prueba` comprueba el aislamiento,
-  también entre dos IAs.
-- Navegador (`app/src/navegador.ts`): Chromium sin ventana
-  (chrome-headless-shell de Playwright, en `IA-discalves/navegador`) dentro
-  de la misma caja, controlado con `playwright-core` por el árbol de
-  accesibilidad. Búsquedas en Bing (DuckDuckGo y Mojeek bloquean el
-  navegador automatizado). No hay Xvfb/VNC en el equipo y no se instaló
-  nada con sudo, así que la "pantalla" de qwen es su navegador.
-- Vista en vivo: el ícono de monitor muestra la pantalla por screencast de
-  CDP, solo mientras está abierta; "tomar el control" reenvía clics, rueda
-  y teclas, y mientras tanto las herramientas del navegador le dicen a qwen
-  que espere.
+- Computadora de cada IA (desde 2026-09-27): un contenedor con **Debian 13
+  (trixie)**, escritorio XFCE mínimo, terminal de XFCE, Chromium con ventana
+  y KasmVNC (`app/computadora/Dockerfile`, imagen base fijada por digest y
+  `.deb` de KasmVNC verificado con sha256). Se enciende en su primer uso y se
+  apaga al cerrar la app (también al cerrarla con una señal); al arrancar se
+  borran restos de sesiones anteriores. `app/src/computadora.ts` es el único
+  módulo que llama al motor de contenedores: `docker` por defecto,
+  `DISCALAVES_MOTOR=podman` para Podman (el Dockerfile es OCI estándar; con
+  Podman aún no se ha probado). Encima de la imagen base se construye una
+  capa mínima por IA con su usuario (mismo uid que el usuario del equipo).
+  Endurecimiento: usuario sin privilegios, `--cap-drop=ALL`,
+  `no-new-privileges`, raíz de solo lectura (`/tmp` y `/run` en tmpfs), 2 GB
+  de memoria y 512 procesos como máximo, sin socket de Docker, y del equipo
+  solo se monta su carpeta. Puertos (KasmVNC y CDP) publicados solo en
+  `127.0.0.1` con puerto aleatorio. `npm run prueba` comprueba el
+  aislamiento con contenedores reales, también entre dos IAs.
+- Mediciones (RTX 3060 Ti, 16 GB de RAM): imagen base ~1,6 GB en disco
+  (~410 MB comprimida); la capa de cada IA es mínima. Primera construcción
+  ~2 min. Arranque hasta ver el escritorio en la app: ~6,5 s (KasmVNC listo
+  en ~0,7 s tras `run`). RAM de un contenedor: ~220 MB en reposo (escritorio
+  sin Chromium), ~790 MB trabajando (con Chromium navegando).
+- Navegador (`app/src/navegador.ts`): Playwright se conecta por CDP al
+  Chromium con ventana del escritorio del contenedor (se abre en su primer
+  uso; `socat` reenvía el CDP porque Chromium solo escucha en su loopback) y
+  lo controla por el árbol de accesibilidad. Búsquedas en Bing (DuckDuckGo y
+  Mojeek bloquean el navegador automatizado). Chromium corre con
+  `--no-sandbox`: el aislamiento lo da el contenedor.
+- Pantalla en vivo: el ícono de monitor muestra el escritorio entero con el
+  cliente web de KasmVNC en un iframe; solo hay conexión mientras el panel
+  está abierto. KasmVNC tiene dos usuarios con claves aleatorias por sesión
+  (como la de llama-server), que el proceso principal entrega en el evento
+  `login`: "ver" solo mira y "control" usa teclado y ratón ("tomar el
+  control"). Mientras el usuario tiene el control, las herramientas del
+  navegador le dicen a la IA que espere. Portapapeles desactivado.
 - `sudo` (decisión del usuario, 2026-09-25): un comando que empieza por
-  `sudo` sale de la caja y corre en el sistema real mediante `pkexec`, que
+  `sudo` sale del contenedor y corre en el sistema real mediante `pkexec`, que
   muestra el diálogo de GNOME para la contraseña; ni la app ni el modelo la
   ven. Es la única vía para acciones de administrador.
 - Aprobación de acciones delicadas (borrar, enviar, pagar): obligatoria en el
@@ -153,6 +171,20 @@ propia.
 
 ## Pendientes y supuestos (sin resolver)
 
+- **Motor de contenedores:** hoy es Docker (decisión del usuario,
+  2026-09-27), aunque los principios dicen "sin Docker" y el instalador debe
+  traer un motor rootless propio. El demonio de Docker corre como root y
+  estar en el grupo `docker` equivale a ser root. Pendiente: probar con
+  Podman rootless (`DISCALAVES_MOTOR=podman`) y empaquetarlo.
+- **Red local:** los contenedores llegan a la red local de la casa (probado:
+  responde el router de la casa). No se añadieron reglas de firewall.
+  Los servicios del equipo que escuchan solo en 127.0.0.1 (llama-server,
+  Ollama) no son accesibles. El CDP y KasmVNC publicados en 127.0.0.1 los
+  puede usar cualquier proceso local del usuario (KasmVNC pide clave; el CDP
+  no).
+- **sudo:** con una computadora propia, tendría más sentido que `sudo`
+  actuara dentro del contenedor (por ejemplo `apt install` en su Debian) y no
+  en el sistema real; hoy la IA no tiene root en su contenedor.
 - **Lenguaje:** TypeScript en todo el proyecto. Supuesto provisional, porque
   OpenClaw trae Node.
 - **OpenClaw con modelos pequeños:** verificar que funcione con modelos

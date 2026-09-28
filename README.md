@@ -3,8 +3,9 @@
 > **Estado: en diseño, aún no funcional.** Todavía no hay nada que instalar.
 > Este README describe lo que el proyecto quiere ser, no lo que ya hace.
 > Por ahora solo existe un prototipo en [`app/`](app/) con un único
-> empleado que usa un modelo local, una terminal y un navegador aislados
-> (que puedes ver en vivo); todavía no hay equipo ni escritorio completo.
+> empleado que usa un modelo local y su propia computadora aislada (un
+> contenedor Linux con escritorio, terminal y navegador que puedes ver en
+> vivo). Todavía no hay equipo, y de momento necesita Docker.
 
 Discalaves es un equipo de "empleados" de IA que corre en tu propia
 computadora. Les asignas tareas como a compañeros de trabajo; cada empleado
