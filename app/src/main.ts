@@ -15,8 +15,10 @@ const MODELO = path.join(IA, "modelos", "Qwen3.5-9B-Q4_K_M.gguf");
 const PUERTO = 8089;
 const CLAVE = randomBytes(24).toString("hex"); // sin clave, cualquier web abierta en el navegador podría usar el servidor
 const CONTEXTO_CARACTERES = 32000; // ponytail: ventana por tamaño (~9k tokens de 16k); resumir cuando las conversaciones crezcan
-const MAX_PASOS = 8; // honestidad con modelos pequeños: tras 8 herramientas seguidas se detiene y pregunta
-const MAX_PASOS_LIBRE = 30; // en modo libre trabaja más tiempo sola, pero sigue deteniéndose en algún momento
+// Sin límite de pasos (decisión del usuario, 2026-09-27): la IA trabaja hasta acabar. Frenos: el botón
+// Detener y la detección de repeticiones (misma llamada con los mismos argumentos).
+const AVISO_REPETICION = 3; // a la 3.ª vez no se ejecuta: se le dice que cambie de enfoque
+const MAX_REPETICIONES = 5; // a la 5.ª se detiene y lo explica
 const OLLAMA = "http://127.0.0.1:11434"; // ponytail: dirección por defecto de Ollama; configurable cuando exista el gestor de modelos
 const CONTEXTO_OLLAMA = 10000; // Ollama recorta por defecto a ~4k tokens: se le manda menos historial
 
@@ -43,7 +45,8 @@ const sistemaConHerramientas = (nombre: string, usuario: string, libre: boolean)
   `Tienes tu propia computadora aislada (Debian con escritorio) con terminal, navegador e internet; tu carpeta es /home/${usuario}. ` +
   "Para investigar en la web: buscar_web, luego abrir_pagina con las direcciones más útiles; para formularios: ver_pagina, hacer_clic y escribir_en. " +
   "Cita las direcciones de donde sacas la información. " +
-  "Trabaja en pasos cortos y cuenta al usuario qué hiciste y qué encontraste. " +
+  "Trabaja hasta terminar la tarea completa, sin pedir permiso para continuar; entre paso y paso cuenta en una frase qué hiciste y qué encontraste. " +
+  "Si algo falla, prueba otro camino en vez de repetir lo mismo. " +
   "Si no sabes algo, un comando falla o no puedes hacerlo, dilo en vez de inventar. " +
   "Para instalar programas o tocar el sistema, empieza el comando con sudo (eres root en tu computadora, no en la del usuario); " +
   "para instalar: sudo apt-get update && sudo apt-get install -y <paquete>. " +
@@ -363,27 +366,35 @@ ipcMain.handle("enviar", async (ev, id: unknown, entrada: unknown) => {
   historial.push({ de: "yo", texto, t: Date.now() });
   guardarHistorial(c.id);
   try {
-    const pasos = c.libre ? MAX_PASOS_LIBRE : MAX_PASOS;
-    for (let paso = 0; paso < pasos; paso++) {
+    const veces = new Map<string, number>(); // cuántas veces pidió cada llamada exacta en esta tarea
+    for (;;) {
       cambiarEstado(c, { fase: "escribiendo" });
       const { texto, llamadas } = await turno(c, ev.sender);
       if (texto || llamadas.length) historial.push({ de: "ia", texto, t: Date.now(), ...(llamadas.length && { llamadas }) });
       guardarHistorial(c.id);
       if (!llamadas.length) return {};
       for (const l of llamadas) {
-        const r = await ejecutarHerramienta(
-          { ...computadora(c), avisar: (fase, detalle) => cambiarEstado(c, { fase, detalle }), aprobar: async (d) => c.libre === true || pedirAprobacion(c, ev.sender, d) },
-          l.nombre,
-          l.argumentos,
-        );
+        const firma = `${l.nombre} ${l.argumentos}`;
+        const n = (veces.get(firma) ?? 0) + 1;
+        veces.set(firma, n);
+        if (n >= MAX_REPETICIONES) {
+          historial.push({ de: "ia", texto: `me detuve: intenté ${n} veces lo mismo (${l.nombre}) sin avanzar. ¿Me das otra pista?`, t: Date.now() });
+          guardarHistorial(c.id);
+          return {};
+        }
+        const r =
+          n >= AVISO_REPETICION
+            ? { salida: `ya hiciste exactamente esto ${n - 1} veces; no lo repito. Prueba otro camino o termina con lo que tienes.`, codigo: 1 }
+            : await ejecutarHerramienta(
+                { ...computadora(c), avisar: (fase, detalle) => cambiarEstado(c, { fase, detalle }), aprobar: async (d) => c.libre === true || pedirAprobacion(c, ev.sender, d) },
+                l.nombre,
+                l.argumentos,
+              );
         historial.push({ de: "herramienta", ...l, ...r, t: Date.now() });
         guardarHistorial(c.id);
       }
       ev.sender.send("paso", c.id);
     }
-    historial.push({ de: "ia", texto: `me detuve después de ${pasos} pasos para que revises cómo va. ¿sigo?`, t: Date.now() });
-    guardarHistorial(c.id);
-    return {};
   } catch (e) {
     const detalle = c.proveedor === "ollama" && (e as Error).message === "fetch failed" ? "Ollama no responde; ¿está en marcha?" : (e as Error).message;
     return { error: `no pude obtener respuesta: ${detalle}` };
