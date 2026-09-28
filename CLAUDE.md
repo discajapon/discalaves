@@ -131,9 +131,18 @@ imagen, ~2 min).
     distro (`wsl --terminate`) para liberar memoria.
   - `computadora.ts` invoca `wsl.exe -d discalaves -u discalaves -- podman`,
     copia el contexto del Dockerfile dentro de la distro y monta la carpeta por
-    su ruta de Linux. Con Podman: `--userns=keep-id` y `setpriv` para que los
-    procesos del usuario no hereden las capacidades de su `sudo` (Podman se
-    las da como ambientales; Docker no).
+    su ruta de Linux. Diferencias de Podman que el código ya cubre (no
+    quitarlas): `--userns=keep-id`; `setpriv` para que los procesos del
+    usuario no hereden las capacidades de su `sudo` (Podman se las da como
+    ambientales; Docker no); redes por IA creadas con `isolate=true` (Podman
+    no las aísla entre sí por defecto); la red del contenedor se lee de
+    `NetworkSettings.Networks` (en Podman `HostConfig.NetworkMode` dice
+    "bridge").
+  - Persistencia: el contenedor se reutiliza si coincide la **huella** de la
+    imagen (sha256 de su configuración y sus capas), no su `.Id`: con Docker 29
+    (almacén de containerd) el `.Id` cambia en cada build aunque todo salga de
+    la caché, y en Linux la computadora se recreaba en cada arranque
+    (corregido el 2026-09-28).
   - Probado de verdad en Linux: pruebas de unidad de rutas y adaptadores, y
     `prueba.ts` completa con Podman rootless dentro de un contenedor Debian 13
     que simula la distro (mismo `PREPARAR`, red del equipo como el reenvío de
