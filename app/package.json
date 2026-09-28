@@ -7,7 +7,8 @@
   "main": "dist/main.js",
   "scripts": {
     "start": "tsc && electron .",
-    "prueba": "tsc && node dist/prueba.js"
+    "prueba": "tsc && node dist/prueba-unidad.js && node dist/prueba.js",
+    "prueba:unidad": "tsc && node dist/prueba-unidad.js"
   },
   "devDependencies": {
     "electron": "^44.4.5",

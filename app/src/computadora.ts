@@ -112,6 +112,7 @@ export class Computadora {
     avisar("encendiendo su computadora (la primera vez prepara Debian: puede tardar unos minutos)");
     const imagen = await construirUsuario(this.usuario);
     const idImagen = await motorOk(["image", "inspect", "-f", "{{.Id}}", imagen]);
+    fs.mkdirSync(this.carpeta, { recursive: true }); // antes de montarla: si no existe, Docker la crearía como root
     // Claves de KasmVNC de esta sesión: en un archivo que iniciar.sh lee y borra (el entorno de un
     // contenedor que se reanuda no se puede cambiar).
     // Su carpeta es de la IA: si dejó ahí un enlace simbólico con ese nombre, seguirlo sobrescribiría un archivo del

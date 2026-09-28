@@ -2,16 +2,16 @@ import { app, BrowserWindow, ipcMain, session } from "electron";
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { DEFINICIONES, ejecutarHerramienta } from "./herramientas";
 import { apagarTodas, computadoraDe, responde, type Computadora } from "./computadora";
 import { navegadorDe } from "./navegador";
+import { rutas } from "./rutas";
 
-// ponytail: rutas y puerto fijos para un solo empleado; el instalador y el gestor de modelos los definirán.
-const IA = process.env.DISCALAVES_IA ?? path.join(os.homedir(), "Documents", "IA-discalves");
-const SERVIDOR = path.join(IA, "llama.cpp", "llama-server");
-const MODELO = path.join(IA, "modelos", "Qwen3.5-9B-Q4_K_M.gguf");
+// Rutas según el sistema (Linux o Windows): ver rutas.ts. ponytail: puerto fijo para un solo servidor.
+const SERVIDOR = rutas.servidor;
+const MODELO = rutas.modelo;
+if (rutas.datos) app.setPath("userData", rutas.datos); // Windows: datos locales, antes de usar userData
 const PUERTO = 8089;
 const CLAVE = randomBytes(24).toString("hex"); // sin clave, cualquier web abierta en el navegador podría usar el servidor
 const CONTEXTO_CARACTERES = 32000; // ponytail: ventana por tamaño (~9k tokens de 16k); resumir cuando las conversaciones crezcan
@@ -33,8 +33,7 @@ const QWEN: Conversacion = { id: "qwen", nombre: "qwen", proveedor: "qwen", mode
 function computadora(c: Conversacion) {
   let usuario = c.id === QWEN.id ? "qwen" : c.nombre.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 32) || "ia";
   if (c.id !== QWEN.id && usuario === "qwen") usuario = "qwen-ollama"; // un modelo de Ollama llamado qwen no comparte con el incluido
-  const carpeta = path.join(IA, "trabajo", usuario);
-  fs.mkdirSync(carpeta, { recursive: true });
+  const carpeta = rutas.trabajo(usuario); // la crea la computadora al encenderse (en Windows vive dentro de WSL)
   const pc = computadoraDe(carpeta, usuario);
   return { usuario, carpeta, computadora: pc, navegador: navegadorDe(pc) };
 }
