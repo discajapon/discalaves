@@ -17,7 +17,6 @@
     "typescript": "^7.0.2"
   },
   "dependencies": {
-    "openclaw": "^0.3.2",
     "playwright-core": "^1.63.0"
   },
   "build": {
