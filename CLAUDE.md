@@ -139,6 +139,12 @@ de diseño viven en `app/estilos.css` (nada de hex sueltos). El "vidrio
 líquido" (filtro SVG de refracción vía `backdrop-filter: url(#vidrio)`) solo
 funciona en Chromium.
 
+Cambio de conversación (preferencia del usuario, 2026-09-27): la única
+animación es la lente de vidrio de la lista lateral, que viaja como una gota
+de la conversación actual a la elegida (`moverLente()` en `interfaz.ts`),
+con un toque del color de esa IA. Nada de ondas ni deformaciones en el hilo,
+en las filas ni en el resto de la pantalla.
+
 ## Principios
 
 1. **Cero fricción.** Un instalador nativo que trae todo. Sin Docker, sin
