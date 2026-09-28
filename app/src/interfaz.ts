@@ -367,15 +367,28 @@ document.getElementById("detener")!.addEventListener("click", (ev) => {
 // ---- Menú del +: IAs instaladas (qwen incluido y los modelos de Ollama) ----
 const menuIA = document.getElementById("menu-ia")!;
 
+// Cada IA es una tarjeta tipo widget: ícono y nombre arriba (y "abierta" a la derecha), el modelo con
+// sus datos en negrita, y el estado en color: con computadora (herramientas) o solo chat.
 function opcionIA(m: Modelo): HTMLElement {
   const b = crear("button", "opcion-ia");
   b.setAttribute("type", "button");
   const nombre = m.proveedor === "qwen" ? "qwen" : m.modelo.replace(/:latest$/, "");
   const abierta = conversaciones.some((c) => c.proveedor === m.proveedor && (c.proveedor === "qwen" || c.modelo === m.modelo));
-  const arriba = crear("span", "fila-arriba");
-  arriba.append(crear("span", "nombre", nombre), crear("span", "detalle", abierta ? "abierta" : ""));
-  b.append(arriba, crear("span", "detalle", m.detalle));
-  if (!m.herramientas) b.append(crear("strong", "solo-chat", "solo chat: sin navegador, terminal ni archivos"));
+
+  const arriba = crear("span", "tarjeta-arriba");
+  const icono = crear("span", "tarjeta-icono");
+  icono.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${GLIFO_IA}</svg>`;
+  arriba.append(icono, crear("span", "nombre", nombre));
+  if (abierta) arriba.append(crear("span", "etiqueta", "abierta"));
+
+  const partes = m.detalle.split(" · ").filter((p) => p && p !== "incluido");
+  const dato = crear("span", "dato", partes.length ? "modelo " : "");
+  partes.forEach((p, i) => dato.append(i ? " · " : "", crear("strong", "", p)));
+
+  const estado = m.herramientas
+    ? crear("span", "estado con-computadora", "con su computadora")
+    : crear("strong", "estado solo-chat", "solo chat: sin navegador, terminal ni archivos");
+  b.append(arriba, ...(partes.length ? [dato] : []), estado);
   b.addEventListener("click", async () => {
     const r = await discalaves.nuevaConversacion(m.proveedor, m.modelo);
     menuIA.hidePopover();
