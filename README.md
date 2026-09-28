@@ -42,6 +42,10 @@ Grok Bot.
 
 ## Qué falta
 
+- **Probar Windows en una PC real.** Ya existe el soporte (ver
+  [Windows](#windows-en-preparación)) y un instalador que se genera
+  automáticamente, pero nadie lo ha probado todavía en un equipo con Windows y
+  GPU.
 - **Un equipo que colabore:** que un empleado le pase su trabajo a otro en un
   hilo compartido. Hoy puedes hablar con varias IAs, pero cada una por
   separado y de a una trabajando a la vez.
@@ -75,11 +79,11 @@ Grok Bot.
 
 ## Requisitos
 
-- Linux (la primera versión es solo para Linux; Windows y Mac después).
+- Linux o Windows 10/11 (Windows todavía sin probar; Mac después).
 - GPU NVIDIA con al menos 8 GB de VRAM.
 - 16 GB de RAM recomendados.
-- Para el prototipo actual, además: Docker usable sin `sudo` y Node.js 24 o
-  superior.
+- Para el prototipo actual en Linux, además: Docker usable sin `sudo` y
+  Node.js 24 o superior. En Windows no hace falta Docker (ver abajo).
 
 El desarrollo y las pruebas se hacen con Qwen 3.5 9B (Q4) en una RTX 3060 Ti
 de 8 GB.
@@ -103,6 +107,29 @@ instalación para el público.
 
 La primera vez construye la imagen de la computadora de los empleados
 (unos 2 minutos) y carga el modelo (entre 10 y 30 segundos).
+
+## Windows (en preparación)
+
+> **Sin probar en una PC real.** Todo lo de esta sección está escrito y pasa
+> las pruebas automáticas, pero todavía no se ha comprobado en un equipo con
+> Windows y GPU NVIDIA. La lista de lo que falta comprobar está en
+> [PRUEBAS_WINDOWS.md](PRUEBAS_WINDOWS.md).
+
+En Windows, Discalaves funciona en modo híbrido:
+
+- La app y el modelo (llama.cpp con CUDA) corren como programas normales de
+  Windows.
+- Las computadoras de los empleados corren en una distro propia de WSL2
+  («discalaves») con Podman: sin Docker Desktop y sin tocar tus otras distros
+  ni tu configuración de WSL.
+- La primera vez, la app explica qué va a hacer y pide permiso antes de
+  activar WSL (Windows pedirá permiso de administrador y quizá un reinicio).
+
+El instalador (`.exe`) se genera en cada cambio con GitHub Actions: en la
+pestaña **Actions** del repositorio, abre el último run del workflow
+**Windows** y descarga el artefacto `discalaves-instalador-windows`. Por ahora
+llama.cpp y el modelo se colocan a mano en `%LOCALAPPDATA%\Discalaves` (ver
+[PRUEBAS_WINDOWS.md](PRUEBAS_WINDOWS.md)).
 
 ## Licencia
 

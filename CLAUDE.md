@@ -108,6 +108,40 @@ imagen, ~2 min).
   lo deja borroso (el aviso de control es un anillo del propio panel). La
   calidad de imagen la decide el servidor (`kasmvnc.yaml`); KasmVNC ignora
   los parámetros de calidad del cliente.
+- **Windows** (desde 2026-09-28; **sin probar en una PC real**, ver
+  `PRUEBAS_WINDOWS.md`): modo híbrido. La app de Electron y llama-server (binarios
+  oficiales de llama.cpp para Windows con CUDA, mismos parámetros) corren
+  nativos; solo las computadoras de los empleados corren en una distro WSL2
+  propia, "discalaves", con **Podman rootless** y la misma imagen. Nada de
+  Docker Desktop.
+  - `app/src/rutas.ts` es el único módulo que decide rutas: en Windows,
+    runtime, modelos y datos en `%LOCALAPPDATA%\Discalaves` (datos en
+    `…\datos`, disco de la distro en `…\wsl`); las carpetas de trabajo
+    viven dentro de la distro (`/home/discalaves/trabajo/<usuario>`) y la app
+    las ve como `\\wsl$\discalaves\home\discalaves\trabajo\<usuario>`.
+    `DISCALAVES_IA` sigue moviendo runtime y modelos.
+  - `app/src/wsl.ts`: estado de WSL, activación (`wsl --install
+    --no-distribution` con UAC, solo tras pulsar "Preparar" en la pantalla de
+    primer arranque, `primer-arranque.ts`) y creación de la distro: raíz de
+    Debian 13 = la capa de `debian:trixie-slim` que fija el Dockerfile,
+    descargada del registro por su digest y verificada con sha256,
+    `wsl --import`, y el script `PREPARAR` (usuario `discalaves` uid 1000,
+    Podman, `/etc/wsl.conf` propio: systemd, sin discos ni programas de
+    Windows). Nunca toca el `.wslconfig` global. Al cerrar la app se apaga la
+    distro (`wsl --terminate`) para liberar memoria.
+  - `computadora.ts` invoca `wsl.exe -d discalaves -u discalaves -- podman`,
+    copia el contexto del Dockerfile dentro de la distro y monta la carpeta por
+    su ruta de Linux. Con Podman: `--userns=keep-id` y `setpriv` para que los
+    procesos del usuario no hereden las capacidades de su `sudo` (Podman se
+    las da como ambientales; Docker no).
+  - Probado de verdad en Linux: pruebas de unidad de rutas y adaptadores, y
+    `prueba.ts` completa con Podman rootless dentro de un contenedor Debian 13
+    que simula la distro (mismo `PREPARAR`, red del equipo como el reenvío de
+    localhost de WSL). No probado: `wsl.exe`, la activación, el reenvío real de
+    puertos de WSL, systemd y cgroups en WSL, llama.cpp con CUDA en Windows.
+  - Instalador: `npm run instalador:win` (electron-builder, NSIS x64, menú
+    Inicio). El workflow `.github/workflows/windows.yml` compila, pasa
+    `prueba-unidad` y sube el instalador como artefacto (sin GPU ni WSL).
 - `sudo` (decisión del usuario, 2026-09-27; reemplaza la del 2026-09-25 con
   `pkexec`): un comando que empieza por `sudo` corre como **root de su
   contenedor** (`exec -u 0`), sin contraseña, y nunca toca el sistema del
@@ -172,7 +206,8 @@ en las filas ni en el resto de la pantalla.
 Si alguna parece un error, se señala al usuario; no se cambia por cuenta
 propia.
 
-- **Plataforma v1:** solo Linux. Windows y Mac después.
+- **Plataforma v1:** Linux y Windows (computadoras vía WSL2); Mac después
+  (decisión del usuario, 2026-09-28).
 - **Computadora de cada empleado:** contenedor endurecido — sin privilegios,
   sin acceso a carpetas personales ni a la red local del usuario, con salida
   a internet — con escritorio Linux liviano, navegador y terminal. El
@@ -206,7 +241,7 @@ propia.
 - Marketplace de bots.
 - Empleado coordinador.
 - Iniciar sesión en cuentas reales del usuario.
-- Windows y Mac.
+- Mac.
 - MicroVMs.
 
 ## Pendientes y supuestos (sin resolver)
@@ -222,6 +257,14 @@ propia.
   Ollama) no son accesibles. El CDP y KasmVNC publicados en 127.0.0.1 los
   puede usar cualquier proceso local del usuario (KasmVNC pide clave; el CDP
   no).
+- **Windows sin probar:** falta pasar `PRUEBAS_WINDOWS.md` en una PC con GPU
+  NVIDIA. Riesgos: WSL usa por defecto hasta la mitad de la RAM (cada empleado
+  ~0,8 GB trabajando, más el modelo en Windows); el reenvío de puertos de
+  KasmVNC y CDP a 127.0.0.1 de Windows depende de `localhostForwarding` (activo
+  por defecto) del `.wslconfig` del usuario; los límites de memoria de Podman
+  rootless necesitan cgroups delegados (por eso systemd en la distro); primera
+  descarga ~0,5 GB (Debian, Podman, imagen) más el modelo (5,7 GB) y llama.cpp
+  con CUDA (~0,6 GB), que todavía se colocan a mano.
 - **Lenguaje:** TypeScript en todo el proyecto. Supuesto provisional, porque
   OpenClaw trae Node.
 - **OpenClaw con modelos pequeños:** verificar que funcione con modelos
