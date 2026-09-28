@@ -68,16 +68,20 @@ imagen, ~2 min).
   (trixie)**, escritorio XFCE mínimo, terminal de XFCE, Chromium con ventana
   y KasmVNC (`app/computadora/Dockerfile`, imagen base fijada por digest y
   `.deb` de KasmVNC verificado con sha256). Se enciende en su primer uso y se
-  apaga al cerrar la app (también al cerrarla con una señal); al arrancar se
-  borran restos de sesiones anteriores. `app/src/computadora.ts` es el único
+  detiene al cerrar la app (también al cerrarla con una señal); el
+  contenedor **persiste** entre sesiones (lo instalado con `sudo` se
+  conserva) y se recrea solo si cambia la imagen. `app/src/computadora.ts` es el único
   módulo que llama al motor de contenedores: `docker` por defecto,
   `DISCALAVES_MOTOR=podman` para Podman (el Dockerfile es OCI estándar; con
   Podman aún no se ha probado). Encima de la imagen base se construye una
   capa mínima por IA con su usuario (mismo uid que el usuario del equipo).
-  Endurecimiento: usuario sin privilegios, `--cap-drop=ALL`,
-  `no-new-privileges`, raíz de solo lectura (`/tmp` y `/run` en tmpfs), 2 GB
-  de memoria y 512 procesos como máximo, sin socket de Docker, y del equipo
-  solo se monta su carpeta. Puertos (KasmVNC y CDP) publicados solo en
+  Endurecimiento: la IA trabaja como usuario sin privilegios y sin
+  capacidades (no puede escribir fuera de su `/home`), `no-new-privileges`,
+  `--cap-drop=ALL` más solo CHOWN, DAC_OVERRIDE, FOWNER, SETUID y SETGID para
+  el root del contenedor (lo que necesita `apt`), `/tmp` y `/run` en tmpfs,
+  2 GB de memoria y 512 procesos como máximo, sin socket de Docker, y del
+  equipo solo se monta su carpeta. Las claves de KasmVNC llegan en un
+  archivo de un solo uso en su carpeta, que `iniciar.sh` lee y borra. Puertos (KasmVNC y CDP) publicados solo en
   `127.0.0.1` con puerto aleatorio. `npm run prueba` comprueba el
   aislamiento con contenedores reales, también entre dos IAs.
 - Mediciones (RTX 3060 Ti, 16 GB de RAM): imagen base ~1,6 GB en disco
@@ -98,12 +102,20 @@ imagen, ~2 min).
   `login`: "ver" solo mira y "control" usa teclado y ratón ("tomar el
   control"). Mientras el usuario tiene el control, las herramientas del
   navegador le dicen a la IA que espere. Portapapeles desactivado.
-- `sudo` (decisión del usuario, 2026-09-25): un comando que empieza por
-  `sudo` sale del contenedor y corre en el sistema real mediante `pkexec`, que
-  muestra el diálogo de GNOME para la contraseña; ni la app ni el modelo la
-  ven. Es la única vía para acciones de administrador.
+- `sudo` (decisión del usuario, 2026-09-27; reemplaza la del 2026-09-25 con
+  `pkexec`): un comando que empieza por `sudo` corre como **root de su
+  contenedor** (`exec -u 0`), sin contraseña, y nunca toca el sistema del
+  usuario. La imagen trae un `sudo` sustituto para que un `sudo` a mitad de
+  comando funcione dentro de ese root (no es setuid: `no-new-privileges` lo
+  impediría).
+- **Modo libre** (decisión del usuario, 2026-09-27): interruptor por IA en la
+  cabecera, apagado por defecto y guardado en `indice.json`. Encendido: no
+  pide aprobación para acciones delicadas, el mensaje de sistema le dice que
+  actúe sin preguntar, y el límite de pasos sube de 8 a 30. Ojo: el
+  contenedor protege el equipo, pero lo que haga en la web (enviar, pagar)
+  es real.
 - Aprobación de acciones delicadas (borrar, enviar, pagar): obligatoria en el
-  código (`delicado()` en `herramientas.ts`): `rm`/`rmdir`/`-delete` en la
+  código salvo en modo libre (`delicado()` en `herramientas.ts`): `rm`/`rmdir`/`-delete` en la
   terminal, clics en botones como "enviar", "pagar", "comprar", "borrar", y
   enviar formularios que no son de búsqueda. La interfaz muestra una tarjeta
   con "permitir"/"no". Es por palabras clave: puede dejar pasar acciones
@@ -182,9 +194,6 @@ propia.
   Ollama) no son accesibles. El CDP y KasmVNC publicados en 127.0.0.1 los
   puede usar cualquier proceso local del usuario (KasmVNC pide clave; el CDP
   no).
-- **sudo:** con una computadora propia, tendría más sentido que `sudo`
-  actuara dentro del contenedor (por ejemplo `apt install` en su Debian) y no
-  en el sistema real; hoy la IA no tiene root en su contenedor.
 - **Lenguaje:** TypeScript en todo el proyecto. Supuesto provisional, porque
   OpenClaw trae Node.
 - **OpenClaw con modelos pequeños:** verificar que funcione con modelos
