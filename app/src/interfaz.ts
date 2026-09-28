@@ -5,9 +5,9 @@ type MensajeChat =
   | { de: "herramienta"; nombre: string; argumentos: string; salida: string; codigo: number; t: number };
 type EstadoQwen =
   | { fase: "cargando" | "listo" | "escribiendo" }
-  | { fase: "ejecutando" | "esperando-clave" | "esperando-aprobacion" | "error"; detalle: string };
+  | { fase: "ejecutando" | "esperando-aprobacion" | "error"; detalle: string };
 interface Conversacion {
-  id: string; nombre: string; proveedor: "qwen" | "ollama"; modelo: string; herramientas: boolean;
+  id: string; nombre: string; proveedor: "qwen" | "ollama"; modelo: string; herramientas: boolean; libre?: boolean;
   estado: EstadoQwen; ultimo?: MensajeChat;
 }
 interface Modelo { proveedor: "qwen" | "ollama"; modelo: string; detalle: string; herramientas: boolean }
@@ -25,6 +25,7 @@ declare const discalaves: {
   alAprobacion(f: (p: { id: string; conversacion: string; descripcion: string }) => void): void;
   verPantalla(id: string, ver: boolean): Promise<{ url?: string; error?: string }>;
   controlPantalla(id: string, activo: boolean): Promise<{ url?: string }>;
+  modoLibre(id: string, activo: boolean): Promise<boolean>;
 };
 
 const ACENTOS = ["violeta", "turquesa", "naranja", "azul", "rojizo"];
@@ -35,7 +36,6 @@ const TEXTO_ESTADO: Record<EstadoQwen["fase"], string> = {
   listo: "en línea · local",
   escribiendo: "escribiendo…",
   ejecutando: "ejecutando",
-  "esperando-clave": "esperando tu contraseña para",
   "esperando-aprobacion": "esperando tu aprobación para",
   error: "sin conexión",
 };
@@ -183,6 +183,7 @@ function dibujarCabecera() {
   entrada.placeholder = `Mensaje a ${c.nombre}`;
   // Sin herramientas no hay computadora que mirar.
   document.getElementById("ver-pantalla")!.hidden = !c.herramientas;
+  dibujarModoLibre();
   // Cada IA tiene su computadora: si la pantalla está abierta, pasa a mostrar la de esta conversación.
   if (!pantalla.hidden) void mostrarPantalla(c.herramientas);
   dibujarEstado();
@@ -380,5 +381,23 @@ async function controlar(activo: boolean) {
 const enControl = () => botonControl.getAttribute("aria-pressed") === "true";
 botonVer.addEventListener("click", () => mostrarPantalla(pantalla.hidden !== false));
 botonControl.addEventListener("click", () => controlar(!enControl()));
+
+// ---- Modo libre: la IA actúa sin pedir aprobación ni preguntar qué hacer (decisión del usuario, por IA) ----
+const botonLibre = document.getElementById("modo-libre")!;
+
+function dibujarModoLibre() {
+  const c = actual();
+  botonLibre.hidden = !c.herramientas;
+  botonLibre.setAttribute("aria-pressed", String(c.libre === true));
+  botonLibre.title = c.libre
+    ? `${c.nombre} actúa sin pedir tu aprobación (borrar, enviar, pagar) ni preguntar qué hacer`
+    : `activar: ${c.nombre} dejará de pedir tu aprobación y de preguntarte qué hacer`;
+}
+
+botonLibre.addEventListener("click", async () => {
+  const c = actual();
+  c.libre = await discalaves.modoLibre(c.id, !c.libre);
+  dibujarModoLibre();
+});
 
 void seleccionar(activa);
