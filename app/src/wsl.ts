@@ -27,7 +27,7 @@ id -u ${USUARIO_DISTRO} >/dev/null 2>&1 || useradd -m -u ${UID_DISTRO} -s /bin/b
 grep -q '^${USUARIO_DISTRO}:' /etc/subuid || echo '${USUARIO_DISTRO}:100000:65536' >> /etc/subuid
 grep -q '^${USUARIO_DISTRO}:' /etc/subgid || echo '${USUARIO_DISTRO}:100000:65536' >> /etc/subgid
 apt-get update -q
-apt-get install -y -q --no-install-recommends podman uidmap passt fuse-overlayfs ca-certificates
+apt-get install -y -q --no-install-recommends podman uidmap passt fuse-overlayfs ca-certificates nftables aardvark-dns
 apt-get clean
 mkdir -p /etc/containers/registries.conf.d
 printf 'unqualified-search-registries = ["docker.io"]\\n' > /etc/containers/registries.conf.d/50-discalaves.conf
