@@ -13,7 +13,7 @@
 // ponytail: la red del contenedor llega a la red local de la casa; hace falta un motor rootless con
 // red propia (o reglas de firewall) para cerrarla.
 import { execFileSync, spawn } from "node:child_process";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { DISTRO, rutas, UID_DISTRO, USUARIO_DISTRO } from "./rutas";
@@ -150,7 +150,12 @@ export class Computadora {
     }
     avisar("encendiendo su computadora (la primera vez prepara Debian: puede tardar unos minutos)");
     const imagen = await construirUsuario(this.usuario);
-    const idImagen = await motorOk(["image", "inspect", "-f", "{{.Id}}", imagen]);
+    // Huella estable de la imagen (su configuración y sus capas). El .Id no sirve: con el almacén de containerd
+    // (Docker 29) cambia en cada build aunque todo salga de la caché, y la computadora se recrearía en cada
+    // arranque perdiendo lo instalado con sudo.
+    const idImagen = "sha256:" + createHash("sha256")
+      .update(await motorOk(["image", "inspect", "-f", "{{json .Config}}{{range .RootFS.Layers}}{{.}}{{end}}", imagen]))
+      .digest("hex");
     fs.mkdirSync(this.carpeta, { recursive: true }); // antes de montarla: si no existe, Docker la crearía como root
     // Claves de KasmVNC de esta sesión: en un archivo que iniciar.sh lee y borra (el entorno de un
     // contenedor que se reanuda no se puede cambiar).
@@ -162,8 +167,12 @@ export class Computadora {
     // Una red propia por IA: en la red compartida del motor, una IA llegaría al CDP (sin clave) y al KasmVNC de
     // las demás. Las redes de usuario del motor están aisladas entre sí.
     const red = this.nombre;
-    if ((await motor(["network", "inspect", red])).codigo !== 0) await motorOk(["network", "create", "--label", ETIQUETA, red]);
-    const existente = await motor(["inspect", "-f", '{{index .Config.Labels "discalaves.imagen"}} {{.HostConfig.NetworkMode}}', this.nombre]);
+    // Docker aísla entre sí las redes de usuario; Podman solo si se crean con isolate=true.
+    const aislar = PODMAN ? ["--opt", "isolate=true"] : [];
+    if ((await motor(["network", "inspect", red])).codigo !== 0) await motorOk(["network", "create", "--label", ETIQUETA, ...aislar, red]);
+    // La red se lee de NetworkSettings.Networks (en Docker y en Podman, indexada por nombre); HostConfig.NetworkMode
+    // en Podman dice "bridge" y haría recrear la computadora (perdiendo lo instalado) en cada arranque.
+    const existente = await motor(["inspect", "-f", '{{index .Config.Labels "discalaves.imagen"}} {{range $red, $_ := .NetworkSettings.Networks}}{{$red}}{{end}}', this.nombre]);
     if (existente.codigo === 0 && existente.salida.trim() === `${idImagen} ${red}`) {
       await motorOk(["start", this.nombre]);
     } else {
