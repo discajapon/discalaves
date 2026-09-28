@@ -452,3 +452,18 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 }
 .opcion-ia:hover, .opcion-ia:focus-visible { background: var(--gris-suave); }
 .solo-chat { font-size: var(--texto-chico); font-weight: 700; color: var(--tinta); }
+
+/* Interruptor de modo libre en la cabecera */
+.modo-libre {
+  padding: var(--e1) var(--e3);
+  border-radius: var(--radio-total);
+  border: 1px solid var(--borde);
+  font-size: var(--texto-chico);
+  color: var(--secundario);
+}
+.modo-libre[aria-pressed="true"] {
+  border-color: var(--notificacion-texto);
+  background: var(--notificacion-texto);
+  color: var(--sobre-oscuro);
+}
+.modo-libre[hidden] { display: none; }
