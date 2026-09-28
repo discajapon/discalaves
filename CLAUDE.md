@@ -28,7 +28,7 @@ el proceso principal (`app/src/main.ts`) lanza `llama-server` (llama.cpp,
 API compatible con OpenAI) en `127.0.0.1:8089` con una clave aleatoria por
 sesión, y la interfaz habla con él solo por IPC (`app/src/preload.ts`), con
 respuestas en streaming. qwen ya usa herramientas (bucle de agente propio en
-`main.ts`, máximo 8 pasos por mensaje; ver `app/src/herramientas.ts`):
+`main.ts`, sin límite de pasos: trabaja hasta acabar; ver `app/src/herramientas.ts`):
 `terminal`, `escribir_archivo`, `buscar_web`, `abrir_pagina`, `ver_pagina`,
 `hacer_clic` y `escribir_en`. Cumple el criterio 1 de "listo" (investiga en
 la web y deja un informe en un archivo, ~30 s) desde su propia computadora
@@ -111,9 +111,21 @@ imagen, ~2 min).
 - **Modo libre** (decisión del usuario, 2026-09-27): interruptor por IA en la
   cabecera, apagado por defecto y guardado en `indice.json`. Encendido: no
   pide aprobación para acciones delicadas, el mensaje de sistema le dice que
-  actúe sin preguntar, y el límite de pasos sube de 8 a 30. Ojo: el
+  actúe sin preguntar. Ojo: el
   contenedor protege el equipo, pero lo que haga en la web (enviar, pagar)
   es real.
+- **Sin límite de pasos** (decisión del usuario, 2026-09-27, en ambos modos):
+  la IA trabaja hasta acabar la tarea sin preguntar "¿sigo?"; el mensaje de
+  sistema le pide contar en una frase cada paso y probar otro camino si algo
+  falla. Frenos: el botón **Detener** (sustituye al de enviar mientras
+  trabaja; aborta la respuesta en curso, cuenta como "no" las aprobaciones
+  pendientes y deja "me detuviste" en el hilo; un comando que ya corre
+  termina antes de parar) y la detección de repeticiones (misma herramienta
+  con los mismos argumentos: a la 3.ª no se ejecuta y se le pide otro camino,
+  a la 5.ª se detiene y lo explica). Si una sola tarea no cabe en la ventana,
+  `contexto()` recorta las salidas de herramientas más antiguas (las 3
+  últimas quedan enteras). Choca con el principio 3 (puntos de control):
+  lo decidió el usuario.
 - Aprobación de acciones delicadas (borrar, enviar, pagar): obligatoria en el
   código salvo en modo libre (`delicado()` en `herramientas.ts`): `rm`/`rmdir`/`-delete` en la
   terminal, clics en botones como "enviar", "pagar", "comprar", "borrar", y
