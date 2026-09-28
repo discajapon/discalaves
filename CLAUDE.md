@@ -101,7 +101,12 @@ imagen, ~2 min).
   (como la de llama-server), que el proceso principal entrega en el evento
   `login`: "ver" solo mira y "control" usa teclado y ratón ("tomar el
   control"). Mientras el usuario tiene el control, las herramientas del
-  navegador le dicen a la IA que espere. Portapapeles desactivado.
+  navegador le dicen a la IA que espere. Portapapeles desactivado. No poner
+  `outline`/borde al iframe: dentro de un panel con `backdrop-filter:
+  url(#vidrio)`, Chromium aplica el filtro de vidrio encima del escritorio y
+  lo deja borroso (el aviso de control es un anillo del propio panel). La
+  calidad de imagen la decide el servidor (`kasmvnc.yaml`); KasmVNC ignora
+  los parámetros de calidad del cliente.
 - `sudo` (decisión del usuario, 2026-09-27; reemplaza la del 2026-09-25 con
   `pkexec`): un comando que empieza por `sudo` corre como **root de su
   contenedor** (`exec -u 0`), sin contraseña, y nunca toca el sistema del
