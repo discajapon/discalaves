@@ -1,10 +1,10 @@
-// Comprueba el aislamiento de las computadoras de las IAs (contenedores, sin modelo ni sudo): npm run prueba
+// Comprueba el aislamiento de las computadoras de las IAs (contenedores reales, sin modelo): npm run prueba
 // La primera vez construye la imagen de Debian (varios minutos).
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { apagarTodas, computadoraDe } from "./computadora";
+import { borrar, computadoraDe } from "./computadora";
 import { ejecutarHerramienta } from "./herramientas";
 import { navegadorDe } from "./navegador";
 
@@ -30,7 +30,13 @@ async function main() {
   r = await correr("terminal", { comando: "grep CapEff /proc/self/status; test -e /var/run/docker.sock && echo SOCKET; touch /usr/x" });
   assert.match(r.salida, /CapEff:\s+0+\n/, "debe correr sin capacidades");
   assert.doesNotMatch(r.salida, /SOCKET/, "no debe ver el socket de Docker");
-  assert.match(r.salida, /Read-only file system/, "el sistema debe ser de solo lectura");
+  assert.match(r.salida, /Permission denied/, "sin sudo no debe poder tocar su sistema");
+
+  // sudo: root de SU contenedor (puede tocar su sistema), nunca del equipo.
+  r = await correr("terminal", { comando: `sudo id -u && touch /usr/local/prueba-root && ls ${os.homedir()}` });
+  assert.match(r.salida, /^0\n/, "sudo debe ser root dentro del contenedor");
+  assert.notEqual(r.codigo, 0, "ni como root debe ver la carpeta personal");
+  assert.equal(fs.existsSync("/usr/local/prueba-root"), false, "sudo no debe tocar el sistema del equipo");
 
   r = await correr("escribir_archivo", { ruta: "informes/a.md", contenido: "# hola\n" });
   assert.equal(r.codigo, 0, r.salida);
@@ -60,13 +66,15 @@ async function main() {
   assert.notEqual(r.codigo, 0, "una IA no debe ver la carpeta de otra");
   assert.notEqual(ctx.navegador, ctx2.navegador, "cada IA debe tener su propio navegador");
 
-  apagarTodas();
-  for (const c of [ctx, ctx2]) fs.rmSync(c.carpeta, { recursive: true, force: true });
+  for (const c of [ctx, ctx2]) {
+    await borrar(c.computadora);
+    fs.rmSync(c.carpeta, { recursive: true, force: true });
+  }
   console.log("computadoras: ok");
 }
 
-main().catch((e) => {
-  apagarTodas();
+main().catch(async (e) => {
+  for (const u of ["prueba", "otra"]) await borrar(computadoraDe("", u));
   console.error(e);
   process.exit(1);
 });

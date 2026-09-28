@@ -1,15 +1,13 @@
 // Herramientas de cada IA. Todo corre dentro de su computadora (un contenedor Debian, ver
-// computadora.ts) salvo los comandos que empiezan por "sudo": esos corren en el sistema real y solo
-// después de que el usuario escriba su contraseña en el diálogo de GNOME (pkexec/polkit). La
-// contraseña nunca pasa por la app ni por el modelo.
-import { spawn } from "node:child_process";
+// computadora.ts); nada toca el sistema del usuario. Los comandos que empiezan por "sudo" corren como
+// root de SU contenedor, sin contraseña (decisión del usuario, 2026-09-27).
 import fs from "node:fs";
 import type { Computadora } from "./computadora";
 import type { Navegador } from "./navegador";
 
 const MAX_SALIDA = 3000; // caracteres de salida que ve el modelo
 const TIEMPO_CAJA = 120_000;
-const TIEMPO_SUDO = 10 * 60_000; // incluye el tiempo que tarda el usuario en escribir la contraseña
+const TIEMPO_SUDO = 10 * 60_000; // apt puede tardar
 
 export const DEFINICIONES = [
   {
@@ -19,8 +17,8 @@ export const DEFINICIONES = [
       description:
         "Ejecuta un comando bash en tu computadora aislada (Debian 13 con escritorio): empieza en tu carpeta de inicio (~), con internet, " +
         "sin acceso a los archivos del usuario. Los programas gráficos se abren en tu escritorio (DISPLAY=:1). " +
-        "Devuelve la salida y el código de salida. Si de verdad necesitas permisos de administrador (por ejemplo instalar un paquete " +
-        "con apt), empieza el comando con sudo: el usuario tendrá que escribir su contraseña y el comando correrá en su sistema real.",
+        "Devuelve la salida y el código de salida. Para ser administrador de tu computadora (por ejemplo sudo apt-get install -y <paquete>), " +
+        "empieza el comando con sudo: corre como root de tu computadora, no de la del usuario.",
       parameters: {
         type: "object",
         properties: { comando: { type: "string", description: "comando bash, por ejemplo: ls -la" } },
@@ -66,7 +64,7 @@ function herramienta(name: string, description: string, properties: Record<strin
 }
 
 export interface Resultado { salida: string; codigo: number }
-export type Aviso = (fase: "ejecutando" | "esperando-clave", detalle: string) => void;
+export type Aviso = (fase: "ejecutando", detalle: string) => void;
 export interface Contexto {
   carpeta: string; // su /home en su computadora
   usuario: string; // nombre dentro de su computadora: /home/<usuario>
@@ -88,35 +86,16 @@ function recortar(r: Resultado): Resultado {
   return { salida: salida || "(sin salida)", codigo: r.codigo };
 }
 
-// Solo para pkexec (sudo en el sistema real); todo lo demás corre en su computadora.
-function ejecutar(programa: string, argumentos: string[], tiempo: number): Promise<Resultado> {
-  return new Promise((resolver) => {
-    const hijo = spawn(programa, argumentos, { timeout: tiempo, stdio: ["ignore", "pipe", "pipe"] });
-    const trozos: Buffer[] = [];
-    hijo.stdout.on("data", (b) => trozos.push(b));
-    hijo.stderr.on("data", (b) => trozos.push(b));
-    hijo.on("error", (e) => resolver({ salida: `no se pudo ejecutar ${programa}: ${e.message}`, codigo: -1 }));
-    hijo.on("close", (codigo, senal) =>
-      resolver(recortar({ salida: Buffer.concat(trozos).toString("utf8") + (senal ? `\n[detenido: superó ${tiempo / 1000} s]` : ""), codigo: codigo ?? -1 })),
-    );
-  });
-}
-
-async function terminal({ carpeta, computadora, avisar }: Contexto, comando: string): Promise<Resultado> {
+async function terminal({ computadora, avisar }: Contexto, comando: string): Promise<Resultado> {
   const sudo = comando.match(/^\s*sudo\s+(?:-\S+\s+)*(.+)$/s);
   if (!sudo) {
     await computadora.encender((d) => avisar("ejecutando", d));
     avisar("ejecutando", comando);
     return recortar(await computadora.ejecutar(["bash", "-c", comando], { tiempo: TIEMPO_CAJA }));
   }
-  avisar("esperando-clave", sudo[1]);
-  // pkexec muestra el comando completo en el diálogo, así el usuario ve qué está autorizando.
-  const r = await ejecutar("pkexec", ["/bin/bash", "-c", `cd '${carpeta}' && ${sudo[1]}`], TIEMPO_SUDO);
-  if (r.codigo === 126) return { salida: "el usuario canceló el permiso de administrador; no se ejecutó nada", codigo: 126 };
-  if (r.codigo === 127 && /not authorized|No authentication agent/i.test(r.salida)) {
-    return { salida: "no se obtuvo el permiso de administrador (contraseña incorrecta o sin diálogo disponible)", codigo: 127 };
-  }
-  return r;
+  await computadora.encender((d) => avisar("ejecutando", d));
+  avisar("ejecutando", `sudo ${sudo[1]}`);
+  return recortar(await computadora.ejecutar(["bash", "-c", sudo[1]], { tiempo: TIEMPO_SUDO, root: true }));
 }
 
 async function delicado(navegador: Navegador, nombre: string, args: Record<string, unknown>): Promise<string | null> {
