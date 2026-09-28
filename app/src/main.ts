@@ -16,11 +16,13 @@ const PUERTO = 8089;
 const CLAVE = randomBytes(24).toString("hex"); // sin clave, cualquier web abierta en el navegador podría usar el servidor
 const CONTEXTO_CARACTERES = 32000; // ponytail: ventana por tamaño (~9k tokens de 16k); resumir cuando las conversaciones crezcan
 const MAX_PASOS = 8; // honestidad con modelos pequeños: tras 8 herramientas seguidas se detiene y pregunta
+const MAX_PASOS_LIBRE = 30; // en modo libre trabaja más tiempo sola, pero sigue deteniéndose en algún momento
 const OLLAMA = "http://127.0.0.1:11434"; // ponytail: dirección por defecto de Ollama; configurable cuando exista el gestor de modelos
 const CONTEXTO_OLLAMA = 10000; // Ollama recorta por defecto a ~4k tokens: se le manda menos historial
 
 // Cada conversación es con una IA: qwen (llama-server incluido) o un modelo de Ollama.
-interface Conversacion { id: string; nombre: string; proveedor: "qwen" | "ollama"; modelo: string; herramientas: boolean }
+// libre: "modo libre", decisión del usuario por IA (apagado por defecto): no pide aprobación ni pregunta qué hacer.
+interface Conversacion { id: string; nombre: string; proveedor: "qwen" | "ollama"; modelo: string; herramientas: boolean; libre?: boolean }
 interface Modelo { proveedor: "qwen" | "ollama"; modelo: string; detalle: string; herramientas: boolean }
 const QWEN: Conversacion = { id: "qwen", nombre: "qwen", proveedor: "qwen", modelo: "Qwen3.5-9B", herramientas: true };
 
@@ -35,16 +37,20 @@ function computadora(c: Conversacion) {
   return { usuario, carpeta, computadora: pc, navegador: navegadorDe(pc) };
 }
 
-const sistemaConHerramientas = (nombre: string, usuario: string) =>
+const sistemaConHerramientas = (nombre: string, usuario: string, libre: boolean) =>
   `Eres ${nombre}, un empleado de Discalaves que trabaja en la computadora del usuario. ` +
   "Responde en el idioma del usuario, de forma breve y clara. " +
-  `Tienes tu propia computadora aislada con terminal, navegador e internet; tu carpeta es /home/${usuario}. ` +
+  `Tienes tu propia computadora aislada (Debian con escritorio) con terminal, navegador e internet; tu carpeta es /home/${usuario}. ` +
   "Para investigar en la web: buscar_web, luego abrir_pagina con las direcciones más útiles; para formularios: ver_pagina, hacer_clic y escribir_en. " +
   "Cita las direcciones de donde sacas la información. " +
   "Trabaja en pasos cortos y cuenta al usuario qué hiciste y qué encontraste. " +
   "Si no sabes algo, un comando falla o no puedes hacerlo, dilo en vez de inventar. " +
-  "Borrar, enviar o pagar siempre requiere la aprobación del usuario: la app se la pide sola; si la rechaza, no insistas. " +
-  "Usa sudo solo si es imprescindible: el usuario tendrá que escribir su contraseña.";
+  "Para instalar programas o tocar el sistema, empieza el comando con sudo (eres root en tu computadora, no en la del usuario); " +
+  "para instalar: sudo apt-get update && sudo apt-get install -y <paquete>. " +
+  (libre
+    ? "Trabajas en modo libre: actúa por tu cuenta, no pidas confirmación ni preguntes qué hacer; decide tú y termina la tarea. " +
+      "Pregunta solo si te falta un dato imprescindible que no puedes averiguar."
+    : "Borrar, enviar o pagar siempre requiere la aprobación del usuario: la app se la pide sola; si la rechaza, no insistas.");
 
 const sistemaSoloChat = (nombre: string) =>
   `Eres ${nombre}, un empleado de Discalaves que corre en la computadora del usuario. ` +
@@ -60,7 +66,7 @@ type Mensaje =
   | { de: "herramienta"; id: string; nombre: string; argumentos: string; salida: string; codigo: number; t: number };
 type Estado =
   | { fase: "cargando" | "listo" | "escribiendo" }
-  | { fase: "ejecutando" | "esperando-clave" | "esperando-aprobacion" | "error"; detalle: string };
+  | { fase: "ejecutando" | "esperando-aprobacion" | "error"; detalle: string };
 
 const carpetaConversaciones = () => path.join(app.getPath("userData"), "conversaciones");
 const archivoHistorial = (id: string) => path.join(carpetaConversaciones(), `${id}.json`);
@@ -89,7 +95,8 @@ function cambiarEstadoServidor(nuevo: Estado) {
 function leerConversaciones() {
   try {
     const guardadas: Conversacion[] = JSON.parse(fs.readFileSync(archivoIndice(), "utf8"));
-    conversaciones = [QWEN, ...guardadas.filter((c) => c.proveedor === "ollama")];
+    const qwen = guardadas.find((c) => c.id === QWEN.id);
+    conversaciones = [{ ...QWEN, libre: qwen?.libre === true }, ...guardadas.filter((c) => c.proveedor === "ollama")];
   } catch {
     conversaciones = [QWEN];
   }
@@ -216,7 +223,7 @@ function contexto(c: Conversacion) {
 // Un turno del modelo: el texto se reenvía a la interfaz mientras llega; las llamadas se acumulan.
 async function turno(c: Conversacion, interfaz: Electron.WebContents) {
   const url = c.proveedor === "qwen" ? `http://127.0.0.1:${PUERTO}/v1/chat/completions` : `${OLLAMA}/v1/chat/completions`;
-  const sistema = c.herramientas ? sistemaConHerramientas(c.nombre, computadora(c).usuario) : sistemaSoloChat(c.nombre);
+  const sistema = c.herramientas ? sistemaConHerramientas(c.nombre, computadora(c).usuario, c.libre === true) : sistemaSoloChat(c.nombre);
   const r = await fetch(url, {
     method: "POST",
     headers: { authorization: `Bearer ${CLAVE}`, "content-type": "application/json" },
@@ -311,6 +318,13 @@ app.on("login", (ev, _contenido, detalles, _auth, responder) => {
 
 const buscar = (id: unknown) => conversaciones.find((c) => c.id === id);
 
+ipcMain.handle("modo-libre", (_e, id: unknown, activo: unknown) => {
+  const c = buscar(id);
+  if (!c?.herramientas) return false;
+  c.libre = activo === true;
+  guardarConversaciones();
+  return c.libre;
+});
 ipcMain.handle("conversaciones", () => conversaciones.map((c) => ({ ...c, estado: estadoDe(c), ultimo: historialDe(c.id).at(-1) })));
 ipcMain.handle("historial", (_e, id: unknown) => (buscar(id) ? historialDe(String(id)) : []));
 ipcMain.handle("estado", (_e, id: unknown) => {
@@ -349,7 +363,8 @@ ipcMain.handle("enviar", async (ev, id: unknown, entrada: unknown) => {
   historial.push({ de: "yo", texto, t: Date.now() });
   guardarHistorial(c.id);
   try {
-    for (let paso = 0; paso < MAX_PASOS; paso++) {
+    const pasos = c.libre ? MAX_PASOS_LIBRE : MAX_PASOS;
+    for (let paso = 0; paso < pasos; paso++) {
       cambiarEstado(c, { fase: "escribiendo" });
       const { texto, llamadas } = await turno(c, ev.sender);
       if (texto || llamadas.length) historial.push({ de: "ia", texto, t: Date.now(), ...(llamadas.length && { llamadas }) });
@@ -357,7 +372,7 @@ ipcMain.handle("enviar", async (ev, id: unknown, entrada: unknown) => {
       if (!llamadas.length) return {};
       for (const l of llamadas) {
         const r = await ejecutarHerramienta(
-          { ...computadora(c), avisar: (fase, detalle) => cambiarEstado(c, { fase, detalle }), aprobar: (d) => pedirAprobacion(c, ev.sender, d) },
+          { ...computadora(c), avisar: (fase, detalle) => cambiarEstado(c, { fase, detalle }), aprobar: async (d) => c.libre === true || pedirAprobacion(c, ev.sender, d) },
           l.nombre,
           l.argumentos,
         );
@@ -366,7 +381,7 @@ ipcMain.handle("enviar", async (ev, id: unknown, entrada: unknown) => {
       }
       ev.sender.send("paso", c.id);
     }
-    historial.push({ de: "ia", texto: `me detuve después de ${MAX_PASOS} pasos para que revises cómo va. ¿sigo?`, t: Date.now() });
+    historial.push({ de: "ia", texto: `me detuve después de ${pasos} pasos para que revises cómo va. ¿sigo?`, t: Date.now() });
     guardarHistorial(c.id);
     return {};
   } catch (e) {
