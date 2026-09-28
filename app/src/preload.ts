@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld("discalaves", {
   historial: (id: string) => ipcRenderer.invoke("historial", id),
   estado: (id: string) => ipcRenderer.invoke("estado", id),
   enviar: (id: string, texto: string) => ipcRenderer.invoke("enviar", id, texto),
+  detener: (id: string) => ipcRenderer.invoke("detener", id),
   aprobar: (id: string, si: boolean) => ipcRenderer.invoke("aprobar", id, si),
   verPantalla: (id: string, ver: boolean) => ipcRenderer.invoke("pantalla:ver", id, ver),
   controlPantalla: (id: string, activo: boolean) => ipcRenderer.invoke("pantalla:control", id, activo),
