@@ -1,6 +1,7 @@
 // Computadora de cada IA: un contenedor con Debian 13, escritorio XFCE, Chromium con ventana y
 // KasmVNC (ver app/computadora/Dockerfile). Es el ÚNICO módulo que llama al motor de contenedores:
-// docker por defecto, podman con DISCALAVES_MOTOR=podman (el Dockerfile es OCI estándar).
+// en Linux, docker por defecto o podman con DISCALAVES_MOTOR=podman; en Windows, Podman rootless dentro
+// de la distro WSL "discalaves" (ver wsl.ts), con la misma imagen. Nada de Docker Desktop.
 //
 // Endurecimiento: la IA trabaja como usuario sin privilegios y sin capacidades (no puede escribir fuera de
 // su /home), no-new-privileges, límites de memoria y procesos, puertos solo en 127.0.0.1, y del equipo
@@ -15,20 +16,31 @@ import { execFileSync, spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { DISTRO, rutas, UID_DISTRO, USUARIO_DISTRO } from "./rutas";
+import { apagarDistro, distroEnMarcha, estadoWsl, wslLista } from "./wsl";
 
-const MOTOR = process.env.DISCALAVES_MOTOR ?? "docker";
+// Cómo se invoca al motor en cada sistema.
+export function ordenMotor(plataforma: string, motorElegido?: string): string[] {
+  if (plataforma === "win32") return ["wsl.exe", "-d", DISTRO, "-u", USUARIO_DISTRO, "--", "podman"];
+  return [motorElegido || "docker"];
+}
+const ORDEN = ordenMotor(process.platform, process.env.DISCALAVES_MOTOR);
+const MOTOR = ORDEN.at(-1)!; // docker o podman (para los mensajes)
+const PODMAN = MOTOR === "podman";
 const IMAGEN = "discalaves-computadora";
 const DIR_IMAGEN = path.join(__dirname, "..", "computadora");
 const ETIQUETA = "discalaves.computadora=1";
-const UID = String(process.getuid?.() ?? 1000); // el mismo uid que el usuario del equipo: los archivos de su carpeta son suyos
-const GID = String(process.getgid?.() ?? 1000);
+// Linux: el mismo uid que el usuario del equipo, así los archivos de su carpeta son suyos. Windows: el
+// uid fijo del usuario de la distro (con Podman, --userns=keep-id lo conserva dentro del contenedor).
+const UID = String(rutas.windows ? UID_DISTRO : (process.getuid?.() ?? 1000));
+const GID = String(rutas.windows ? UID_DISTRO : (process.getgid?.() ?? 1000));
 const CAPACIDADES_ROOT = ["CHOWN", "DAC_OVERRIDE", "FOWNER", "SETUID", "SETGID"]; // lo justo para apt/dpkg como root
 
 export interface Resultado { salida: string; codigo: number }
 
 function motor(args: string[], opciones: { entrada?: string; tiempo?: number } = {}): Promise<Resultado> {
   return new Promise((resolver) => {
-    const hijo = spawn(MOTOR, args, { timeout: opciones.tiempo, stdio: ["pipe", "pipe", "pipe"] });
+    const hijo = spawn(ORDEN[0], [...ORDEN.slice(1), ...args], { timeout: opciones.tiempo, stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
     const trozos: Buffer[] = [];
     hijo.stdout.on("data", (b) => trozos.push(b));
     hijo.stderr.on("data", (b) => trozos.push(b));
@@ -46,13 +58,33 @@ async function motorOk(args: string[], opciones: { entrada?: string; tiempo?: nu
   return r.salida.trim();
 }
 
+// Carpeta con el Dockerfile tal como la ve el motor. En Windows se copia dentro de la distro (son pocos
+// archivos): así la distro no necesita ver los discos de Windows, y funciona aunque la app esté empaquetada
+// en un .asar (Node lo lee; un proceso externo no).
+async function contextoImagen(): Promise<string> {
+  if (!rutas.windows) return DIR_IMAGEN;
+  const destino = `/home/${USUARIO_DISTRO}/.discalaves-imagen`;
+  for (const f of fs.readdirSync(DIR_IMAGEN)) {
+    const r = await new Promise<Resultado>((resolver) => {
+      const hijo = spawn("wsl.exe", ["-d", DISTRO, "-u", USUARIO_DISTRO, "--", "sh", "-c", 'mkdir -p "$1" && cat > "$1/$2"', "sh", destino, f], { windowsHide: true });
+      hijo.on("error", (e) => resolver({ salida: e.message, codigo: -1 }));
+      hijo.on("close", (codigo) => resolver({ salida: "", codigo: codigo ?? -1 }));
+      hijo.stdin.end(fs.readFileSync(path.join(DIR_IMAGEN, f)));
+    });
+    if (r.codigo !== 0) throw new Error(`no pude copiar ${f} a la distro ${DISTRO}: ${r.salida}`);
+  }
+  return destino;
+}
+
 // La imagen base se construye (o se confirma en caché) una vez por sesión de la app.
 let imagenBase: Promise<string> | undefined;
 const construirBase = () =>
-  (imagenBase ??= motorOk(["build", "-q", "-t", `${IMAGEN}:base`, DIR_IMAGEN], { tiempo: 30 * 60_000 }).catch((e) => {
-    imagenBase = undefined;
-    throw e;
-  }));
+  (imagenBase ??= contextoImagen()
+    .then((contexto) => motorOk(["build", "-q", "-t", `${IMAGEN}:base`, contexto], { tiempo: 30 * 60_000 }))
+    .catch((e) => {
+      imagenBase = undefined;
+      throw e;
+    }));
 
 // Capa mínima con el usuario de la IA: así /etc/passwd lo conoce sin darle permisos para editarlo.
 async function construirUsuario(usuario: string): Promise<string> {
@@ -109,6 +141,9 @@ export class Computadora {
   }
 
   private async arrancar(avisar: Avisar) {
+    if (rutas.windows && !wslLista() && (await estadoWsl()).estado !== "lista") {
+      throw new Error("su computadora necesita WSL preparado: acepta el aviso de Windows al abrir Discalaves");
+    }
     avisar("encendiendo su computadora (la primera vez prepara Debian: puede tardar unos minutos)");
     const imagen = await construirUsuario(this.usuario);
     const idImagen = await motorOk(["image", "inspect", "-f", "{{.Id}}", imagen]);
@@ -132,11 +167,12 @@ export class Computadora {
       await motorOk([
         "run", "-d", "--name", this.nombre, "--label", ETIQUETA, "--label", `discalaves.imagen=${idImagen}`,
         "--hostname", this.usuario, "--network", red,
+        ...(PODMAN ? ["--userns=keep-id"] : []), // rootless: su uid dentro = el del usuario dueño de la carpeta
         "--cap-drop=ALL", ...CAPACIDADES_ROOT.flatMap((c) => ["--cap-add", c]), "--security-opt", "no-new-privileges",
         "--tmpfs", "/tmp", "--tmpfs", "/run",
         "--memory", "2g", "--pids-limit", "512", "--shm-size", "512m",
         "-p", "127.0.0.1::6901", "-p", "127.0.0.1::9223",
-        "-v", `${this.carpeta}:${this.home}`,
+        "-v", `${rutas.enMotor(this.carpeta)}:${this.home}`,
         "-e", `TZ=${Intl.DateTimeFormat().resolvedOptions().timeZone}`,
         imagen,
       ]);
@@ -237,12 +273,16 @@ export function computadoraDe(carpeta: string, usuario: string): Computadora {
 // que se cerró mal). Se conservan detenidas, con lo que tengan instalado. Síncrono a propósito: se llama al
 // salir de la app, cuando ya no se puede esperar a promesas.
 export function apagarTodas() {
+  if (rutas.windows && !distroEnMarcha()) return; // no enciende la distro solo para mirar
+  const [programa, ...previos] = ORDEN;
   try {
-    const ids = execFileSync(MOTOR, ["ps", "-q", "--filter", `label=${ETIQUETA}`], { encoding: "utf8", timeout: 10_000 }).split("\n").filter(Boolean);
-    if (ids.length) execFileSync(MOTOR, ["stop", "-t", "3", ...ids], { timeout: 60_000, stdio: "ignore" });
+    const ids = execFileSync(programa, [...previos, "ps", "-q", "--filter", `label=${ETIQUETA}`], { encoding: "utf8", timeout: 10_000, windowsHide: true })
+      .split("\n").map((l) => l.trim()).filter(Boolean);
+    if (ids.length) execFileSync(programa, [...previos, "stop", "-t", "3", ...ids], { timeout: 60_000, stdio: "ignore", windowsHide: true });
   } catch {
     // sin motor de contenedores no hay nada que apagar
   }
+  if (rutas.windows) apagarDistro(); // libera la memoria de WSL
 }
 
 // Borra una computadora (su sistema, no su carpeta). Para las pruebas.

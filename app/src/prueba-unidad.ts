@@ -1,7 +1,9 @@
 // Pruebas que no necesitan GPU, Docker ni WSL: rutas y adaptadores por sistema. Corren en Linux y en el
 // runner de Windows de GitHub Actions: npm run prueba:unidad
 import assert from "node:assert/strict";
+import { ordenMotor } from "./computadora";
 import { rutasPara } from "./rutas";
+import { distrosDe, textoWsl } from "./wsl";
 
 // Linux: igual que siempre.
 let r = rutasPara("linux", {}, "/home/ana");
@@ -31,5 +33,18 @@ assert.equal(rutasPara("win32", {}, "C:\\Users\\Ana").datos, "C:\\Users\\Ana\\Ap
 const conIA = rutasPara("win32", { LOCALAPPDATA: "C:\\L", DISCALAVES_IA: "D:\\IA" });
 assert.equal(conIA.servidor, "D:\\IA\\llama.cpp\\llama-server.exe");
 assert.equal(conIA.datos, "C:\\L\\Discalaves\\datos");
+
+// Motor de contenedores por sistema: nada de Docker Desktop en Windows.
+assert.deepEqual(ordenMotor("linux"), ["docker"]);
+assert.deepEqual(ordenMotor("linux", "podman"), ["podman"]);
+assert.deepEqual(ordenMotor("win32"), ["wsl.exe", "-d", "discalaves", "-u", "discalaves", "--", "podman"]);
+assert.deepEqual(ordenMotor("win32", "docker"), ordenMotor("win32"), "en Windows DISCALAVES_MOTOR no cambia a Docker");
+
+// wsl.exe -l -q responde en UTF-16LE (a veces con BOM); lo de dentro de la distro, en UTF-8.
+const utf16 = (t: string) => Buffer.from(t, "utf16le");
+assert.deepEqual(distrosDe(utf16("Ubuntu\r\ndiscalaves\r\n")), ["Ubuntu", "discalaves"]);
+assert.deepEqual(distrosDe(Buffer.concat([Buffer.from([0xff, 0xfe]), utf16("discalaves\r\n")])), ["discalaves"]);
+assert.deepEqual(distrosDe(Buffer.from("")), []);
+assert.equal(textoWsl(Buffer.from("hola ñ\n", "utf8")), "hola ñ\n", "la salida de los comandos de la distro es UTF-8");
 
 console.log("unidad: ok");

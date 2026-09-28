@@ -164,7 +164,7 @@ function iniciarServidor() {
     "-ctk", "q8_0", "-ctv", "q8_0", // caché en 8 bits: 16k de contexto (páginas web) casi sin coste de VRAM
     "-fitt", "256", // margen de VRAM bajo: con el de 1 GB por defecto, en 8 GB quedan capas en CPU y va a la mitad de velocidad
     "--reasoning", "off", "--no-webui",
-  ], { stdio: ["ignore", log, log] });
+  ], { stdio: ["ignore", log, log], windowsHide: true }); // en Windows, sin ventana de consola
   servidor.on("exit", (codigo) => {
     servidor = undefined;
     if (!saliendo) cambiarEstadoServidor({ fase: "error", detalle: `el modelo se detuvo (código ${codigo}); revisa llama-server.log` });
