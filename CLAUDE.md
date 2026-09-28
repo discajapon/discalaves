@@ -138,6 +138,10 @@ imagen, ~2 min).
   con "permitir"/"no". Es por palabras clave: puede dejar pasar acciones
   delicadas con otros nombres.
 
+**Diseño:** antes de tocar estilos, filtros SVG o animaciones, lee
+`GUIA_DE_DISEÑO.md` (reglas del vidrio líquido, tokens, recetas de
+materiales, patrones de movimiento y plantillas de componentes).
+
 La interfaz se escribe como HTML/CSS/TS estándar para poder servirla como web
 local (y en el celular) más adelante; Electron es solo la ventana. Los tokens
 de diseño viven en `app/estilos.css` (nada de hex sueltos). El "vidrio
