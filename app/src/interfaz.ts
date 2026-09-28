@@ -87,6 +87,36 @@ function horaCorta(t: number): string {
   return d.toLocaleDateString("es", { day: "numeric", month: "short" });
 }
 
+// ---- Selección de la lista: una lente de vidrio que se desliza hasta la IA activa ----
+const sinMovimiento = matchMedia("(prefers-reduced-motion: reduce)");
+const lente = crear("span", "seleccion");
+lente.setAttribute("aria-hidden", "true");
+let indiceLente = -1;
+
+function moverLente(filas: HTMLElement[]) {
+  const i = conversaciones.findIndex((c) => c.id === activa);
+  const fila = filas[i];
+  if (!fila) return;
+  const destino = `translateY(${fila.offsetTop}px)`;
+  lente.style.height = `${fila.offsetHeight}px`;
+  if (indiceLente >= 0 && i !== indiceLente && !sinMovimiento.matches) {
+    // Viaja como una gota: se estira a mitad de camino y se asienta con un pequeño rebote.
+    const origen = lente.style.transform || destino;
+    const mitad = (filas[indiceLente]?.offsetTop ?? fila.offsetTop) / 2 + fila.offsetTop / 2;
+    lente.animate(
+      [
+        { transform: origen },
+        { transform: `translateY(${mitad}px) scale(0.96, 1.35)`, offset: 0.45 },
+        { transform: `${destino} scale(1.02, 0.94)`, offset: 0.8 },
+        { transform: destino },
+      ],
+      { duration: 480, easing: "cubic-bezier(0.34, 1.2, 0.64, 1)" },
+    );
+  }
+  lente.style.transform = destino;
+  indiceLente = i;
+}
+
 function dibujarLista() {
   const filas = conversaciones.map((c) => {
     const ultimo = c.id === activa ? mensajes.at(-1) : c.ultimo;
@@ -102,7 +132,8 @@ function dibujarLista() {
     fila.addEventListener("click", () => seleccionar(c.id));
     return fila;
   });
-  document.getElementById("lista")!.replaceChildren(...filas);
+  document.getElementById("lista")!.replaceChildren(lente, ...filas); // la misma lente: conserva su posición
+  moverLente(filas);
 }
 
 function resumen(m: MensajeChat): string {
@@ -203,8 +234,10 @@ async function recargar() {
 }
 
 async function seleccionar(id: string) {
+  const antes = conversaciones.findIndex((c) => c.id === activa);
   conversaciones = await discalaves.conversaciones();
   activa = conversaciones.some((c) => c.id === id) ? id : conversaciones[0].id;
+  const despues = conversaciones.findIndex((c) => c.id === activa);
   try {
     localStorage.setItem(CLAVE_ACTIVA, activa);
   } catch {
@@ -213,6 +246,14 @@ async function seleccionar(id: string) {
   burbujaEnCurso = null;
   dibujarCabecera();
   await recargar();
+  // El hilo entra desde la dirección en que se movió la selección: desde abajo si la nueva IA está más abajo.
+  if (antes >= 0 && antes !== despues && !sinMovimiento.matches) {
+    const desde = despues > antes ? 28 : -28;
+    hilo.animate(
+      [{ transform: `translateY(${desde}px)`, opacity: 0 }, { transform: "none", opacity: 1 }],
+      { duration: 360, easing: "cubic-bezier(0.22, 1, 0.36, 1)" },
+    );
+  }
   entrada.focus();
 }
 
@@ -327,6 +368,8 @@ async function llenarMenuIA() {
   if (!ollama) menuIA.append(crear("p", "detalle", "Ollama no responde en este equipo; ¿está en marcha?"));
   else if (!deOllama.length) menuIA.append(crear("p", "detalle", "no hay modelos instalados (ollama pull …)"));
   else menuIA.append(...deOllama.map(opcionIA));
+  // Las opciones entran escalonadas (ver .menu-ia > * en estilos.css).
+  [...menuIA.children].forEach((el, i) => (el as HTMLElement).style.setProperty("--orden", String(i)));
   menuIA.querySelector("button")?.focus();
 }
 
