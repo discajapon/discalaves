@@ -52,7 +52,9 @@ async function main() {
 
   // Borrar necesita aprobación; si el usuario dice que no, no se borra.
   await correr("terminal", { comando: "ls && rm -rf informes" });
-  assert.equal(pedidas, 1);
+  await correr("terminal", { comando: "sudo rm -rf informes" });
+  await correr("terminal", { comando: "find informes -type f -exec rm {} +" });
+  assert.equal(pedidas, 3);
   assert.ok(fs.existsSync(path.join(ctx.carpeta, "informes/a.md")), "borró sin aprobación");
 
   r = await correr("terminal", { comando: "exit 3" });
