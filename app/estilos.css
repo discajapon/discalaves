@@ -467,3 +467,7 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
   color: var(--sobre-oscuro);
 }
 .modo-libre[hidden] { display: none; }
+
+/* Detener: ocupa el lugar del botón de enviar mientras la IA trabaja. */
+.microfono[hidden] { display: none; }
+.detener rect { fill: currentColor; }
