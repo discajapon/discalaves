@@ -10,6 +10,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     LANG=es_ES.UTF-8 \
     LC_ALL=es_ES.UTF-8 \
     DISPLAY=:1 \
+    NO_AT_BRIDGE=1 \
     PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/games:/usr/games
 
 RUN apt-get update \
@@ -23,9 +24,15 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends /tmp/kasmvnc.deb \
  && rm /tmp/kasmvnc.deb \
  && sed -i 's/^# *es_ES.UTF-8 UTF-8/es_ES.UTF-8 UTF-8/' /etc/locale.gen && locale-gen \
+ # El cliente web de KasmVNC relee sus lienzos (getImageData) al redimensionar; sin willReadFrequently
+ # Chromium avisa en la consola en cada conexión.
+ && sed -i -e 's/getContext("2d")/getContext("2d",{willReadFrequently:!0})/g' \
+      -e 's/getContext("2d",{alpha:!1})/getContext("2d",{alpha:!1,willReadFrequently:!0})/g' \
+      /usr/share/kasmvnc/www/assets/ui-*.js \
  && rm -rf /var/lib/apt/lists/*
 
 COPY kasmvnc.yaml /etc/kasmvnc/kasmvnc.yaml
+COPY xfce4-session.xml /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-session.xml
 COPY iniciar.sh /usr/local/bin/iniciar
 # "sudo" de esta computadora: la app ejecuta como root los comandos que EMPIEZAN por sudo (exec -u 0);
 # este sustituto hace que un sudo a mitad de comando funcione dentro de ese root y lo explique fuera de él.
