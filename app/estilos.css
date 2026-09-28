@@ -146,28 +146,28 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 .fila { position: relative; z-index: 1; }
 .fila[aria-current="true"], .fila[aria-current="true"]:hover { background: none; } /* la marca es la lente */
 
-/* Lente de vidrio que marca la conversación activa; se desliza al cambiar (ver moverLente en interfaz.ts). */
+/* Lente de vidrio que marca la conversación activa; al cambiar viaja como una gota de la fila actual a la
+   elegida (ver moverLente en interfaz.ts). Vidrio esmerilado y brillante: brillo arriba, canto claro,
+   refracción en los bordes (#lente) y un toque del color de la IA elegida (--acento). */
 .seleccion {
+  --acento: var(--acento-violeta);
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
   border-radius: var(--radio-fila);
   background:
-    radial-gradient(80% 60% at 30% 0%, var(--vidrio-reflejo), transparent 70%),
-    var(--vidrio-seleccion);
-  backdrop-filter: url(#lente);
+    radial-gradient(120% 80% at 25% 0%, var(--vidrio-reflejo), transparent 60%),
+    linear-gradient(to bottom, var(--vidrio-seleccion), color-mix(in srgb, var(--acento) 12%, var(--vidrio-seleccion)));
+  backdrop-filter: blur(6px) saturate(1.5) url(#lente);
   box-shadow:
-    inset 0 0 0 1px var(--vidrio-canto-fuerte),
-    inset 0 -2px 6px var(--vidrio-sombra),
-    0 3px 10px var(--vidrio-sombra-fuerte);
+    inset 0 1px 0 var(--vidrio-canto-fuerte),
+    inset 0 0 0 1px var(--vidrio-canto),
+    inset 0 -4px 10px color-mix(in srgb, var(--acento) 14%, transparent),
+    0 4px 14px var(--vidrio-sombra-fuerte);
   pointer-events: none;
-  transition: height 0.3s ease;
+  will-change: transform, height;
 }
-/* Al cambiar de conversación todo se licúa un instante: las filas implicadas y el hilo que entra se
-   ondulan y se calman (ver ondular() en interfaz.ts). */
-.fila.licuando { filter: url(#lente-liquida); }
-.hilo.licuando { filter: url(#ondas); }
 .fila-cuerpo { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .fila-arriba { display: flex; align-items: baseline; gap: var(--e2); }
 .nombre { font-weight: 550; font-size: var(--texto); }
@@ -492,8 +492,6 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 @media (prefers-reduced-motion: reduce) {
   .menu-ia, .menu-ia:not(:popover-open) { transition: none; transform: none; }
   .menu-ia:popover-open > * { animation: none; }
-  .seleccion { transition: none; }
-  .fila.licuando, .hilo.licuando { filter: none; }
 }
 .menu-titulo {
   padding: var(--e2) var(--e1) var(--e2);
