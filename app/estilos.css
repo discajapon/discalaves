@@ -25,6 +25,9 @@
   --vidrio-lente: rgb(255 255 255 / 0.06);
   --vidrio-reflejo: rgb(255 255 255 / 0.7);
   --vidrio-canto-fuerte: rgb(255 255 255 / 0.85);
+  --vidrio-seleccion: rgb(255 255 255 / 0.55);
+  --vidrio-menu: rgb(250 250 250 / 0.88); /* más opaco que los paneles: flota sobre texto; con una burbuja negra detrás el gris secundario sigue en AA */
+  --rebote: cubic-bezier(0.34, 1.56, 0.64, 1);
 
   --radio-burbuja: 16px;
   --radio-fila: 10px;
@@ -124,7 +127,7 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 .buscador input::placeholder { color: var(--secundario); }
 .buscador:focus-within { outline: 2px solid var(--acento-azul); }
 
-.lista { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+.lista { position: relative; flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
 .fila {
   display: flex;
   align-items: center;
@@ -135,7 +138,27 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
   text-align: left;
 }
 .fila:hover { background: rgb(0 0 0 / 0.03); }
-.fila[aria-current="true"] { background: var(--gris-suave); }
+.fila { position: relative; z-index: 1; }
+.fila[aria-current="true"], .fila[aria-current="true"]:hover { background: none; } /* la marca es la lente */
+
+/* Lente de vidrio que marca la conversación activa; se desliza al cambiar (ver moverLente en interfaz.ts). */
+.seleccion {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  border-radius: var(--radio-fila);
+  background:
+    radial-gradient(80% 60% at 30% 0%, var(--vidrio-reflejo), transparent 70%),
+    var(--vidrio-seleccion);
+  backdrop-filter: url(#lente);
+  box-shadow:
+    inset 0 0 0 1px var(--vidrio-canto-fuerte),
+    inset 0 -2px 6px var(--vidrio-sombra),
+    0 3px 10px var(--vidrio-sombra-fuerte);
+  pointer-events: none;
+  transition: height 0.3s ease;
+}
 .fila-cuerpo { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .fila-arriba { display: flex; align-items: baseline; gap: var(--e2); }
 .nombre { font-weight: 550; font-size: var(--texto); }
@@ -426,11 +449,36 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
   max-height: 60vh;
   overflow-y: auto;
   padding: var(--e2);
-  border: 1px solid var(--borde);
+  border: 0;
   border-radius: var(--radio-panel);
-  background: var(--fondo);
   color: var(--tinta);
-  box-shadow: 0 12px 40px var(--velo);
+  /* vidrio líquido, como los paneles, con más tinte para que se lea sobre la lista */
+  background: var(--vidrio-menu);
+  backdrop-filter: url(#vidrio);
+  box-shadow:
+    inset 0 1px 0 var(--vidrio-brillo),
+    inset 0 0 0 1px var(--vidrio-canto-fuerte),
+    0 16px 40px var(--vidrio-sombra-fuerte);
+  /* se abre como una gota que crece desde el botón + y se cierra encogiéndose */
+  transform-origin: top left;
+  transition:
+    transform 0.5s var(--rebote),
+    opacity 0.2s ease,
+    overlay 0.5s allow-discrete,
+    display 0.5s allow-discrete;
+}
+.menu-ia:not(:popover-open) { transform: scale(0.35, 0.15); opacity: 0; transition-duration: 0.22s; }
+@starting-style {
+  .menu-ia:popover-open { transform: scale(0.35, 0.15); opacity: 0; }
+}
+.menu-ia:popover-open > * { animation: aparecer 0.35s cubic-bezier(0.22, 1, 0.36, 1) both; animation-delay: calc(var(--orden, 0) * 35ms + 90ms); }
+@keyframes aparecer {
+  from { opacity: 0; transform: translateY(-6px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .menu-ia, .menu-ia:not(:popover-open) { transition: none; transform: none; }
+  .menu-ia:popover-open > * { animation: none; }
+  .seleccion { transition: none; }
 }
 .menu-titulo {
   padding: var(--e2) var(--e2) var(--e1);
@@ -454,7 +502,7 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
   text-align: left;
   cursor: pointer;
 }
-.opcion-ia:hover, .opcion-ia:focus-visible { background: var(--gris-suave); }
+.opcion-ia:hover, .opcion-ia:focus-visible { background: var(--vidrio-seleccion); box-shadow: inset 0 0 0 1px var(--vidrio-canto-fuerte); }
 .solo-chat { font-size: var(--texto-chico); font-weight: 700; color: var(--tinta); }
 
 /* Interruptor de modo libre: texto y, al lado, una pista con una lente de vidrio líquido que se desliza
@@ -462,7 +510,7 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 .modo-libre {
   display: flex;
   align-items: center;
-  gap: var(--e2);
+  gap: var(--e3); /* la lente sobresale de la pista: sin esto roza el texto */
   padding: var(--e1) var(--e2);
   border-radius: var(--radio-total);
   font-size: 13px;
