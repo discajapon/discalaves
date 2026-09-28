@@ -35,6 +35,10 @@ const ETIQUETA = "discalaves.computadora=1";
 const UID = String(rutas.windows ? UID_DISTRO : (process.getuid?.() ?? 1000));
 const GID = String(rutas.windows ? UID_DISTRO : (process.getgid?.() ?? 1000));
 const CAPACIDADES_ROOT = ["CHOWN", "DAC_OVERRIDE", "FOWNER", "SETUID", "SETGID"]; // lo justo para apt/dpkg como root
+// Docker da esas capacidades solo a root; Podman también a los usuarios normales (como capacidades
+// "ambientales"). Todo lo que corre como su usuario pasa antes por setpriv, que las vacía: así se queda sin
+// ninguna, igual que con Docker (lo comprueba prueba.ts: "debe correr sin capacidades").
+const SIN_CAPACIDADES = PODMAN ? ["setpriv", "--ambient-caps=-all", "--inh-caps=-all", "--"] : [];
 
 export interface Resultado { salida: string; codigo: number }
 
@@ -175,6 +179,7 @@ export class Computadora {
         "-v", `${rutas.enMotor(this.carpeta)}:${this.home}`,
         "-e", `TZ=${Intl.DateTimeFormat().resolvedOptions().timeZone}`,
         imagen,
+        ...(PODMAN ? [...SIN_CAPACIDADES, "/usr/local/bin/iniciar"] : []), // el mismo CMD de la imagen, sin capacidades
       ]);
     }
     this.puertoPantalla = await this.puerto(6901);
@@ -200,8 +205,9 @@ export class Computadora {
     await this.encender();
     const segundos = String(Math.ceil(opciones.tiempo / 1000));
     const usuario = opciones.root ? ["-u", "0", "-e", "HOME=/root"] : [];
+    const capacidades = opciones.root ? [] : SIN_CAPACIDADES;
     return motor(
-      ["exec", "-i", ...usuario, "-w", this.home, this.nombre, "timeout", "-k", "5", segundos, ...argumentos],
+      ["exec", "-i", ...usuario, "-w", this.home, this.nombre, ...capacidades, "timeout", "-k", "5", segundos, ...argumentos],
       { entrada: opciones.entrada, tiempo: opciones.tiempo + 15_000 },
     );
   }
@@ -228,7 +234,7 @@ export class Computadora {
       `f="${perfil}/Default/Preferences"; [ -f "$f" ] && sed -i ` +
       `-e 's/"exit_type":"[A-Za-z]*"/"exit_type":"Normal"/' -e 's/"exited_cleanly":false/"exited_cleanly":true/' "$f"; exec "$@"`;
     await motorOk([
-      "exec", "-d", this.nombre, "sh", "-c", marcarCerrado, "chromium",
+      "exec", "-d", this.nombre, ...SIN_CAPACIDADES, "sh", "-c", marcarCerrado, "chromium",
       "chromium", "--no-sandbox", // el aislamiento lo da el contenedor
       "--test-type", // sin la barra de aviso de --no-sandbox
       "--hide-crash-restore-bubble",
