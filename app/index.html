@@ -16,6 +16,16 @@
       <feDisplacementMap in="suave" in2="mapa" scale="70" xChannelSelector="R" yChannelSelector="G" result="refractado"/>
       <feColorMatrix in="refractado" type="saturate" values="1.6"/>
     </filter>
+    <!-- Ondas para las filas de la lista mientras la lente viaja de una conversación a otra. -->
+    <filter id="lente-liquida" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB">
+      <feTurbulence type="fractalNoise" baseFrequency="0.012 0.05" numOctaves="2" seed="7" result="ondas"/>
+      <feDisplacementMap in="SourceGraphic" in2="ondas" scale="16" xChannelSelector="R" yChannelSelector="G"/>
+    </filter>
+    <!-- Ondas para el contenido del hilo mientras entra al cambiar de conversación. -->
+    <filter id="ondas" x="-5%" y="-5%" width="110%" height="110%" color-interpolation-filters="sRGB">
+      <feTurbulence type="fractalNoise" baseFrequency="0.008 0.03" numOctaves="2" seed="3" result="ondas"/>
+      <feDisplacementMap in="SourceGraphic" in2="ondas" scale="22" xChannelSelector="R" yChannelSelector="G"/>
+    </filter>
     <!-- Lente del interruptor: mismo mapa, desplazamiento pequeño para un elemento de 30 px. -->
     <filter id="lente" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB">
       <feImage preserveAspectRatio="none" result="mapa"
