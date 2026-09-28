@@ -212,7 +212,7 @@ function contexto(c: Conversacion) {
     inicio = i;
     if (caracteres > limite) break;
   }
-  return historial.slice(inicio).map((m) => {
+  const mensajes: { role: string; content: string; [otros: string]: unknown }[] = historial.slice(inicio).map((m) => {
     if (m.de === "yo") return { role: "user", content: m.texto };
     if (m.de === "herramienta") return { role: "tool", tool_call_id: m.id, content: `código de salida ${m.codigo}\n${m.salida}` };
     return {
@@ -221,6 +221,19 @@ function contexto(c: Conversacion) {
       ...(m.llamadas && { tool_calls: m.llamadas.map((l) => ({ id: l.id, type: "function", function: { name: l.nombre, arguments: l.argumentos } })) }),
     };
   });
+  // Una sola tarea larga puede no caber: se acortan las salidas de herramientas más antiguas
+  // (las últimas quedan enteras) hasta entrar en la ventana.
+  // ponytail: recorte, no resumen; si ni así cabe, el servidor responderá con error de contexto.
+  let total = JSON.stringify(mensajes).length;
+  const herramientas = mensajes.filter((m) => m.role === "tool");
+  for (const m of herramientas.slice(0, -3)) {
+    if (total <= limite) break;
+    if (m.content.length <= 300) continue;
+    const corto = `${m.content.slice(0, 200)}\n[… salida antigua recortada para que quepa la tarea …]`;
+    total -= m.content.length - corto.length;
+    m.content = corto;
+  }
+  return mensajes;
 }
 
 // Un turno del modelo: el texto se reenvía a la interfaz mientras llega; las llamadas se acumulan.
