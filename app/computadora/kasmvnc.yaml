@@ -1,0 +1,16 @@
+# KasmVNC dentro del contenedor. Solo se publica en 127.0.0.1 del equipo (ver motor.ts), por eso va sin TLS.
+network:
+  protocol: http
+  interface: 0.0.0.0
+  websocket_port: 6901
+  ssl:
+    pem_certificate: ~
+    pem_key: ~
+    require_ssl: false
+  udp:
+    public_ip: 127.0.0.1
+desktop:
+  resolution:
+    width: 1280
+    height: 800
+  allow_resize: false
