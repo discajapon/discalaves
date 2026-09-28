@@ -2,7 +2,7 @@
   "name": "discalaves",
   "version": "0.0.0",
   "private": true,
-  "description": "Interfaz de escritorio de Discalaves (prototipo, datos de ejemplo)",
+  "description": "Discalaves: empleados de IA locales, cada uno con su propia computadora aislada (prototipo)",
   "license": "Apache-2.0",
   "main": "dist/main.js",
   "scripts": {
