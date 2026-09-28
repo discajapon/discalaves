@@ -112,7 +112,24 @@
     </form>
   </dialog>
 
+  <!-- Primer arranque en Windows (ver primer-arranque.ts): hoja sólida, como la del perfil. -->
+  <dialog id="wsl" class="perfil" aria-labelledby="wsl-titulo">
+    <form method="dialog">
+      <h2 id="wsl-titulo">Preparar las computadoras de los empleados</h2>
+      <p>En Windows, cada empleado trabaja en su propia computadora Linux aislada. Discalaves la crea dentro de WSL. Esto es lo que se hará:</p>
+      <ol id="wsl-pasos" class="wsl-pasos"></ol>
+      <p id="wsl-memoria" class="detalle"></p>
+      <p class="detalle">Sin esto puedes conversar, pero los empleados no podrán usar su computadora.</p>
+      <p id="wsl-estado" class="detalle" role="status"></p>
+      <div class="acciones">
+        <button id="wsl-ahora-no" type="button" class="boton secundario">Ahora no</button>
+        <button id="wsl-preparar" type="button" class="boton">Preparar</button>
+      </div>
+    </form>
+  </dialog>
+
   <script src="dist/interfaz.js"></script>
   <script src="dist/perfil.js"></script>
+  <script src="dist/primer-arranque.js"></script>
 </body>
 </html>

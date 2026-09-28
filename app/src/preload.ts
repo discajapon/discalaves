@@ -2,6 +2,11 @@ import { contextBridge, ipcRenderer } from "electron";
 
 // Único puente entre la interfaz (sin acceso a Node) y el proceso principal.
 contextBridge.exposeInMainWorld("discalaves", {
+  // Windows: primer arranque (WSL). En Linux, wslEstado responde "no-aplica".
+  wslEstado: () => ipcRenderer.invoke("wsl:estado"),
+  wslActivar: () => ipcRenderer.invoke("wsl:activar"),
+  wslPreparar: () => ipcRenderer.invoke("wsl:preparar"),
+  alProgresoWsl: (f: (texto: string) => void) => ipcRenderer.on("wsl:progreso", (_e, texto) => f(texto)),
   conversaciones: () => ipcRenderer.invoke("conversaciones"),
   modelos: () => ipcRenderer.invoke("modelos"),
   nuevaConversacion: (proveedor: string, modelo: string) => ipcRenderer.invoke("nueva-conversacion", proveedor, modelo),

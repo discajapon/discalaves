@@ -7,6 +7,7 @@ import { DEFINICIONES, ejecutarHerramienta } from "./herramientas";
 import { apagarTodas, computadoraDe, responde, type Computadora } from "./computadora";
 import { navegadorDe } from "./navegador";
 import { rutas } from "./rutas";
+import { registrarWsl } from "./ipc-wsl";
 
 // Rutas según el sistema (Linux o Windows): ver rutas.ts. ponytail: puerto fijo para un solo servidor.
 const SERVIDOR = rutas.servidor;
@@ -469,6 +470,8 @@ app.on("second-instance", () => {
   if (ventana?.isMinimized()) ventana.restore();
   ventana?.focus();
 });
+
+registrarWsl(ipcMain); // Windows: pantalla de primer arranque (WSL); en Linux no hace nada
 
 app.whenReady().then(() => {
   if (!primera) return;
