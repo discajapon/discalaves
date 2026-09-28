@@ -237,11 +237,12 @@ function contexto(c: Conversacion) {
 }
 
 // Un turno del modelo: el texto se reenvía a la interfaz mientras llega; las llamadas se acumulan.
-async function turno(c: Conversacion, interfaz: Electron.WebContents) {
+async function turno(c: Conversacion, interfaz: Electron.WebContents, senal: AbortSignal) {
   const url = c.proveedor === "qwen" ? `http://127.0.0.1:${PUERTO}/v1/chat/completions` : `${OLLAMA}/v1/chat/completions`;
   const sistema = c.herramientas ? sistemaConHerramientas(c.nombre, computadora(c).usuario, c.libre === true) : sistemaSoloChat(c.nombre);
   const r = await fetch(url, {
     method: "POST",
+    signal: senal, // Detener corta también la respuesta que está llegando
     headers: { authorization: `Bearer ${CLAVE}`, "content-type": "application/json" },
     body: JSON.stringify({
       model: c.modelo,
@@ -280,16 +281,28 @@ async function turno(c: Conversacion, interfaz: Electron.WebContents) {
 }
 
 // Aprobación de acciones delicadas: la interfaz muestra la tarjeta y responde con el id.
-const aprobaciones = new Map<string, (si: boolean) => void>();
+const aprobaciones = new Map<string, { conversacion: string; resolver: (si: boolean) => void }>();
 function pedirAprobacion(c: Conversacion, interfaz: Electron.WebContents, descripcion: string): Promise<boolean> {
   const id = randomBytes(8).toString("hex");
   cambiarEstado(c, { fase: "esperando-aprobacion", detalle: descripcion });
   interfaz.send("aprobacion", { id, conversacion: c.id, descripcion });
-  return new Promise((resolver) => aprobaciones.set(id, resolver));
+  return new Promise((resolver) => aprobaciones.set(id, { conversacion: c.id, resolver }));
 }
 ipcMain.handle("aprobar", (_e, id: unknown, si: unknown) => {
-  aprobaciones.get(String(id))?.(si === true);
+  aprobaciones.get(String(id))?.resolver(si === true);
   aprobaciones.delete(String(id));
+});
+
+// Detener: corta la tarea en curso de esa conversación. Lo que se esté ejecutando termina
+// (un comando no se mata a medias) y después ya no sigue.
+const tareas = new Map<string, AbortController>();
+ipcMain.handle("detener", (_e, id: unknown) => {
+  tareas.get(String(id))?.abort();
+  for (const [clave, a] of aprobaciones) {
+    if (a.conversacion !== id) continue;
+    a.resolver(false); // una aprobación pendiente cuenta como "no"
+    aprobaciones.delete(clave);
+  }
 });
 
 // Vista en vivo: el cliente web de KasmVNC de su escritorio, dentro del panel de la interfaz. Solo hay
@@ -378,11 +391,19 @@ ipcMain.handle("enviar", async (ev, id: unknown, entrada: unknown) => {
   const historial = historialDe(c.id);
   historial.push({ de: "yo", texto, t: Date.now() });
   guardarHistorial(c.id);
+  const parar = new AbortController();
+  tareas.set(c.id, parar);
+  const detenida = () => {
+    historial.push({ de: "ia", texto: "me detuviste. Aquí lo dejo; dime si sigo o cambio algo.", t: Date.now() });
+    guardarHistorial(c.id);
+    return {};
+  };
   try {
     const veces = new Map<string, number>(); // cuántas veces pidió cada llamada exacta en esta tarea
     for (;;) {
+      if (parar.signal.aborted) return detenida();
       cambiarEstado(c, { fase: "escribiendo" });
-      const { texto, llamadas } = await turno(c, ev.sender);
+      const { texto, llamadas } = await turno(c, ev.sender, parar.signal);
       if (texto || llamadas.length) historial.push({ de: "ia", texto, t: Date.now(), ...(llamadas.length && { llamadas }) });
       guardarHistorial(c.id);
       if (!llamadas.length) return {};
@@ -409,9 +430,11 @@ ipcMain.handle("enviar", async (ev, id: unknown, entrada: unknown) => {
       ev.sender.send("paso", c.id);
     }
   } catch (e) {
+    if (parar.signal.aborted) return detenida();
     const detalle = c.proveedor === "ollama" && (e as Error).message === "fetch failed" ? "Ollama no responde; ¿está en marcha?" : (e as Error).message;
     return { error: `no pude obtener respuesta: ${detalle}` };
   } finally {
+    tareas.delete(c.id);
     trabajando.delete(c.id);
     avisarEstado(c);
   }
