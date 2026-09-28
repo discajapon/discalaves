@@ -1,6 +1,6 @@
 # Computadora de cada IA: Debian 13 con escritorio XFCE mínimo, Chromium con ventana y terminal,
 # y KasmVNC para ver el escritorio en vivo desde la app. Dockerfile estándar (OCI): también sirve con
-# Podman rootless. El usuario de cada IA se añade encima en una capa mínima (ver motor.ts).
+# Podman rootless. El usuario de cada IA se añade encima en una capa mínima (ver src/computadora.ts).
 FROM debian:trixie-slim@sha256:a99cfc517144bc59b1978475ec53b46ecabec7e43635402ee5b77cc54cd1b20a
 
 ARG KASMVNC_VERSION=1.5.0

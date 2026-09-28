@@ -1,4 +1,4 @@
-# KasmVNC dentro del contenedor. Solo se publica en 127.0.0.1 del equipo (ver motor.ts), por eso va sin TLS.
+# KasmVNC dentro del contenedor. Solo se publica en 127.0.0.1 del equipo (ver src/computadora.ts), por eso va sin TLS.
 network:
   protocol: http
   interface: 0.0.0.0
