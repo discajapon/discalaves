@@ -93,43 +93,99 @@ de 8 GB.
 Esto es para quien quiera seguir el desarrollo; todavía no es una
 instalación para el público.
 
-1. Coloca en `~/Documents/IA-discalves` (o en la carpeta que indique la
-   variable `DISCALAVES_IA`):
-   - `llama.cpp/llama-server`: los binarios oficiales de llama.cpp con CUDA;
-   - `modelos/Qwen3.5-9B-Q4_K_M.gguf`: el modelo.
-2. Arranca la app:
+### Linux
 
-   ```sh
-   cd app
-   npm install
-   npm start
-   ```
+#### 1. Preparación
 
-La primera vez construye la imagen de la computadora de los empleados
-(unos 2 minutos) y carga el modelo (entre 10 y 30 segundos).
+1. **Descarga y configura llama.cpp con CUDA:**
+   - Descarga desde [ggml-org/llama.cpp/releases](https://github.com/ggml-org/llama.cpp/releases) el archivo `llama-*-bin-linux-cuda-12.4-x64.tar.gz`.
+   - Descomprime en `~/Documents/IA-discalaves/llama.cpp/` para que exista `~/Documents/IA-discalaves/llama.cpp/llama-server`.
+   - (O establece la variable de entorno `DISCALAVES_IA` a otra ruta).
 
-## Windows (en preparación)
+2. **Descarga el modelo:**
+   - Coloca `Qwen3.5-9B-Q4_K_M.gguf` en `~/Documents/IA-discalaves/modelos/`.
 
-> **Sin probar en una PC real.** Todo lo de esta sección está escrito y pasa
-> las pruebas automáticas, pero todavía no se ha comprobado en un equipo con
-> Windows y GPU NVIDIA. La lista de lo que falta comprobar está en
-> [PRUEBAS_WINDOWS.md](PRUEBAS_WINDOWS.md).
+3. **Requisitos del sistema:**
+   - Docker corriendo e instalado sin `sudo` (añade tu usuario al grupo `docker`):
+     ```bash
+     sudo usermod -aG docker $USER
+     newgrp docker
+     ```
+   - Node.js 24 o superior:
+     ```bash
+     node --version
+     ```
 
-En Windows, Discalaves funciona en modo híbrido:
+#### 2. Arrancar
 
-- La app y el modelo (llama.cpp con CUDA) corren como programas normales de
-  Windows.
-- Las computadoras de los empleados corren en una distro propia de WSL2
-  («discalaves») con Podman: sin Docker Desktop y sin tocar tus otras distros
-  ni tu configuración de WSL.
-- La primera vez, la app explica qué va a hacer y pide permiso antes de
-  activar WSL (Windows pedirá permiso de administrador y quizá un reinicio).
+```bash
+cd app
+npm install
+npm start
+```
 
-El instalador (`.exe`) se genera en cada cambio con GitHub Actions: en la
-pestaña **Actions** del repositorio, abre el último run del workflow
-**Windows** y descarga el artefacto `discalaves-instalador-windows`. Por ahora
-llama.cpp y el modelo se colocan a mano en `%LOCALAPPDATA%\Discalaves` (ver
-[PRUEBAS_WINDOWS.md](PRUEBAS_WINDOWS.md)).
+La primera vez:
+- Construye la imagen del contenedor de los empleados (~2 minutos).
+- Carga el modelo en la GPU (~10-30 segundos).
+
+#### 3. Pruebas rápidas
+
+```bash
+cd app
+npm run prueba:unidad
+```
+
+Todas las pruebas:
+```bash
+cd app
+npm run prueba
+```
+
+---
+
+### Windows
+
+#### 1. Preparación
+
+1. **Descarga el instalador:**
+   - Ve a [Actions](https://github.com/discajapon/discalaves/actions/workflows/windows.yml) del repositorio.
+   - Abre el último run **verde** del workflow **Windows**.
+   - Descarga el artefacto `discalaves-instalador-windows`.
+
+2. **Descarga llama.cpp con CUDA:**
+   - Desde [ggml-org/llama.cpp/releases](https://github.com/ggml-org/llama.cpp/releases), descarga `llama-…-bin-win-cuda-12.4-x64.zip` y `cudart` de la misma versión.
+   - Descomprime ambos en `%LOCALAPPDATA%\Discalaves\llama.cpp\` para que exista `%LOCALAPPDATA%\Discalaves\llama.cpp\llama-server.exe`.
+
+3. **Descarga el modelo:**
+   - Coloca `Qwen3.5-9B-Q4_K_M.gguf` en `%LOCALAPPDATA%\Discalaves\modelos\`.
+
+4. **Requisitos del equipo:**
+   - Windows 10 22H2 o Windows 11.
+   - GPU NVIDIA con 8 GB de VRAM o más.
+   - 16 GB de RAM recomendados.
+   - ~15 GB libres en el disco del sistema (modelo + WSL2 + contenedores).
+
+#### 2. Arrancar
+
+- Ejecuta el instalador descargado (`Discalaves-*-instalador-windows.exe`).
+- Elige la carpeta de instalación.
+- Al abrir la app por primera vez, si WSL2 no está activado, aparecerá una pantalla "Preparar las computadoras de los empleados".
+  - **"Ahora no":** sigas usando la app en modo chat (sin herramientas de los empleados).
+  - **"Preparar":** activa WSL2 (pide permiso de administrador), descarga Debian 13, instala Podman y crea la distro (puede pedir reinicio).
+
+#### 3. Primer uso con herramientas
+
+Tras preparar WSL:
+- La primera tarea con herramientas construye la imagen de Docker en Podman (~minutos).
+- Luego los empleados pueden investigar en la web y crear archivos.
+- Los archivos se guardan en `\\wsl$\discalaves\home\discalaves\trabajo\...` (accesible desde el Explorador).
+
+#### 4. Ver el escritorio del empleado
+
+- El botón del monitor muestra su escritorio (XFCE con Chromium) en vivo.
+- Puedes "Tomar el control" con tu teclado y ratón.
+
+---
 
 ## Licencia
 
