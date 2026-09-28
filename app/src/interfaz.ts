@@ -112,7 +112,7 @@ function moverLente(filas: HTMLElement[]) {
       [
         { transform: `translateY(${y0}px)`, height: `${h0}px`, easing: "cubic-bezier(0.55, 0, 0.35, 1)" },
         { transform: `translateY(${estirada.y}px) scaleX(0.95)`, height: `${estirada.h}px`, offset: 0.45, easing: "cubic-bezier(0.3, 0, 0.25, 1)" },
-        { transform: `translateY(${y1 + (baja ? 2 : -2)}px) scaleX(1.03)`, height: `${h1 - 4}px`, offset: 0.8, easing: "ease-out" },
+        { transform: `translateY(${y1 + (baja ? 2 : -2)}px)`, height: `${h1 - 4}px`, offset: 0.8, easing: "ease-out" }, // se aplasta al llegar (sin ensancharse: la lista la recortaría)
         { transform: `translateY(${y1}px)`, height: `${h1}px` },
       ],
       { duration: 520 },
