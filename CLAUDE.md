@@ -79,7 +79,8 @@ imagen, ~2 min).
   capacidades (no puede escribir fuera de su `/home`), `no-new-privileges`,
   `--cap-drop=ALL` más solo CHOWN, DAC_OVERRIDE, FOWNER, SETUID y SETGID para
   el root del contenedor (lo que necesita `apt`), `/tmp` y `/run` en tmpfs,
-  2 GB de memoria y 512 procesos como máximo, sin socket de Docker, y del
+  2 GB de memoria y 512 procesos como máximo, sin socket de Docker, una red
+  propia por IA (en la compartida una IA llegaba al CDP de otra), y del
   equipo solo se monta su carpeta. Las claves de KasmVNC llegan en un
   archivo de un solo uso en su carpeta, que `iniciar.sh` lee y borra. Puertos (KasmVNC y CDP) publicados solo en
   `127.0.0.1` con puerto aleatorio. `npm run prueba` comprueba el
