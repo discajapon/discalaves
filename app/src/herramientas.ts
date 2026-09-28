@@ -1,10 +1,10 @@
-// Herramientas de cada IA. Todo corre dentro de una caja bubblewrap (sin ver las carpetas del usuario,
-// con internet) salvo los comandos que empiezan por "sudo": esos corren en el sistema real y solo
+// Herramientas de cada IA. Todo corre dentro de su computadora (un contenedor Debian, ver
+// computadora.ts) salvo los comandos que empiezan por "sudo": esos corren en el sistema real y solo
 // después de que el usuario escriba su contraseña en el diálogo de GNOME (pkexec/polkit). La
 // contraseña nunca pasa por la app ni por el modelo.
 import { spawn } from "node:child_process";
 import fs from "node:fs";
-import { caja } from "./caja";
+import type { Computadora } from "./computadora";
 import type { Navegador } from "./navegador";
 
 const MAX_SALIDA = 3000; // caracteres de salida que ve el modelo
@@ -17,7 +17,8 @@ export const DEFINICIONES = [
     function: {
       name: "terminal",
       description:
-        "Ejecuta un comando bash en tu computadora aislada: tu carpeta de inicio (~), con internet, sin acceso a los archivos del usuario. " +
+        "Ejecuta un comando bash en tu computadora aislada (Debian 13 con escritorio): empieza en tu carpeta de inicio (~), con internet, " +
+        "sin acceso a los archivos del usuario. Los programas gráficos se abren en tu escritorio (DISPLAY=:1). " +
         "Devuelve la salida y el código de salida. Si de verdad necesitas permisos de administrador (por ejemplo instalar un paquete " +
         "con apt), empieza el comando con sudo: el usuario tendrá que escribir su contraseña y el comando correrá en su sistema real.",
       parameters: {
@@ -67,9 +68,10 @@ function herramienta(name: string, description: string, properties: Record<strin
 export interface Resultado { salida: string; codigo: number }
 export type Aviso = (fase: "ejecutando" | "esperando-clave", detalle: string) => void;
 export interface Contexto {
-  carpeta: string; // su /home en la caja
-  usuario: string; // nombre dentro de la caja: /home/<usuario>
-  navegador: Navegador; // el suyo, no compartido con otras IAs
+  carpeta: string; // su /home en su computadora
+  usuario: string; // nombre dentro de su computadora: /home/<usuario>
+  computadora: Computadora; // la suya: su contenedor
+  navegador: Navegador; // el Chromium de su escritorio, no compartido con otras IAs
   avisar: Aviso;
   aprobar: (descripcion: string) => Promise<boolean>; // el usuario decide en la interfaz
 }
@@ -80,28 +82,32 @@ const DELICADO = /\b(enviar|env[ií]a|send|pagar|pago|pay|comprar|compra|buy|che
 const BORRADO = /(^|[;&|(]\s*)(rm|rmdir|shred|unlink)\b|\s-delete\b/;
 const BUSQUEDA = /busca|search|buscar|consulta|query|\bq\b/i;
 
-function ejecutar(programa: string, argumentos: string[], tiempo: number, entrada?: string): Promise<Resultado> {
+function recortar(r: Resultado): Resultado {
+  let salida = r.salida;
+  if (salida.length > MAX_SALIDA) salida = `${salida.slice(0, MAX_SALIDA / 2)}\n[… recortado …]\n${salida.slice(-MAX_SALIDA / 2)}`;
+  return { salida: salida || "(sin salida)", codigo: r.codigo };
+}
+
+// Solo para pkexec (sudo en el sistema real); todo lo demás corre en su computadora.
+function ejecutar(programa: string, argumentos: string[], tiempo: number): Promise<Resultado> {
   return new Promise((resolver) => {
-    const hijo = spawn(programa, argumentos, { timeout: tiempo, stdio: ["pipe", "pipe", "pipe"] });
+    const hijo = spawn(programa, argumentos, { timeout: tiempo, stdio: ["ignore", "pipe", "pipe"] });
     const trozos: Buffer[] = [];
     hijo.stdout.on("data", (b) => trozos.push(b));
     hijo.stderr.on("data", (b) => trozos.push(b));
-    hijo.stdin.end(entrada ?? "");
     hijo.on("error", (e) => resolver({ salida: `no se pudo ejecutar ${programa}: ${e.message}`, codigo: -1 }));
-    hijo.on("close", (codigo, senal) => {
-      let salida = Buffer.concat(trozos).toString("utf8");
-      if (salida.length > MAX_SALIDA) salida = `${salida.slice(0, MAX_SALIDA / 2)}\n[… recortado …]\n${salida.slice(-MAX_SALIDA / 2)}`;
-      if (senal) salida += `\n[detenido: superó ${tiempo / 1000} s]`;
-      resolver({ salida: salida || "(sin salida)", codigo: codigo ?? -1 });
-    });
+    hijo.on("close", (codigo, senal) =>
+      resolver(recortar({ salida: Buffer.concat(trozos).toString("utf8") + (senal ? `\n[detenido: superó ${tiempo / 1000} s]` : ""), codigo: codigo ?? -1 })),
+    );
   });
 }
 
-async function terminal({ carpeta, usuario, avisar }: Contexto, comando: string): Promise<Resultado> {
+async function terminal({ carpeta, computadora, avisar }: Contexto, comando: string): Promise<Resultado> {
   const sudo = comando.match(/^\s*sudo\s+(?:-\S+\s+)*(.+)$/s);
   if (!sudo) {
+    await computadora.encender((d) => avisar("ejecutando", d));
     avisar("ejecutando", comando);
-    return ejecutar("bwrap", caja(carpeta, ["/bin/bash", "-c", comando], [], usuario), TIEMPO_CAJA);
+    return recortar(await computadora.ejecutar(["bash", "-c", comando], { tiempo: TIEMPO_CAJA }));
   }
   avisar("esperando-clave", sudo[1]);
   // pkexec muestra el comando completo en el diálogo, así el usuario ve qué está autorizando.
@@ -135,7 +141,7 @@ async function ejecutarNavegador(navegador: Navegador, nombre: string, t: (k: st
 }
 
 export async function ejecutarHerramienta(ctx: Contexto, nombre: string, argumentosJson: string): Promise<Resultado> {
-  const { carpeta, usuario, avisar, navegador } = ctx;
+  const { carpeta, computadora, avisar, navegador } = ctx;
   fs.mkdirSync(carpeta, { recursive: true });
   let args: Record<string, unknown>;
   try {
@@ -150,16 +156,18 @@ export async function ejecutarHerramienta(ctx: Contexto, nombre: string, argumen
 
   if (nombre === "terminal" && texto("comando")) return terminal(ctx, texto("comando"));
   if (nombre === "escribir_archivo" && texto("ruta")) {
+    await computadora.encender((d) => avisar("ejecutando", d));
     avisar("ejecutando", `escribir ${texto("ruta")}`);
-    // Se escribe desde dentro de la caja: así un enlace simbólico creado por el modelo no puede sacar el archivo fuera.
+    // Se escribe desde dentro del contenedor: así un enlace simbólico creado por el modelo no puede sacar el archivo fuera.
     const script = 'mkdir -p -- "$(dirname -- "$1")" && cat > "$1" && echo "guardado: $1 ($(wc -c < "$1") bytes)"';
     const contenido = typeof args.contenido === "string" ? args.contenido : "";
-    return ejecutar("bwrap", caja(carpeta, ["/bin/bash", "-c", script, "escribir", texto("ruta")], [], usuario), TIEMPO_CAJA, contenido);
+    return recortar(await computadora.ejecutar(["bash", "-c", script, "escribir", texto("ruta")], { entrada: contenido, tiempo: TIEMPO_CAJA }));
   }
-  if (nombre in NAVEGADOR && navegador.controlUsuario) {
+  if (nombre in NAVEGADOR && computadora.controlUsuario) {
     return { salida: "el usuario tomó el control de tu navegador; espera a que lo devuelva o pregúntale.", codigo: 1 };
   }
   try {
+    if (nombre in NAVEGADOR) await computadora.encender((d) => avisar("ejecutando", d));
     avisar("ejecutando", `${nombre.replace("_", " ")} ${texto("consulta") || texto("url") || texto("texto") || texto("campo")}`.trim());
     const salida = await ejecutarNavegador(navegador, nombre, texto, args.enviar === true);
     if (salida !== null) return { salida, codigo: 0 };

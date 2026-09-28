@@ -1,44 +1,10 @@
-// Navegador de cada IA: Chromium sin ventana dentro de su propia caja bubblewrap (la misma que su terminal),
-// controlado por la estructura de la página (árbol de accesibilidad) con playwright-core, no por
-// píxeles. La pantalla se transmite a la interfaz solo mientras el usuario la está mirando.
-import fs from "node:fs";
-import path from "node:path";
-import { chromium, type BrowserContext, type CDPSession, type Page } from "playwright-core";
-import { caja } from "./caja";
+// Navegador de cada IA: el Chromium con ventana de su escritorio (en su contenedor, ver computadora.ts),
+// controlado por CDP con playwright-core a través de la estructura de la página (árbol de
+// accesibilidad), no por píxeles. El usuario lo ve moverse en la pantalla en vivo.
+import { chromium, type BrowserContext, type Page } from "playwright-core";
+import type { Computadora } from "./computadora";
 
 const MAX_TEXTO = 2500;
-const ANCHO = 1280;
-const ALTO = 800;
-// ponytail: agente de usuario fijo; los buscadores bloquean el de Chromium sin ventana ("HeadlessChrome").
-const AGENTE = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36";
-
-export interface Fotograma { datos: string; ancho: number; alto: number; url: string }
-
-let opciones: { ia: string; datos: string } | undefined;
-
-export function configurarNavegador(o: { ia: string; datos: string }) {
-  opciones = o;
-}
-
-function ejecutableChromium(dir: string): string {
-  const version = fs.readdirSync(dir).find((d) => d.startsWith("chromium_headless_shell-"));
-  if (!version) throw new Error(`no encuentro Chromium en ${dir}`);
-  return path.join(dir, version, "chrome-headless-shell-linux64", "chrome-headless-shell");
-}
-
-// Playwright lanza este script en lugar de Chromium: así el navegador arranca dentro de la caja.
-function escribirEnvoltorio(carpeta: string, usuario: string): string {
-  const { ia, datos } = opciones!;
-  const dirNavegador = path.join(ia, "navegador");
-  const comillas = (a: string) => `'${a.replace(/'/g, `'\\''`)}'`;
-  const args = caja(carpeta, [ejecutableChromium(dirNavegador)], [
-    "--bind", carpeta, carpeta, // el perfil del navegador vive en su carpeta, con la misma ruta que ve Playwright
-    "--ro-bind", dirNavegador, dirNavegador,
-  ], usuario);
-  const archivo = path.join(datos, `navegador-en-caja-${usuario}.sh`);
-  fs.writeFileSync(archivo, `#!/bin/sh\nexec bwrap ${args.map(comillas).join(" ")} "$@"\n`, { mode: 0o700 });
-  return archivo;
-}
 
 // ---- Herramientas para el modelo ----
 
@@ -74,38 +40,24 @@ function desenvolverBing(url: string): string {
   }
 }
 
-export type Entrada =
-  | { tipo: "clic"; x: number; y: number }
-  | { tipo: "rueda"; dy: number }
-  | { tipo: "tecla"; tecla: string };
-
-// Un navegador por IA: perfil, pestañas y pantalla propios, en su carpeta (su /home).
+// Un navegador por IA: el de su propio escritorio, con perfil en su carpeta (su /home).
 export class Navegador {
   private contexto: Promise<BrowserContext> | undefined;
   private pagina: Page | undefined;
-  private transmision: { cdp: CDPSession; enviar: (f: Fotograma) => void } | undefined;
-  controlUsuario = false;
 
-  constructor(readonly carpeta: string, readonly usuario: string) {}
+  constructor(readonly computadora: Computadora) {}
 
   private async abrirContexto(): Promise<BrowserContext> {
-    const ctx = await chromium.launchPersistentContext(path.join(this.carpeta, ".navegador"), {
-      executablePath: escribirEnvoltorio(this.carpeta, this.usuario),
-      headless: true,
-      viewport: { width: ANCHO, height: ALTO },
-      userAgent: AGENTE,
-      locale: "es-ES",
-    });
-    this.pagina = ctx.pages()[0] ?? (await ctx.newPage());
-    // Si una página abre otra pestaña, la IA (y la transmisión) pasan a la nueva.
-    ctx.on("page", (p) => {
-      this.pagina = p;
-      if (this.transmision) void this.transmitir(this.transmision.enviar);
-    });
-    ctx.on("close", () => {
+    const navegador = await chromium.connectOverCDP(await this.computadora.cdp());
+    // Si el usuario cierra la ventana (o el contenedor se apaga), se vuelve a abrir en el próximo uso.
+    navegador.on("disconnected", () => {
       this.contexto = undefined;
       this.pagina = undefined;
+      this.computadora.navegadorCerrado();
     });
+    const ctx = navegador.contexts()[0];
+    this.pagina = ctx.pages()[0] ?? (await ctx.newPage());
+    ctx.on("page", (p) => (this.pagina = p)); // si una página abre otra pestaña, la IA pasa a la nueva
     return ctx;
   }
 
@@ -119,7 +71,7 @@ export class Navegador {
   }
 
   async cerrar() {
-    await (await this.contexto)?.close().catch(() => {});
+    await (await this.contexto)?.browser()?.close().catch(() => {});
   }
 
   async buscarWeb(consulta: string): Promise<string> {
@@ -186,41 +138,6 @@ export class Navegador {
     return `no encontré el campo "${campo}". Usa ver_pagina para ver los campos disponibles.`;
   }
 
-  // ---- Vista en vivo y control del usuario ----
-
-  async transmitir(enviar: (f: Fotograma) => void) {
-    await this.detenerTransmision();
-    const p = await this.paginaActual();
-    const cdp = await p.context().newCDPSession(p);
-    this.transmision = { cdp, enviar };
-    cdp.on("Page.screencastFrame", (f) => {
-      void cdp.send("Page.screencastFrameAck", { sessionId: f.sessionId }).catch(() => {});
-      enviar({ datos: f.data, ancho: f.metadata.deviceWidth, alto: f.metadata.deviceHeight, url: p.url() });
-    });
-    await cdp.send("Page.startScreencast", { format: "jpeg", quality: 70, maxWidth: ANCHO, maxHeight: ALTO });
-  }
-
-  async detenerTransmision() {
-    const t = this.transmision;
-    this.transmision = undefined;
-    this.controlUsuario = false;
-    await t?.cdp.send("Page.stopScreencast").catch(() => {});
-    await t?.cdp.detach().catch(() => {});
-  }
-
-  tomarControl(activo: boolean) {
-    this.controlUsuario = activo && !!this.transmision;
-  }
-
-  // Entradas del usuario cuando tomó el control. Coordenadas ya en píxeles de la página.
-  async entradaUsuario(e: Entrada) {
-    if (!this.controlUsuario || !this.pagina) return;
-    const p = this.pagina;
-    if (e.tipo === "clic") await p.mouse.click(e.x, e.y);
-    else if (e.tipo === "rueda") await p.mouse.wheel(0, e.dy);
-    else await p.keyboard.press(e.tecla).catch(() => {}); // una tecla desconocida no debe romper nada
-  }
-
   async urlActual(): Promise<string> {
     return this.pagina?.url() ?? "(sin página abierta)";
   }
@@ -229,9 +146,9 @@ export class Navegador {
 const navegadores = new Map<string, Navegador>();
 
 // Se crea al primer uso: un Chromium ocupa RAM y solo arranca cuando la IA lo necesita.
-export function navegadorDe(carpeta: string, usuario: string): Navegador {
-  let n = navegadores.get(usuario);
-  if (!n) navegadores.set(usuario, (n = new Navegador(carpeta, usuario)));
+export function navegadorDe(computadora: Computadora): Navegador {
+  let n = navegadores.get(computadora.usuario);
+  if (!n) navegadores.set(computadora.usuario, (n = new Navegador(computadora)));
   return n;
 }
 

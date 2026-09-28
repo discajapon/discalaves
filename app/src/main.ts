@@ -1,11 +1,12 @@
-import { app, BrowserWindow, ipcMain } from "electron";
+import { app, BrowserWindow, ipcMain, session } from "electron";
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { DEFINICIONES, ejecutarHerramienta } from "./herramientas";
-import { cerrarNavegadores, configurarNavegador, navegadorDe, type Navegador } from "./navegador";
+import { apagarTodas, computadoraDe, type Computadora } from "./computadora";
+import { navegadorDe } from "./navegador";
 
 // ponytail: rutas y puerto fijos para un solo empleado; el instalador y el gestor de modelos los definirán.
 const IA = process.env.DISCALAVES_IA ?? path.join(os.homedir(), "Documents", "IA-discalves");
@@ -23,13 +24,15 @@ interface Conversacion { id: string; nombre: string; proveedor: "qwen" | "ollama
 interface Modelo { proveedor: "qwen" | "ollama"; modelo: string; detalle: string; herramientas: boolean }
 const QWEN: Conversacion = { id: "qwen", nombre: "qwen", proveedor: "qwen", modelo: "Qwen3.5-9B", herramientas: true };
 
-// Computadora propia de cada IA: carpeta IA-discalves/trabajo/<usuario>, vista dentro de su caja
-// como /home/<usuario>, y su navegador (se abre la primera vez que lo usa).
+// Computadora propia de cada IA: su contenedor (se enciende la primera vez que lo usa), con la carpeta
+// IA-discalves/trabajo/<usuario> como /home/<usuario>, y el Chromium de su escritorio.
 function computadora(c: Conversacion) {
   let usuario = c.id === QWEN.id ? "qwen" : c.nombre.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 32) || "ia";
   if (c.id !== QWEN.id && usuario === "qwen") usuario = "qwen-ollama"; // un modelo de Ollama llamado qwen no comparte con el incluido
   const carpeta = path.join(IA, "trabajo", usuario);
-  return { usuario, carpeta, navegador: navegadorDe(carpeta, usuario) };
+  fs.mkdirSync(carpeta, { recursive: true });
+  const pc = computadoraDe(carpeta, usuario);
+  return { usuario, carpeta, computadora: pc, navegador: navegadorDe(pc) };
 }
 
 const sistemaConHerramientas = (nombre: string, usuario: string) =>
@@ -266,36 +269,44 @@ ipcMain.handle("aprobar", (_e, id: unknown, si: unknown) => {
   aprobaciones.delete(String(id));
 });
 
-// Vista en vivo: solo se transmite mientras la interfaz la pide, y solo la pantalla de una IA a la vez.
-let mirando: Navegador | undefined;
-const navegadorConHerramientas = (id: unknown) => {
+// Vista en vivo: el cliente web de KasmVNC de su escritorio, dentro del panel de la interfaz. Solo hay
+// transmisión mientras el panel está abierto (la interfaz quita el iframe al cerrarlo). Las credenciales
+// se dan aquí (evento "login"): "ver" solo mira; "control" usa teclado y ratón.
+let mirando: Computadora | undefined;
+const computadoraConHerramientas = (id: unknown) => {
   const c = buscar(id);
-  return c?.herramientas ? computadora(c).navegador : undefined;
+  return c?.herramientas ? computadora(c).computadora : undefined;
 };
-ipcMain.handle("pantalla:ver", async (ev, id: unknown, ver: unknown) => {
+async function abrirPantalla(pc: Computadora) {
+  mirando = pc;
+  await session.defaultSession.clearAuthCache(); // al cambiar de "ver" a "control" hay que volver a autenticarse
+  return { url: (await pc.pantalla()).url };
+}
+ipcMain.handle("pantalla:ver", async (_e, id: unknown, ver: unknown) => {
+  if (mirando) mirando.controlUsuario = false;
+  mirando = undefined;
+  const pc = computadoraConHerramientas(id);
+  if (ver !== true || !pc) return {};
   try {
-    await mirando?.detenerTransmision();
-    mirando = undefined;
-    const n = navegadorConHerramientas(id);
-    if (ver === true && n) {
-      mirando = n;
-      await n.transmitir((f) => ev.sender.send("pantalla:fotograma", { ...f, id }));
-    }
-    return {};
+    return await abrirPantalla(pc);
   } catch (e) {
     return { error: (e as Error).message.split("\n")[0] };
   }
 });
-ipcMain.handle("pantalla:control", (_e, id: unknown, activo: unknown) => navegadorConHerramientas(id)?.tomarControl(activo === true));
-ipcMain.handle("pantalla:entrada", (_e, id: unknown, e: unknown) => {
-  const navegador = navegadorConHerramientas(id);
-  if (!navegador) return;
-  const x = e as Record<string, unknown>;
-  const num = (v: unknown) => typeof v === "number" && Number.isFinite(v);
-  const str = (v: unknown, max: number) => typeof v === "string" && v.length > 0 && v.length <= max;
-  if (x?.tipo === "clic" && num(x.x) && num(x.y)) return navegador.entradaUsuario({ tipo: "clic", x: x.x as number, y: x.y as number });
-  if (x?.tipo === "rueda" && num(x.dy)) return navegador.entradaUsuario({ tipo: "rueda", dy: x.dy as number });
-  if (x?.tipo === "tecla" && str(x.tecla, 40)) return navegador.entradaUsuario({ tipo: "tecla", tecla: x.tecla as string });
+ipcMain.handle("pantalla:control", async (_e, id: unknown, activo: unknown) => {
+  const pc = computadoraConHerramientas(id);
+  if (!pc || pc !== mirando) return {};
+  pc.controlUsuario = activo === true;
+  return abrirPantalla(pc);
+});
+app.on("login", (ev, _contenido, detalles, _auth, responder) => {
+  const pc = mirando;
+  if (!pc) return;
+  void pc.pantalla().then((p) => {
+    if (new URL(detalles.url).origin === p.origen) responder(p.usuario, p.clave);
+    else responder(); // cualquier otro sitio: sin credenciales
+  });
+  ev.preventDefault();
 });
 
 const buscar = (id: unknown) => conversaciones.find((c) => c.id === id);
@@ -396,14 +407,16 @@ app.on("second-instance", () => {
 
 app.whenReady().then(() => {
   if (!primera) return;
-  configurarNavegador({ ia: IA, datos: app.getPath("userData") });
+  apagarTodas(); // restos de una sesión que se cerró mal
   leerConversaciones();
   iniciarServidor();
   crearVentana();
 });
 app.on("window-all-closed", () => app.quit());
+// Cerrar con una señal (terminal, lanzador) no pasa por "will-quit": sin esto quedarían llama-server y los contenedores.
+for (const senal of ["SIGTERM", "SIGINT", "SIGHUP"] as const) process.on(senal, () => app.quit());
 app.on("will-quit", () => {
   saliendo = true;
   servidor?.kill();
-  void cerrarNavegadores(); // las cajas mueren igualmente con la app (--die-with-parent)
+  apagarTodas(); // no deja contenedores corriendo
 });
