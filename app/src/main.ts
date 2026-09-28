@@ -456,6 +456,10 @@ function crearVentana() {
     },
   });
   ventana.setMenuBarVisibility(false);
+  // El escritorio en vivo es código de la computadora de la IA (donde es root): desde su marco no puede llevar
+  // esta ventana, que tiene el puente al proceso principal, a otra página ni abrir ventanas que lo heredarían.
+  ventana.webContents.on("will-navigate", (e) => e.preventDefault());
+  ventana.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   ventana.loadFile(path.join(__dirname, "..", "index.html"));
 }
 
