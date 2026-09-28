@@ -93,6 +93,21 @@ const lente = crear("span", "seleccion");
 lente.setAttribute("aria-hidden", "true");
 let indiceLente = -1;
 
+// Cambia la intensidad de un filtro de ondas (su feDisplacementMap) fotograma a fotograma: forma(t) va de 0 a 1.
+function ondular(filtro: string, maximo: number, duracion: number, forma: (t: number) => number): Promise<void> {
+  const mapa = document.querySelector(`#${filtro} feDisplacementMap`)!;
+  const inicio = performance.now();
+  return new Promise((listo) => {
+    const paso = (ahora: number) => {
+      const t = Math.min(1, (ahora - inicio) / duracion);
+      mapa.setAttribute("scale", String(maximo * forma(t)));
+      if (t < 1) requestAnimationFrame(paso);
+      else listo();
+    };
+    requestAnimationFrame(paso);
+  });
+}
+
 function moverLente(filas: HTMLElement[]) {
   const i = conversaciones.findIndex((c) => c.id === activa);
   const fila = filas[i];
@@ -100,18 +115,26 @@ function moverLente(filas: HTMLElement[]) {
   const destino = `translateY(${fila.offsetTop}px)`;
   lente.style.height = `${fila.offsetHeight}px`;
   if (indiceLente >= 0 && i !== indiceLente && !sinMovimiento.matches) {
-    // Viaja como una gota: se estira a mitad de camino y se asienta con un pequeño rebote.
+    // Se licúa antes de salir (se recoge y se vuelve ondulada), viaja estirada como una gota y se asienta
+    // con un pequeño rebote; las ondas deforman las filas de debajo y se calman al llegar.
     const origen = lente.style.transform || destino;
     const mitad = (filas[indiceLente]?.offsetTop ?? fila.offsetTop) / 2 + fila.offsetTop / 2;
-    lente.animate(
+    const duracion = 640;
+    // La fila que deja y la que recibe se ondulan (la lente pasa por debajo de las filas).
+    const implicadas = [filas[indiceLente], fila].filter(Boolean);
+    implicadas.forEach((f) => f.classList.add("licuando"));
+    const viaje = lente.animate(
       [
-        { transform: origen },
-        { transform: `translateY(${mitad}px) scale(0.96, 1.35)`, offset: 0.45 },
-        { transform: `${destino} scale(1.02, 0.94)`, offset: 0.8 },
+        { transform: origen, easing: "ease-in-out" }, // se recoge, ya licuada
+        { transform: `${origen} scale(1.05, 0.8)`, offset: 0.2, easing: "ease-in" },
+        { transform: `translateY(${mitad}px) scale(0.93, 1.4)`, offset: 0.52, easing: "ease-out" }, // viaja estirada
+        { transform: `${destino} scale(1.03, 0.9)`, offset: 0.84, easing: "cubic-bezier(0.34, 1.56, 0.64, 1)" }, // rebota
         { transform: destino },
       ],
-      { duration: 480, easing: "cubic-bezier(0.34, 1.2, 0.64, 1)" },
+      { duration: duracion },
     );
+    void ondular("lente-liquida", 30, duracion, (t) => Math.sin(Math.PI * Math.min(1, t * 1.15)));
+    viaje.finished.catch(() => {}).finally(() => implicadas.forEach((f) => f.classList.remove("licuando")));
   }
   lente.style.transform = destino;
   indiceLente = i;
@@ -248,11 +271,14 @@ async function seleccionar(id: string) {
   await recargar();
   // El hilo entra desde la dirección en que se movió la selección: desde abajo si la nueva IA está más abajo.
   if (antes >= 0 && antes !== despues && !sinMovimiento.matches) {
+    // Entra ondulado, como a través de agua, y se asienta.
     const desde = despues > antes ? 28 : -28;
+    hilo.classList.add("licuando");
     hilo.animate(
       [{ transform: `translateY(${desde}px)`, opacity: 0 }, { transform: "none", opacity: 1 }],
-      { duration: 360, easing: "cubic-bezier(0.22, 1, 0.36, 1)" },
+      { duration: 460, easing: "cubic-bezier(0.22, 1, 0.36, 1)" },
     );
+    void ondular("ondas", 60, 460, (t) => (1 - t) ** 2).then(() => hilo.classList.remove("licuando"));
   }
   entrada.focus();
 }
