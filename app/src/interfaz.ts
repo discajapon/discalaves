@@ -6,7 +6,6 @@ type MensajeChat =
 type EstadoQwen =
   | { fase: "cargando" | "listo" | "escribiendo" }
   | { fase: "ejecutando" | "esperando-clave" | "esperando-aprobacion" | "error"; detalle: string };
-interface Fotograma { id: string; datos: string; ancho: number; alto: number; url: string }
 interface Conversacion {
   id: string; nombre: string; proveedor: "qwen" | "ollama"; modelo: string; herramientas: boolean;
   estado: EstadoQwen; ultimo?: MensajeChat;
@@ -24,10 +23,8 @@ declare const discalaves: {
   alPaso(f: (id: string) => void): void;
   aprobar(id: string, si: boolean): Promise<void>;
   alAprobacion(f: (p: { id: string; conversacion: string; descripcion: string }) => void): void;
-  verPantalla(id: string, ver: boolean): Promise<{ error?: string }>;
-  controlPantalla(id: string, activo: boolean): Promise<void>;
-  entradaPantalla(id: string, e: object): Promise<void>;
-  alFotograma(f: (f: Fotograma) => void): void;
+  verPantalla(id: string, ver: boolean): Promise<{ url?: string; error?: string }>;
+  controlPantalla(id: string, activo: boolean): Promise<{ url?: string }>;
 };
 
 const ACENTOS = ["violeta", "turquesa", "naranja", "azul", "rojizo"];
@@ -186,7 +183,7 @@ function dibujarCabecera() {
   entrada.placeholder = `Mensaje a ${c.nombre}`;
   // Sin herramientas no hay computadora que mirar.
   document.getElementById("ver-pantalla")!.hidden = !c.herramientas;
-  // Cada IA tiene su navegador: si la pantalla está abierta, pasa a mostrar la de esta conversación.
+  // Cada IA tiene su computadora: si la pantalla está abierta, pasa a mostrar la de esta conversación.
   if (!pantalla.hidden) void mostrarPantalla(c.herramientas);
   dibujarEstado();
 }
@@ -331,71 +328,57 @@ menuIA.addEventListener("keydown", (ev) => {
   opciones[(i + (ev.key === "ArrowDown" ? 1 : -1) + opciones.length) % opciones.length]?.focus();
 });
 
-// ---- Pantalla en vivo: solo se transmite mientras está abierta ----
+// ---- Pantalla en vivo: el escritorio de su computadora (KasmVNC), solo mientras está abierta ----
 const panel = document.querySelector(".panel")!;
 const pantalla = document.getElementById("pantalla")!;
-const imgPantalla = document.getElementById("pantalla-img") as HTMLImageElement;
+const vnc = document.getElementById("pantalla-vnc") as HTMLIFrameElement;
 const botonVer = document.getElementById("ver-pantalla")!;
 const botonControl = document.getElementById("tomar-control")!;
-let tamPagina = { ancho: 1280, alto: 800 };
+const textoPantalla = document.getElementById("pantalla-url")!;
 
-discalaves.alFotograma((f) => {
-  if (pantalla.hidden || f.id !== activa) return;
-  tamPagina = { ancho: f.ancho, alto: f.alto };
-  imgPantalla.src = `data:image/jpeg;base64,${f.datos}`;
-  document.getElementById("pantalla-url")!.textContent = f.url === "about:blank" ? `${actual().nombre} todavía no abrió ninguna página` : f.url;
-});
+// Quitar el iframe corta la conexión: sin panel abierto no hay transmisión.
+function mostrarEn(url?: string) {
+  vnc.src = url ?? "about:blank";
+}
 
 async function mostrarPantalla(ver: boolean) {
   pantalla.hidden = !ver;
   panel.classList.toggle("viendo", ver);
   botonVer.setAttribute("aria-pressed", String(ver));
-  if (!ver) controlar(false);
-  if (ver) imgPantalla.removeAttribute("src"); // no mostrar la pantalla de otra IA mientras llega la nueva
-  imgPantalla.alt = `Navegador de ${actual().nombre} en vivo`;
+  marcarControl(false);
+  mostrarEn(); // no mostrar el escritorio de otra IA mientras llega el nuevo
+  vnc.title = `Escritorio de ${actual().nombre} en vivo`;
   pantalla.setAttribute("aria-label", `Pantalla de ${actual().nombre}`);
-  const { error } = await discalaves.verPantalla(activa, ver);
+  textoPantalla.textContent = `encendiendo la computadora de ${actual().nombre}…`;
+  const { url, error } = await discalaves.verPantalla(activa, ver);
   if (error) {
     aviso(`no pude abrir su pantalla: ${error}`);
-    mostrarPantalla(false);
+    return mostrarPantalla(false);
+  }
+  if (ver && url && !pantalla.hidden) {
+    mostrarEn(url);
+    textoPantalla.textContent = `escritorio de ${actual().nombre} · solo ver`;
   }
 }
 
-function controlar(activo: boolean) {
-  void discalaves.controlPantalla(activa, activo);
+function marcarControl(activo: boolean) {
   botonControl.setAttribute("aria-pressed", String(activo));
   botonControl.textContent = activo ? "devolver el control" : "tomar el control";
-  imgPantalla.classList.toggle("controlando", activo);
-  if (activo) imgPantalla.focus();
+  pantalla.classList.toggle("controlando", activo);
 }
 
-// Posición del ratón sobre la imgPantalla (object-fit: contain) → píxeles de la página.
-function aPagina(ev: MouseEvent) {
-  const r = imgPantalla.getBoundingClientRect();
-  const escalaImg = Math.min(r.width / tamPagina.ancho, r.height / tamPagina.alto);
-  const x = (ev.clientX - r.left - (r.width - tamPagina.ancho * escalaImg) / 2) / escalaImg;
-  const y = (ev.clientY - r.top - (r.height - tamPagina.alto * escalaImg) / 2) / escalaImg;
-  return x >= 0 && y >= 0 && x <= tamPagina.ancho && y <= tamPagina.alto ? { x, y } : null;
+// Tomar el control vuelve a conectar con el usuario de KasmVNC que puede usar teclado y ratón.
+async function controlar(activo: boolean) {
+  marcarControl(activo);
+  const { url } = await discalaves.controlPantalla(activa, activo);
+  if (!url) return;
+  mostrarEn(url);
+  textoPantalla.textContent = `escritorio de ${actual().nombre} · ${activo ? "tienes el control" : "solo ver"}`;
+  if (activo) vnc.focus();
 }
 
 const enControl = () => botonControl.getAttribute("aria-pressed") === "true";
 botonVer.addEventListener("click", () => mostrarPantalla(pantalla.hidden !== false));
 botonControl.addEventListener("click", () => controlar(!enControl()));
-imgPantalla.addEventListener("click", (ev) => {
-  const p = enControl() && aPagina(ev);
-  if (p) void discalaves.entradaPantalla(activa, { tipo: "clic", ...p });
-});
-imgPantalla.addEventListener("wheel", (ev) => {
-  if (!enControl()) return;
-  ev.preventDefault();
-  void discalaves.entradaPantalla(activa, { tipo: "rueda", dy: ev.deltaY });
-});
-imgPantalla.addEventListener("keydown", (ev) => {
-  if (!enControl() || ev.key === "Dead") return;
-  ev.preventDefault();
-  const tecla = ev.key === " " ? "Space" : ev.key;
-  const mods = [ev.ctrlKey && "Control", ev.altKey && "Alt", ev.metaKey && "Meta"].filter(Boolean).join("+");
-  void discalaves.entradaPantalla(activa, { tipo: "tecla", tecla: mods ? `${mods}+${tecla}` : tecla });
-});
 
 void seleccionar(activa);
