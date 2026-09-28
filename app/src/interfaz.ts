@@ -18,6 +18,7 @@ declare const discalaves: {
   historial(id: string): Promise<MensajeChat[]>;
   estado(id: string): Promise<EstadoQwen>;
   enviar(id: string, texto: string): Promise<{ error?: string }>;
+  detener(id: string): Promise<void>;
   alCambiarEstado(f: (e: { id: string; estado: EstadoQwen }) => void): void;
   alRecibirTrozo(f: (t: { id: string; texto: string }) => void): void;
   alPaso(f: (id: string) => void): void;
@@ -174,6 +175,12 @@ function dibujarEstado() {
   if (!c.herramientas) el.append(" · ", crear("strong", "", "solo chat"));
   el.dataset.fase = e.fase;
   (document.getElementById("enviar") as HTMLButtonElement).disabled = e.fase !== "listo";
+  // Mientras trabaja, el botón de enviar se cambia por el de detener.
+  const ocupado = !["listo", "cargando", "error"].includes(e.fase);
+  document.getElementById("enviar")!.hidden = ocupado;
+  const detener = document.getElementById("detener") as HTMLButtonElement;
+  if (detener.hidden === ocupado) detener.disabled = false;
+  detener.hidden = !ocupado;
 }
 
 function dibujarCabecera() {
@@ -283,6 +290,11 @@ discalaves.alAprobacion(async ({ id, conversacion, descripcion }) => {
   hilo.append(fila);
   hilo.scrollTop = hilo.scrollHeight;
   si.focus();
+});
+
+document.getElementById("detener")!.addEventListener("click", (ev) => {
+  (ev.currentTarget as HTMLButtonElement).disabled = true; // hasta que la tarea termine de pararse
+  void discalaves.detener(activa);
 });
 
 // ---- Menú del +: IAs instaladas (qwen incluido y los modelos de Ollama) ----
