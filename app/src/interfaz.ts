@@ -400,7 +400,7 @@ const botonLibre = document.getElementById("modo-libre")!;
 function dibujarModoLibre() {
   const c = actual();
   botonLibre.hidden = !c.herramientas;
-  botonLibre.setAttribute("aria-pressed", String(c.libre === true));
+  botonLibre.setAttribute("aria-checked", String(c.libre === true));
   botonLibre.title = c.libre
     ? `${c.nombre} actúa sin pedir tu aprobación (borrar, enviar, pagar) ni preguntar qué hacer`
     : `activar: ${c.nombre} dejará de pedir tu aprobación y de preguntarte qué hacer`;

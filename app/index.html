@@ -16,6 +16,12 @@
       <feDisplacementMap in="suave" in2="mapa" scale="70" xChannelSelector="R" yChannelSelector="G" result="refractado"/>
       <feColorMatrix in="refractado" type="saturate" values="1.6"/>
     </filter>
+    <!-- Lente del interruptor: mismo mapa, desplazamiento pequeño para un elemento de 30 px. -->
+    <filter id="lente" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB">
+      <feImage preserveAspectRatio="none" result="mapa"
+        href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'><defs><radialGradient id='r'><stop offset='0.7' stop-color='rgb(128,128,128)'/><stop offset='1' stop-color='rgb(128,128,128)' stop-opacity='0'/></radialGradient><linearGradient id='x'><stop offset='0' stop-color='rgb(255,0,0)'/><stop offset='1' stop-color='rgb(0,0,0)'/></linearGradient><linearGradient id='y' x2='0' y2='1'><stop offset='0' stop-color='rgb(0,255,0)'/><stop offset='1' stop-color='rgb(0,0,0)'/></linearGradient></defs><rect width='100' height='100' fill='url(%23x)'/><rect width='100' height='100' fill='url(%23y)' style='mix-blend-mode:screen'/><ellipse cx='50' cy='50' rx='50' ry='50' fill='url(%23r)'/></svg>"/>
+      <feDisplacementMap in="SourceGraphic" in2="mapa" scale="5" xChannelSelector="R" yChannelSelector="G"/>
+    </filter>
   </svg>
 
   <div class="fondo" aria-hidden="true">
@@ -48,7 +54,10 @@
           <h1 id="cab-nombre" class="nombre"></h1>
           <span id="cab-estado" class="cab-estado" role="status"></span>
         </div>
-        <button id="modo-libre" class="modo-libre" type="button" aria-pressed="false">modo libre</button>
+        <button id="modo-libre" class="modo-libre" type="button" role="switch" aria-checked="false">
+          <span>modo libre</span>
+          <span class="interruptor" aria-hidden="true"><span class="lente"></span></span>
+        </button>
         <button id="ver-pantalla" class="icono" type="button" aria-label="Ver su pantalla" aria-pressed="false" title="Ver su pantalla en vivo">
           <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>
         </button>
