@@ -21,6 +21,10 @@
   --vidrio-brillo: rgb(255 255 255 / 0.95);
   --vidrio-canto: rgb(255 255 255 / 0.5);
   --vidrio-sombra: rgb(0 0 0 / 0.06);
+  --vidrio-sombra-fuerte: rgb(0 0 0 / 0.18);
+  --vidrio-lente: rgb(255 255 255 / 0.06);
+  --vidrio-reflejo: rgb(255 255 255 / 0.7);
+  --vidrio-canto-fuerte: rgb(255 255 255 / 0.85);
 
   --radio-burbuja: 16px;
   --radio-fila: 10px;
@@ -453,20 +457,53 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 .opcion-ia:hover, .opcion-ia:focus-visible { background: var(--gris-suave); }
 .solo-chat { font-size: var(--texto-chico); font-weight: 700; color: var(--tinta); }
 
-/* Interruptor de modo libre en la cabecera */
+/* Interruptor de modo libre: texto y, al lado, una pista con una lente de vidrio líquido que se desliza
+   (inspirado en el "liquid glass switch"). Encendida, la pista se vuelve roja: no hay aprobaciones. */
 .modo-libre {
-  padding: var(--e1) var(--e3);
+  display: flex;
+  align-items: center;
+  gap: var(--e2);
+  padding: var(--e1) var(--e2);
   border-radius: var(--radio-total);
-  border: 1px solid var(--borde);
-  font-size: var(--texto-chico);
-  color: var(--secundario);
-}
-.modo-libre[aria-pressed="true"] {
-  border-color: var(--notificacion-texto);
-  background: var(--notificacion-texto);
-  color: var(--sobre-oscuro);
+  font-size: 13px;
+  color: var(--tinta);
 }
 .modo-libre[hidden] { display: none; }
+.interruptor {
+  position: relative;
+  width: 44px;
+  height: 20px;
+  border-radius: var(--radio-total);
+  background: var(--gris-suave);
+  box-shadow: inset 0 1px 3px var(--vidrio-sombra), inset 0 0 0 1px var(--borde);
+  transition: background 0.3s ease;
+}
+.modo-libre[aria-checked="true"] .interruptor { background: var(--notificacion-texto); box-shadow: inset 0 1px 3px var(--vidrio-sombra); }
+.lente {
+  position: absolute;
+  top: -7px;
+  left: -5px;
+  width: 30px;
+  height: 34px;
+  border-radius: 50%;
+  /* casi transparente: un reflejo arriba y el canto marcado, como una gota de vidrio */
+  background:
+    radial-gradient(90% 55% at 40% 18%, var(--vidrio-reflejo), transparent 60%),
+    var(--vidrio-lente);
+  backdrop-filter: url(#lente);
+  box-shadow:
+    inset 0 0 0 1px var(--vidrio-canto-fuerte),
+    inset 0 -3px 5px var(--vidrio-sombra),
+    0 3px 8px var(--vidrio-sombra-fuerte);
+  transition: transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1); /* rebote de líquido */
+}
+.modo-libre[aria-checked="true"] .lente { transform: translateX(22px); }
+/* Al pulsar, la lente se estira como una gota. */
+.modo-libre:active .lente { transform: scale(1.18, 0.88); }
+.modo-libre[aria-checked="true"]:active .lente { transform: translateX(22px) scale(1.18, 0.88); }
+@media (prefers-reduced-motion: reduce) {
+  .lente, .interruptor { transition: none; }
+}
 
 /* Detener: ocupa el lugar del botón de enviar mientras la IA trabaja. */
 .microfono[hidden] { display: none; }
