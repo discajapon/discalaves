@@ -2,12 +2,18 @@
 // KasmVNC (ver app/computadora/Dockerfile). Es el ÚNICO módulo que llama al motor de contenedores:
 // docker por defecto, podman con DISCALAVES_MOTOR=podman (el Dockerfile es OCI estándar).
 //
-// Endurecimiento: usuario sin privilegios, sin capacidades, no-new-privileges, raíz de solo lectura,
-// límites de memoria y procesos, puertos solo en 127.0.0.1, y del equipo solo se monta su carpeta.
+// Endurecimiento: la IA trabaja como usuario sin privilegios y sin capacidades (no puede escribir fuera de
+// su /home), no-new-privileges, límites de memoria y procesos, puertos solo en 127.0.0.1, y del equipo
+// solo se monta su carpeta. Su "sudo" es root DENTRO de su contenedor (exec -u 0), con las capacidades
+// mínimas para que apt funcione; nunca toca el sistema del usuario.
+//
+// El contenedor persiste entre sesiones (lo que instale con sudo se conserva): se detiene al cerrar la
+// app y se reanuda al volver; se recrea si cambia la imagen.
 // ponytail: la red del contenedor llega a la red local de la casa; hace falta un motor rootless con
 // red propia (o reglas de firewall) para cerrarla.
 import { execFileSync, spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
+import fs from "node:fs";
 import path from "node:path";
 
 const MOTOR = process.env.DISCALAVES_MOTOR ?? "docker";
@@ -16,6 +22,7 @@ const DIR_IMAGEN = path.join(__dirname, "..", "computadora");
 const ETIQUETA = "discalaves.computadora=1";
 const UID = String(process.getuid?.() ?? 1000); // el mismo uid que el usuario del equipo: los archivos de su carpeta son suyos
 const GID = String(process.getgid?.() ?? 1000);
+const CAPACIDADES_ROOT = ["CHOWN", "DAC_OVERRIDE", "FOWNER", "SETUID", "SETGID"]; // lo justo para apt/dpkg como root
 
 export interface Resultado { salida: string; codigo: number }
 
@@ -92,18 +99,27 @@ export class Computadora {
   private async arrancar(avisar: Avisar) {
     avisar("encendiendo su computadora (la primera vez prepara Debian: puede tardar unos minutos)");
     const imagen = await construirUsuario(this.usuario);
-    await motor(["rm", "-f", this.nombre]);
-    await motorOk([
-      "run", "-d", "--rm", "--name", this.nombre, "--label", ETIQUETA, "--hostname", this.usuario,
-      "--cap-drop=ALL", "--security-opt", "no-new-privileges",
-      "--read-only", "--tmpfs", "/tmp", "--tmpfs", "/run",
-      "--memory", "2g", "--pids-limit", "512", "--shm-size", "512m",
-      "-p", "127.0.0.1::6901", "-p", "127.0.0.1::9223",
-      "-v", `${this.carpeta}:${this.home}`,
-      "-e", `CLAVE_VER=${this.claveVer}`, "-e", `CLAVE_CONTROL=${this.claveControl}`,
-      "-e", `TZ=${Intl.DateTimeFormat().resolvedOptions().timeZone}`,
-      imagen,
-    ]);
+    const idImagen = await motorOk(["image", "inspect", "-f", "{{.Id}}", imagen]);
+    // Claves de KasmVNC de esta sesión: en un archivo que iniciar.sh lee y borra (el entorno de un
+    // contenedor que se reanuda no se puede cambiar).
+    fs.writeFileSync(path.join(this.carpeta, ".discalaves-claves"), `CLAVE_VER=${this.claveVer}\nCLAVE_CONTROL=${this.claveControl}\n`, { mode: 0o600 });
+    const existente = await motor(["inspect", "-f", '{{index .Config.Labels "discalaves.imagen"}}', this.nombre]);
+    if (existente.codigo === 0 && existente.salida.trim() === idImagen) {
+      await motorOk(["start", this.nombre]);
+    } else {
+      await motor(["rm", "-f", this.nombre]);
+      await motorOk([
+        "run", "-d", "--name", this.nombre, "--label", ETIQUETA, "--label", `discalaves.imagen=${idImagen}`,
+        "--hostname", this.usuario,
+        "--cap-drop=ALL", ...CAPACIDADES_ROOT.flatMap((c) => ["--cap-add", c]), "--security-opt", "no-new-privileges",
+        "--tmpfs", "/tmp", "--tmpfs", "/run",
+        "--memory", "2g", "--pids-limit", "512", "--shm-size", "512m",
+        "-p", "127.0.0.1::6901", "-p", "127.0.0.1::9223",
+        "-v", `${this.carpeta}:${this.home}`,
+        "-e", `TZ=${Intl.DateTimeFormat().resolvedOptions().timeZone}`,
+        imagen,
+      ]);
+    }
     this.puertoPantalla = await this.puerto(6901);
     for (let i = 0; i < 120; i++) {
       const r = await fetch(`http://${this.puertoPantalla}/`, { headers: { authorization: this.autorizacion("ver") } }).catch(() => null);
@@ -122,13 +138,14 @@ export class Computadora {
     return "Basic " + Buffer.from(`${usuario}:${clave}`).toString("base64");
   }
 
-  // Ejecuta un comando dentro de su computadora, como su usuario. El límite de tiempo va dentro del
-  // contenedor: matar "exec" desde fuera no detendría el proceso.
-  async ejecutar(argumentos: string[], opciones: { entrada?: string; tiempo: number }): Promise<Resultado> {
+  // Ejecuta un comando dentro de su computadora, como su usuario (o como root de su contenedor, para
+  // su "sudo"). El límite de tiempo va dentro del contenedor: matar "exec" desde fuera no lo detendría.
+  async ejecutar(argumentos: string[], opciones: { entrada?: string; tiempo: number; root?: boolean }): Promise<Resultado> {
     await this.encender();
     const segundos = String(Math.ceil(opciones.tiempo / 1000));
+    const usuario = opciones.root ? ["-u", "0", "-e", "HOME=/root"] : [];
     return motor(
-      ["exec", "-i", "-w", this.home, this.nombre, "timeout", "-k", "5", segundos, ...argumentos],
+      ["exec", "-i", ...usuario, "-w", this.home, this.nombre, "timeout", "-k", "5", segundos, ...argumentos],
       { entrada: opciones.entrada, tiempo: opciones.tiempo + 15_000 },
     );
   }
@@ -185,13 +202,20 @@ export function computadoraDe(carpeta: string, usuario: string): Computadora {
   return c;
 }
 
-// Apaga todas las computadoras de Discalaves (también las que quedaran de una sesión que se cerró mal).
-// Síncrono a propósito: se llama al salir de la app, cuando ya no se puede esperar a promesas.
+// Detiene todas las computadoras de Discalaves que estén encendidas (también las que quedaran de una sesión
+// que se cerró mal). Se conservan detenidas, con lo que tengan instalado. Síncrono a propósito: se llama al
+// salir de la app, cuando ya no se puede esperar a promesas.
 export function apagarTodas() {
   try {
-    const ids = execFileSync(MOTOR, ["ps", "-aq", "--filter", `label=${ETIQUETA}`], { encoding: "utf8", timeout: 10_000 }).split("\n").filter(Boolean);
-    if (ids.length) execFileSync(MOTOR, ["rm", "-f", ...ids], { timeout: 30_000, stdio: "ignore" });
+    const ids = execFileSync(MOTOR, ["ps", "-q", "--filter", `label=${ETIQUETA}`], { encoding: "utf8", timeout: 10_000 }).split("\n").filter(Boolean);
+    if (ids.length) execFileSync(MOTOR, ["stop", "-t", "3", ...ids], { timeout: 60_000, stdio: "ignore" });
   } catch {
     // sin motor de contenedores no hay nada que apagar
   }
+}
+
+// Borra una computadora (su sistema, no su carpeta). Para las pruebas.
+export async function borrar(pc: Computadora) {
+  await motor(["rm", "-f", pc.nombre]);
+  computadoras.delete(pc.usuario);
 }

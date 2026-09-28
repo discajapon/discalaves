@@ -9,7 +9,8 @@ ARG KASMVNC_SHA256=80b241de7dfe53bba2b7e1cc5ac8c5246d72271efa16be2d4f76607f30fab
 ENV DEBIAN_FRONTEND=noninteractive \
     LANG=es_ES.UTF-8 \
     LC_ALL=es_ES.UTF-8 \
-    DISPLAY=:1
+    DISPLAY=:1 \
+    PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/games:/usr/games
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
@@ -26,7 +27,11 @@ RUN apt-get update \
 
 COPY kasmvnc.yaml /etc/kasmvnc/kasmvnc.yaml
 COPY iniciar.sh /usr/local/bin/iniciar
-RUN chmod 755 /usr/local/bin/iniciar
+# "sudo" de esta computadora: la app ejecuta como root los comandos que EMPIEZAN por sudo (exec -u 0);
+# este sustituto hace que un sudo a mitad de comando funcione dentro de ese root y lo explique fuera de él.
+RUN chmod 755 /usr/local/bin/iniciar \
+ && printf '#!/bin/sh\n[ "$(id -u)" = 0 ] && exec "$@"\necho "sudo: pon sudo al principio del comando para ejecutarlo como root de tu computadora" >&2\nexit 1\n' > /usr/local/bin/sudo \
+ && chmod 755 /usr/local/bin/sudo
 
 # 6901: KasmVNC (pantalla en vivo). 9223: CDP de Chromium, reenviado con socat (Chromium solo escucha en su loopback).
 EXPOSE 6901 9223
