@@ -183,10 +183,8 @@ export class Computadora {
   async pantalla() {
     await this.encender();
     const usuario = this.controlUsuario ? "control" : "ver";
-    // video_quality=5 ("Lossless"): calidad máxima fija. Con el nivel por defecto, al haber mucha actividad
-    // (p. ej. el usuario moviendo el ratón con el control) KasmVNC baja la calidad y pasa a 960x540: borroso.
-    // La conexión es local (127.0.0.1), así que el ancho de banda no importa.
-    const opciones = "autoconnect=true&resize=scale&show_control_bar=false&show_dot=false&video_quality=5" +
+    // La calidad de imagen la fija el servidor (kasmvnc.yaml): KasmVNC ignora los ajustes de calidad del cliente.
+    const opciones = "autoconnect=true&resize=scale&show_control_bar=false&show_dot=false" +
       "&clipboard_up=false&clipboard_down=false&clipboard_seamless=false";
     return {
       url: `http://${this.puertoPantalla}/?${opciones}`,
