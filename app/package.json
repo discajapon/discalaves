@@ -8,13 +8,51 @@
   "scripts": {
     "start": "tsc && electron .",
     "prueba": "tsc && node dist/prueba-unidad.js && node dist/prueba.js",
-    "prueba:unidad": "tsc && node dist/prueba-unidad.js"
+    "prueba:unidad": "tsc && node dist/prueba-unidad.js",
+    "instalador:win": "tsc && electron-builder --win --x64 --publish never"
   },
   "devDependencies": {
     "electron": "^44.4.5",
+    "electron-builder": "^26.15.3",
     "typescript": "^7.0.2"
   },
   "dependencies": {
     "playwright-core": "^1.63.0"
+  },
+  "build": {
+    "appId": "com.discalaves.app",
+    "productName": "Discalaves",
+    "copyright": "Copyright 2026 Disca",
+    "directories": {
+      "output": "instalador"
+    },
+    "files": [
+      "dist/**/*",
+      "!dist/prueba*.js",
+      "index.html",
+      "estilos.css",
+      "computadora/**/*",
+      "plantillas/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createStartMenuShortcut": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "Discalaves",
+      "artifactName": "Discalaves-${version}-instalador-windows.${ext}"
+    }
   }
 }
