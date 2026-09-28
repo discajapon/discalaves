@@ -394,15 +394,15 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
   text-overflow: ellipsis;
 }
 .pantalla-barra .boton { padding: var(--e1) var(--e3); font-size: 13px; }
-.pantalla img {
+.pantalla iframe {
   flex: 1;
   min-height: 0;
   width: 100%;
-  object-fit: contain;
+  border: 0;
   border-radius: var(--radio-fila);
-  outline: none;
+  background: var(--tinta);
 }
-.pantalla img.controlando { outline: 2px solid var(--acento-azul); cursor: pointer; }
+.pantalla.controlando iframe { outline: 2px solid var(--acento-azul); }
 .panel.viendo .hilo {
   position: absolute;
   inset: calc(var(--cabecera-alto) + 55% + var(--e4)) 0 0 0;
