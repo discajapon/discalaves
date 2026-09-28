@@ -19,10 +19,13 @@ async function main() {
   let pedidas = 0;
   const ctx = contexto("prueba", async () => (pedidas++, false));
   const correr = (nombre: string, args: object) => ejecutarHerramienta(ctx, nombre, JSON.stringify(args));
+  // Su carpeta es suya: un enlace simbólico que deje ahí no debe hacer que la app escriba fuera al encenderla.
+  fs.symlinkSync(fuera, path.join(ctx.carpeta, ".discalaves-claves"));
 
   let r = await correr("terminal", { comando: "echo hola && pwd && . /etc/os-release && echo $ID $VERSION_CODENAME" });
   assert.equal(r.codigo, 0, r.salida);
   assert.match(r.salida, /hola\n\/home\/prueba\ndebian trixie/);
+  assert.equal(fs.existsSync(fuera), false, "la app siguió un enlace de la IA y escribió fuera de su carpeta");
 
   r = await correr("terminal", { comando: `ls ${os.homedir()}` });
   assert.notEqual(r.codigo, 0, "el contenedor no debe ver la carpeta personal");
@@ -65,6 +68,12 @@ async function main() {
   assert.match(r.salida, /^\/home\/otra\notra\n/, r.salida);
   assert.notEqual(r.codigo, 0, "una IA no debe ver la carpeta de otra");
   assert.notEqual(ctx.navegador, ctx2.navegador, "cada IA debe tener su propio navegador");
+
+  // Tampoco debe llegar por la red a la computadora de otra (el CDP no pide clave).
+  await ctx2.computadora.cdp();
+  const ip = (await ejecutarHerramienta(ctx2, "terminal", JSON.stringify({ comando: "hostname -I" }))).salida.trim().split(/\s+/)[0];
+  r = await correr("terminal", { comando: `curl -s -m 3 http://${ip}:9223/json/version` });
+  assert.notEqual(r.codigo, 0, `una IA llegó al navegador de otra: ${r.salida}`);
 
   for (const c of [ctx, ctx2]) {
     await borrar(c.computadora);

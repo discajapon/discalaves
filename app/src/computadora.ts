@@ -114,15 +114,23 @@ export class Computadora {
     const idImagen = await motorOk(["image", "inspect", "-f", "{{.Id}}", imagen]);
     // Claves de KasmVNC de esta sesión: en un archivo que iniciar.sh lee y borra (el entorno de un
     // contenedor que se reanuda no se puede cambiar).
-    fs.writeFileSync(path.join(this.carpeta, ".discalaves-claves"), `CLAVE_VER=${this.claveVer}\nCLAVE_CONTROL=${this.claveControl}\n`, { mode: 0o600 });
-    const existente = await motor(["inspect", "-f", '{{index .Config.Labels "discalaves.imagen"}}', this.nombre]);
-    if (existente.codigo === 0 && existente.salida.trim() === idImagen) {
+    // Su carpeta es de la IA: si dejó ahí un enlace simbólico con ese nombre, seguirlo sobrescribiría un archivo del
+    // equipo. Se borra el enlace y se crea el archivo nuevo sin seguir enlaces ("wx" falla si algo reaparece).
+    const claves = path.join(this.carpeta, ".discalaves-claves");
+    fs.rmSync(claves, { force: true });
+    fs.writeFileSync(claves, `CLAVE_VER=${this.claveVer}\nCLAVE_CONTROL=${this.claveControl}\n`, { mode: 0o600, flag: "wx" });
+    // Una red propia por IA: en la red compartida del motor, una IA llegaría al CDP (sin clave) y al KasmVNC de
+    // las demás. Las redes de usuario del motor están aisladas entre sí.
+    const red = this.nombre;
+    if ((await motor(["network", "inspect", red])).codigo !== 0) await motorOk(["network", "create", "--label", ETIQUETA, red]);
+    const existente = await motor(["inspect", "-f", '{{index .Config.Labels "discalaves.imagen"}} {{.HostConfig.NetworkMode}}', this.nombre]);
+    if (existente.codigo === 0 && existente.salida.trim() === `${idImagen} ${red}`) {
       await motorOk(["start", this.nombre]);
     } else {
       await motor(["rm", "-f", this.nombre]);
       await motorOk([
         "run", "-d", "--name", this.nombre, "--label", ETIQUETA, "--label", `discalaves.imagen=${idImagen}`,
-        "--hostname", this.usuario,
+        "--hostname", this.usuario, "--network", red,
         "--cap-drop=ALL", ...CAPACIDADES_ROOT.flatMap((c) => ["--cap-add", c]), "--security-opt", "no-new-privileges",
         "--tmpfs", "/tmp", "--tmpfs", "/run",
         "--memory", "2g", "--pids-limit", "512", "--shm-size", "512m",
@@ -239,5 +247,6 @@ export function apagarTodas() {
 // Borra una computadora (su sistema, no su carpeta). Para las pruebas.
 export async function borrar(pc: Computadora) {
   await motor(["rm", "-f", pc.nombre]);
+  await motor(["network", "rm", pc.nombre]);
   computadoras.delete(pc.usuario);
 }
