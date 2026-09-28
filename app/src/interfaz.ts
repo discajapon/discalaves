@@ -257,10 +257,8 @@ async function recargar() {
 }
 
 async function seleccionar(id: string) {
-  const antes = conversaciones.findIndex((c) => c.id === activa);
   conversaciones = await discalaves.conversaciones();
   activa = conversaciones.some((c) => c.id === id) ? id : conversaciones[0].id;
-  const despues = conversaciones.findIndex((c) => c.id === activa);
   try {
     localStorage.setItem(CLAVE_ACTIVA, activa);
   } catch {
@@ -268,18 +266,7 @@ async function seleccionar(id: string) {
   }
   burbujaEnCurso = null;
   dibujarCabecera();
-  await recargar();
-  // El hilo entra desde la dirección en que se movió la selección: desde abajo si la nueva IA está más abajo.
-  if (antes >= 0 && antes !== despues && !sinMovimiento.matches) {
-    // Entra ondulado, como a través de agua, y se asienta.
-    const desde = despues > antes ? 28 : -28;
-    hilo.classList.add("licuando");
-    hilo.animate(
-      [{ transform: `translateY(${desde}px)`, opacity: 0 }, { transform: "none", opacity: 1 }],
-      { duration: 460, easing: "cubic-bezier(0.22, 1, 0.36, 1)" },
-    );
-    void ondular("ondas", 60, 460, (t) => (1 - t) ** 2).then(() => hilo.classList.remove("licuando"));
-  }
+  await recargar(); // el hilo cambia sin animación: el movimiento está solo en la lista (moverLente)
   entrada.focus();
 }
 
