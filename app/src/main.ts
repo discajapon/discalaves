@@ -5,7 +5,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { DEFINICIONES, ejecutarHerramienta } from "./herramientas";
-import { apagarTodas, computadoraDe, type Computadora } from "./computadora";
+import { apagarTodas, computadoraDe, responde, type Computadora } from "./computadora";
 import { navegadorDe } from "./navegador";
 
 // ponytail: rutas y puerto fijos para un solo empleado; el instalador y el gestor de modelos los definirán.
@@ -172,7 +172,7 @@ function iniciarServidor() {
   });
   const esperar = async () => {
     if (!servidor) return;
-    const ok = await fetch(`http://127.0.0.1:${PUERTO}/health`).then((r) => r.ok, () => false);
+    const ok = await responde(`http://127.0.0.1:${PUERTO}/health`);
     if (ok) cambiarEstadoServidor({ fase: "listo" });
     else setTimeout(esperar, 1000);
   };
@@ -475,6 +475,20 @@ app.whenReady().then(() => {
   crearVentana();
 });
 app.on("window-all-closed", () => app.quit());
+// Red de seguridad: un error inesperado del proceso principal se anota en errores.log en vez de mostrar el
+// cuadro de Electron "A JavaScript error occurred in the main process" (y la app sigue funcionando).
+function anotarError(tipo: string, e: unknown) {
+  const texto = `${new Date().toISOString()} ${tipo}: ${(e as Error)?.stack ?? String(e)}\n`;
+  console.error(texto);
+  try {
+    fs.appendFileSync(path.join(app.getPath("userData"), "errores.log"), texto);
+  } catch {
+    // sin disco no hay dónde anotarlo
+  }
+}
+process.on("uncaughtException", (e) => anotarError("excepción", e));
+process.on("unhandledRejection", (e) => anotarError("promesa rechazada", e));
+
 // Cerrar con una señal (terminal, lanzador) no pasa por "will-quit": sin esto quedarían llama-server y los contenedores.
 for (const senal of ["SIGTERM", "SIGINT", "SIGHUP"] as const) process.on(senal, () => app.quit());
 app.on("will-quit", () => {

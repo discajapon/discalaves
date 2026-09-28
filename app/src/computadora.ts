@@ -71,6 +71,18 @@ async function construirUsuario(usuario: string): Promise<string> {
 
 const esperar = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+// ¿Responde bien esa dirección? Siempre lee el cuerpo: si se abandona sin leer y el servidor cierra la
+// conexión, el cliente HTTP de Node (undici) falla con "assert(!this.paused)" y tumba el proceso principal.
+export async function responde(url: string, init?: RequestInit): Promise<boolean> {
+  try {
+    const r = await fetch(url, init);
+    await r.arrayBuffer();
+    return r.ok;
+  } catch {
+    return false;
+  }
+}
+
 export type Avisar = (detalle: string) => void;
 
 export class Computadora {
@@ -122,8 +134,7 @@ export class Computadora {
     }
     this.puertoPantalla = await this.puerto(6901);
     for (let i = 0; i < 120; i++) {
-      const r = await fetch(`http://${this.puertoPantalla}/`, { headers: { authorization: this.autorizacion("ver") } }).catch(() => null);
-      if (r?.ok) return;
+      if (await responde(`http://${this.puertoPantalla}/`, { headers: { authorization: this.autorizacion("ver") } })) return;
       await esperar(250);
     }
     throw new Error("su escritorio no arrancó (revisa: " + MOTOR + " logs " + this.nombre + ")");
@@ -165,15 +176,23 @@ export class Computadora {
 
   private async abrirChromium(): Promise<string> {
     await this.encender();
+    // El contenedor se detiene con la app, así que Chromium nunca se cierra "bien": se marca el perfil como
+    // cerrado correctamente para que no pregunte "¿Quieres restaurar las páginas?".
+    const perfil = `${this.home}/.navegador`;
+    const marcarCerrado =
+      `f="${perfil}/Default/Preferences"; [ -f "$f" ] && sed -i ` +
+      `-e 's/"exit_type":"[A-Za-z]*"/"exit_type":"Normal"/' -e 's/"exited_cleanly":false/"exited_cleanly":true/' "$f"; exec "$@"`;
     await motorOk([
-      "exec", "-d", this.nombre, "chromium", "--no-sandbox", // el aislamiento lo da el contenedor
+      "exec", "-d", this.nombre, "sh", "-c", marcarCerrado, "chromium",
+      "chromium", "--no-sandbox", // el aislamiento lo da el contenedor
       "--test-type", // sin la barra de aviso de --no-sandbox
+      "--hide-crash-restore-bubble",
       "--no-first-run", "--no-default-browser-check", "--start-maximized", "--lang=es-ES",
-      "--remote-debugging-port=9222", `--user-data-dir=${this.home}/.navegador`, "about:blank",
+      "--remote-debugging-port=9222", `--user-data-dir=${perfil}`, "about:blank",
     ]);
     const direccion = `http://${await this.puerto(9223)}`;
     for (let i = 0; i < 80; i++) {
-      if ((await fetch(`${direccion}/json/version`).catch(() => null))?.ok) return direccion;
+      if (await responde(`${direccion}/json/version`)) return direccion;
       await esperar(250);
     }
     throw new Error("Chromium no respondió en su escritorio");
@@ -184,7 +203,9 @@ export class Computadora {
     await this.encender();
     const usuario = this.controlUsuario ? "control" : "ver";
     // La calidad de imagen la fija el servidor (kasmvnc.yaml): KasmVNC ignora los ajustes de calidad del cliente.
-    const opciones = "autoconnect=true&resize=scale&show_control_bar=false&show_dot=false" +
+    // logging=error: sus avisos de funciones opcionales que aquí no aplican (códecs de vídeo que Electron no
+    // trae, canales de impresora y tarjeta inteligente) no llenan la consola; los errores sí se ven.
+    const opciones = "autoconnect=true&resize=scale&show_control_bar=false&show_dot=false&logging=error" +
       "&clipboard_up=false&clipboard_down=false&clipboard_seamless=false";
     return {
       url: `http://${this.puertoPantalla}/?${opciones}`,
