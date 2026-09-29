@@ -56,6 +56,29 @@ export const DEFINICIONES = [
     texto: { type: "string" },
     enviar: { type: "boolean", description: "true para pulsar Enter después de escribir" },
   }),
+  // Adicionales: el usuario las activa por empleado (cada una ocupa contexto del modelo).
+  herramienta("leer_archivo", "Lee un archivo de texto de tu carpeta de inicio (~), o lista el contenido de una carpeta.", {
+    ruta: { type: "string", description: "ruta relativa a tu carpeta de inicio, por ejemplo: informes/resumen.md (o . para listarla)" },
+  }),
+  herramienta(
+    "editar_archivo",
+    "Cambia un trozo exacto de un archivo de tu carpeta por otro texto, sin reescribirlo entero. Lee antes el archivo: el texto a buscar debe aparecer una sola vez, igual que en el archivo.",
+    {
+      ruta: { type: "string", description: "ruta relativa a tu carpeta de inicio" },
+      buscar: { type: "string", description: "el texto exacto que hay ahora" },
+      reemplazar: { type: "string", description: "el texto nuevo" },
+    },
+  ),
+  herramienta(
+    "leer_web",
+    "Descarga una dirección y devuelve su texto sin abrir el navegador: más rápido, pero no sirve para páginas que necesitan JavaScript ni permite hacer clic.",
+    { url: { type: "string", description: "por ejemplo: https://es.wikipedia.org/wiki/Linux" } },
+  ),
+  herramienta(
+    "preguntar",
+    "Detiene tu trabajo y le hace una pregunta al usuario. Úsala solo si te falta un dato imprescindible que no puedes averiguar o debe elegir entre opciones; la tarea sigue cuando responda.",
+    { pregunta: { type: "string", description: "la pregunta, corta y concreta (con las opciones si las hay)" } },
+  ),
 ];
 
 // Herramientas del perfil de cada empleado (no usan su computadora: las resuelve main.ts con empleados.ts).
@@ -70,10 +93,24 @@ export const RECORDAR = herramienta(
   { texto: { type: "string", description: "la nota, en una frase" } },
 );
 
+// pasar_trabajo lleva en su descripción a los compañeros del equipo, así que se arma en cada turno.
+function pasarTrabajo(companeros: { nombre: string; rol: string }[]) {
+  return herramienta(
+    "pasar_trabajo",
+    "Encarga una tarea a un compañero del equipo y espera su respuesta, que te llega como texto (sus archivos se quedan en su computadora). " +
+      `Explícale la tarea completa: no ve tu conversación. Compañeros: ${companeros.map((c) => (c.rol ? `${c.nombre} (${c.rol})` : c.nombre)).join(", ")}.`,
+    {
+      empleado: { type: "string", description: "nombre del compañero" },
+      tarea: { type: "string", description: "qué debe hacer y con qué datos" },
+    },
+  );
+}
+
 // Solo se envían al modelo las herramientas del puesto: menos opciones, menos errores.
-export function definicionesPara(permitidas: string[], conProcedimientos: boolean) {
+export function definicionesPara(permitidas: string[], conProcedimientos: boolean, companeros: { nombre: string; rol: string }[] = []) {
   return [
     ...DEFINICIONES.filter((d) => permitidas.includes(d.function.name)),
+    ...(permitidas.includes("pasar_trabajo") && companeros.length ? [pasarTrabajo(companeros)] : []),
     ...(conProcedimientos ? [LEER_PROCEDIMIENTO] : []),
     RECORDAR,
   ];
@@ -100,6 +137,40 @@ export interface Contexto {
 const DELICADO = /\b(enviar|env[ií]a|send|pagar|pago|pay|comprar|compra|buy|checkout|publicar|post|borrar|eliminar|delete|remove|confirmar|confirm|suscrib|subscribe|transferir|donar|donate)/i;
 const BORRADO = /(^|[\s;&|(`\/])(rm|rmdir|shred|unlink)(\s|$)|\s-delete\b/; // también tras sudo, xargs, -exec o /bin/
 const BUSQUEDA = /busca|search|buscar|consulta|query|\bq\b/i;
+
+const MAX_LECTURA = 6000; // caracteres de un archivo o página que ve el modelo (desde el principio)
+const AGENTE = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Safari/537.36";
+
+function escribir(computadora: Computadora, ruta: string, contenido: string): Promise<Resultado> {
+  const script = 'mkdir -p -- "$(dirname -- "$1")" && cat > "$1" && echo "guardado: $1 ($(wc -c < "$1") bytes)"';
+  return computadora.ejecutar(["bash", "-c", script, "escribir", ruta], { entrada: contenido, tiempo: TIEMPO_CAJA });
+}
+
+// Texto legible de una página HTML, sin navegador: fuera scripts, estilos y etiquetas; los bloques pasan a líneas.
+// ponytail: expresiones regulares, no un analizador de HTML; basta para leer el texto de una página.
+export function textoDeHtml(html: string): { titulo: string; texto: string } {
+  const entidades: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " " };
+  const decodificar = (t: string) =>
+    t.replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, e: string) => {
+      if (e[0] !== "#") return entidades[e.toLowerCase()] ?? m;
+      const n = e[1].toLowerCase() === "x" ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10);
+      return n > 0 && n < 0x110000 ? String.fromCodePoint(n) : m;
+    });
+  const titulo = decodificar(html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] ?? "").replace(/\s+/g, " ").trim();
+  const texto = decodificar(
+    html
+      .replace(/<!--[\s\S]*?-->/g, "")
+      .replace(/<(script|style|noscript|svg|head|template)\b[\s\S]*?<\/\1\s*>/gi, "")
+      .replace(/<(br|\/p|\/div|\/h[1-6]|\/li|\/tr|\/section|\/article|\/header|\/footer|\/ul|\/ol|\/table)\b[^>]*>/gi, "\n")
+      .replace(/<li\b[^>]*>/gi, "\n- ")
+      .replace(/<[^>]+>/g, " "),
+  )
+    .split("\n")
+    .map((l) => l.replace(/[ \t\u00a0]+/g, " ").trim())
+    .filter(Boolean)
+    .join("\n");
+  return { titulo, texto };
+}
 
 function recortar(r: Resultado): Resultado {
   let salida = r.salida;
@@ -155,13 +226,48 @@ export async function ejecutarHerramienta(ctx: Contexto, nombre: string, argumen
   if (accion && !(await ctx.aprobar(accion))) return { salida: "el usuario no lo permitió; no se hizo nada", codigo: 1 };
 
   if (nombre === "terminal" && texto("comando")) return terminal(ctx, texto("comando"));
+  // Los archivos se leen y escriben desde dentro del contenedor: así un enlace simbólico creado por el modelo
+  // no puede sacar nada fuera de su computadora.
   if (nombre === "escribir_archivo" && texto("ruta")) {
     await computadora.encender((d) => avisar("ejecutando", d));
     avisar("ejecutando", `escribir ${texto("ruta")}`);
-    // Se escribe desde dentro del contenedor: así un enlace simbólico creado por el modelo no puede sacar el archivo fuera.
-    const script = 'mkdir -p -- "$(dirname -- "$1")" && cat > "$1" && echo "guardado: $1 ($(wc -c < "$1") bytes)"';
-    const contenido = typeof args.contenido === "string" ? args.contenido : "";
-    return recortar(await computadora.ejecutar(["bash", "-c", script, "escribir", texto("ruta")], { entrada: contenido, tiempo: TIEMPO_CAJA }));
+    return recortar(await escribir(computadora, texto("ruta"), typeof args.contenido === "string" ? args.contenido : ""));
+  }
+  if (nombre === "leer_archivo" && texto("ruta")) {
+    await computadora.encender((d) => avisar("ejecutando", d));
+    avisar("ejecutando", `leer ${texto("ruta")}`);
+    const script =
+      `if [ -d "$1" ]; then ls -la -- "$1"; else n=$(wc -c < "$1") && head -c ${MAX_LECTURA} -- "$1" && ` +
+      `if [ "$n" -gt ${MAX_LECTURA} ]; then printf '\n[… el archivo tiene %s bytes; solo ves los primeros ${MAX_LECTURA} …]' "$n"; fi; fi`;
+    const r = await computadora.ejecutar(["bash", "-c", script, "leer", texto("ruta")], { tiempo: TIEMPO_CAJA });
+    return { salida: r.salida || "(archivo vacío)", codigo: r.codigo };
+  }
+  if (nombre === "editar_archivo" && texto("ruta") && typeof args.buscar === "string" && args.buscar) {
+    await computadora.encender((d) => avisar("ejecutando", d));
+    avisar("ejecutando", `editar ${texto("ruta")}`);
+    const actual = await computadora.ejecutar(["cat", "--", texto("ruta")], { tiempo: TIEMPO_CAJA });
+    if (actual.codigo !== 0) return recortar(actual);
+    const veces = actual.salida.split(args.buscar).length - 1;
+    if (veces !== 1) {
+      return { salida: veces ? `ese texto aparece ${veces} veces; incluye más texto alrededor para que sea único.` : "no encontré ese texto exacto en el archivo; léelo con leer_archivo y copia el trozo tal cual.", codigo: 1 };
+    }
+    const reemplazar = typeof args.reemplazar === "string" ? args.reemplazar : "";
+    return recortar(await escribir(computadora, texto("ruta"), actual.salida.replace(args.buscar, () => reemplazar)));
+  }
+  if (nombre === "leer_web" && texto("url")) {
+    await computadora.encender((d) => avisar("ejecutando", d));
+    avisar("ejecutando", `leer web ${texto("url")}`);
+    const url = /^https?:\/\//i.test(texto("url")) ? texto("url") : `https://${texto("url")}`;
+    // Se descarga desde su computadora (su red, no la del equipo) y solo por http(s), también en las redirecciones.
+    const r = await computadora.ejecutar(
+      ["curl", "-sSfL", "--proto", "=http,https", "--proto-redir", "=http,https", "--max-time", "25", "--max-filesize", "5000000", "-A", AGENTE, "--", url],
+      { tiempo: 40_000 },
+    );
+    if (r.codigo !== 0) return { salida: `no pude descargarla: ${r.salida.trim().slice(0, 300)}`, codigo: 1 };
+    if (r.salida.includes("\u0000")) return { salida: "no es una página de texto (parece un archivo binario, por ejemplo un PDF o una imagen).", codigo: 1 };
+    const { titulo, texto: cuerpo } = textoDeHtml(r.salida);
+    const recortado = cuerpo.length > MAX_LECTURA ? `${cuerpo.slice(0, MAX_LECTURA)}\n[… recortado …]` : cuerpo;
+    return { salida: `título: ${titulo}\nurl: ${url}\n\n${recortado || "(la página no tiene texto sin JavaScript; prueba con abrir_pagina)"}`, codigo: 0 };
   }
   if (nombre in NAVEGADOR && computadora.controlUsuario) {
     return { salida: "el usuario tomó el control de tu navegador; espera a que lo devuelva o pregúntale.", codigo: 1 };

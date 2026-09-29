@@ -45,6 +45,17 @@ async function main() {
   assert.equal(r.codigo, 0, r.salida);
   assert.equal(fs.readFileSync(path.join(ctx.carpeta, "informes/a.md"), "utf8"), "# hola\n");
 
+  r = await correr("editar_archivo", { ruta: "informes/a.md", buscar: "hola", reemplazar: "adiós" });
+  assert.equal(r.codigo, 0, r.salida);
+  r = await correr("leer_archivo", { ruta: "informes/a.md" });
+  assert.equal(r.salida, "# adiós\n");
+  r = await correr("editar_archivo", { ruta: "informes/a.md", buscar: "no está", reemplazar: "x" });
+  assert.equal(r.codigo, 1, "editar sin coincidencia debe fallar");
+  r = await correr("leer_web", { url: "file:///etc/passwd" });
+  assert.notEqual(r.codigo, 0, "leer_web no debe leer archivos locales");
+  r = await correr("leer_web", { url: "https://example.com" });
+  assert.match(r.salida, /título: Example Domain/, r.salida);
+
   // Un enlace simbólico hacia fuera no debe permitir escribir fuera de la carpeta.
   await correr("terminal", { comando: `ln -s ${fuera} escape` });
   await correr("escribir_archivo", { ruta: "escape", contenido: "x" });

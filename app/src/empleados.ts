@@ -8,7 +8,10 @@
 import fs from "node:fs";
 import path from "node:path";
 
-export const HERRAMIENTAS = ["terminal", "escribir_archivo", "buscar_web", "abrir_pagina", "ver_pagina", "hacer_clic", "escribir_en"];
+// Principales: las que traen las plantillas. Adicionales: apagadas al principio; el usuario las activa por empleado.
+export const PRINCIPALES = ["terminal", "escribir_archivo", "buscar_web", "abrir_pagina", "ver_pagina", "hacer_clic", "escribir_en"];
+export const ADICIONALES = ["leer_archivo", "editar_archivo", "leer_web", "preguntar", "pasar_trabajo"];
+export const HERRAMIENTAS = [...PRINCIPALES, ...ADICIONALES];
 export const COLORES = ["violeta", "turquesa", "naranja", "azul", "rojizo"];
 const MAX_MEMORIA = 1500; // caracteres de memoria que van al prompt (las notas más recientes)
 const MAX_PROCEDIMIENTO = 6000;

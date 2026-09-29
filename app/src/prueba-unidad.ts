@@ -2,7 +2,7 @@
 // runner de Windows de GitHub Actions: npm run prueba:unidad
 import assert from "node:assert/strict";
 import { Empleados, leerIdentidad, promptEmpleado, textoIdentidad } from "./empleados";
-import { verificar } from "./herramientas";
+import { textoDeHtml, verificar } from "./herramientas";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -92,5 +92,10 @@ assert.equal(verificar("Lo guardé", [pedido], new Set(["archivo"])), null, "una
 assert.equal(verificar("Fuente: https://www.sri.gob.ec", [pedido], new Set())?.tipo, "fuente", "cita una web que no abrió");
 assert.equal(verificar("Fuente: https://www.sri.gob.ec/iva", [pedido, { de: "herramienta", nombre: "abrir_pagina", argumentos: '{"url":"https://www.sri.gob.ec/iva"}', salida: "…", codigo: 0 }], new Set()), null);
 assert.equal(verificar("como dijiste, mira www.ejemplo.com", [{ de: "yo", texto: "revisa www.ejemplo.com" }], new Set()), null, "la dirección la dio el usuario");
+
+// leer_web: texto de una página sin navegador.
+const pagina = textoDeHtml("<html><head><title>Hola &amp; adi&oacute;s</title><style>p{}</style></head><body><script>x()</script><p>Uno&nbsp;&#233;</p><ul><li>a</li><li>b</li></ul></body></html>");
+assert.equal(pagina.titulo, "Hola & adi&oacute;s");
+assert.equal(pagina.texto, "Uno é\n- a\n- b");
 
 console.log("unidad: ok");
