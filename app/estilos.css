@@ -532,7 +532,7 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 }
 .opcion-ia:active { transform: scale(0.98); }
 .tarjeta-arriba { display: flex; align-items: center; gap: var(--e2); }
-.tarjeta-icono { display: grid; color: var(--acento-violeta); }
+.tarjeta-icono { display: grid; color: var(--acento, var(--acento-violeta)); }
 .tarjeta-icono svg { width: 16px; height: 16px; }
 .opcion-ia .nombre { font-size: 16px; font-weight: 600; }
 .etiqueta, .dato {
@@ -549,6 +549,8 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 .estado.con-computadora::before { background: var(--acento-turquesa); }
 .estado.solo-chat { font-weight: 700; }
 .estado.solo-chat::before { background: var(--acento-naranja); }
+.estado.sin-terminal::before { background: var(--secundario); }
+.rol-tarjeta { font-size: var(--texto-chico); color: var(--secundario); }
 
 /* Interruptor de modo libre: texto y, al lado, una pista con una lente de vidrio líquido que se desliza
    (inspirado en el "liquid glass switch"). Encendida, la pista se vuelve roja: no hay aprobaciones. */
@@ -604,3 +606,35 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 
 /* Primer arranque en Windows: lista de pasos dentro de la hoja del perfil. */
 .wsl-pasos { display: flex; flex-direction: column; gap: var(--e2); padding-left: var(--e6); }
+
+/* Diálogo de empleado (crear o editar): sólido como el de perfil (guía 7.9), más ancho y en dos columnas. */
+.perfil.empleado { width: min(560px, 100% - 2 * var(--e4)); max-height: calc(100% - 2 * var(--e6)); overflow-y: auto; }
+.campos-dobles { display: grid; grid-template-columns: 1fr 1fr; gap: var(--e3); }
+.campo select,
+.campo textarea,
+.describir textarea {
+  padding: var(--e2) var(--e3);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio-fila);
+  background: var(--fondo);
+  font: inherit;
+  font-size: var(--texto);
+  color: var(--tinta);
+}
+.campo textarea, .describir textarea { resize: vertical; line-height: 1.45; }
+.describir {
+  display: flex;
+  flex-direction: column;
+  gap: var(--e2);
+  padding: var(--e3);
+  border-radius: var(--radio-fila);
+  background: var(--gris-suave);
+}
+.describir[hidden] { display: none; }
+.describir .acciones { align-items: center; justify-content: space-between; }
+.casillas { margin: 0; padding: 0; border: 0; }
+.casillas legend { margin-bottom: var(--e1); }
+#empleado-herramientas { display: grid; grid-template-columns: 1fr 1fr; gap: var(--e1) var(--e3); }
+.casilla { display: flex; align-items: center; gap: var(--e2); color: var(--tinta); font-size: var(--texto); }
+.casilla input { accent-color: var(--burbuja-mia); }
+.aviso-dialogo { min-height: 1em; font-size: var(--texto-chico); color: var(--notificacion-texto); }
