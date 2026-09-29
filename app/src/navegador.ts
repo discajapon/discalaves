@@ -29,16 +29,27 @@ async function esperarCarga(p: Page) {
   await p.waitForLoadState("domcontentloaded", { timeout: 15000 }).catch(() => {});
 }
 
-// Bing envuelve cada enlace en una redirección con la URL real en base64 ("u=a1…"): se desenvuelve para ahorrar tokens.
-function desenvolverBing(url: string): string {
-  const u = new URL(url).searchParams.get("u");
-  if (!u?.startsWith("a1")) return url;
+// Los buscadores envuelven cada enlace en una redirección con la URL real dentro: DuckDuckGo en "uddg=",
+// Yahoo en "/RU=<url>/RK=". Se desenvuelve para dar la dirección real y ahorrar tokens.
+function desenvolver(url: string): string {
   try {
-    return Buffer.from(u.slice(2), "base64url").toString("utf8");
+    const u = new URL(url, "https://duckduckgo.com");
+    const uddg = u.searchParams.get("uddg");
+    if (uddg) return uddg;
+    const ru = u.pathname.match(/\/RU=([^/]+)\//);
+    if (ru) return decodeURIComponent(ru[1]);
+    return u.href;
   } catch {
     return url;
   }
 }
+
+// Buscadores, en orden. Bing quedó fuera: al navegador automatizado le sirve resultados de relleno sin
+// relación con la consulta (probado 2026-09-28). DuckDuckGo HTML y Yahoo responden bien.
+const BUSCADORES = [
+  { url: (q: string) => `https://html.duckduckgo.com/html/?q=${q}&kl=es-es`, resultado: ".result:not(.result--ad)", titulo: ".result__a", fragmento: ".result__snippet" },
+  { url: (q: string) => `https://search.yahoo.com/search?p=${q}`, resultado: "#web li .algo, #web ol > li", titulo: "h3 a, a h3", fragmento: ".compText p, p" },
+];
 
 // Un navegador por IA: el de su propio escritorio, con perfil en su carpeta (su /home).
 export class Navegador {
@@ -76,16 +87,19 @@ export class Navegador {
 
   async buscarWeb(consulta: string): Promise<string> {
     const p = await this.paginaActual();
-    await p.goto(`https://www.bing.com/search?q=${encodeURIComponent(consulta)}&setlang=es`, { timeout: 30000 });
-    const resultados = await p.$$eval("li.b_algo", (els) =>
-      els.slice(0, 6).map((e) => ({
-        titulo: e.querySelector("h2")?.textContent?.trim() ?? "",
-        url: (e.querySelector("h2 a") as HTMLAnchorElement | null)?.href ?? "",
-        fragmento: e.querySelector(".b_caption p, p")?.textContent?.trim().slice(0, 200) ?? "",
-      })),
-    );
-    if (!resultados.length) return `sin resultados para "${consulta}" (el buscador pudo bloquear la búsqueda)`;
-    return resultados.map((r, i) => `${i + 1}. ${r.titulo}\n   ${desenvolverBing(r.url)}\n   ${r.fragmento}`).join("\n");
+    for (const b of BUSCADORES) {
+      await p.goto(b.url(encodeURIComponent(consulta)), { timeout: 30000, waitUntil: "domcontentloaded" }).catch(() => {});
+      const resultados = await p
+        .$$eval(b.resultado, (els, sel) => els.slice(0, 6).map((e) => {
+          const t = e.querySelector(sel.titulo);
+          const a = (t?.closest("a") ?? t?.querySelector("a") ?? t) as HTMLAnchorElement | null;
+          return { titulo: t?.textContent?.trim() ?? "", url: a?.href ?? "", fragmento: e.querySelector(sel.fragmento)?.textContent?.trim().slice(0, 200) ?? "" };
+        }), { titulo: b.titulo, fragmento: b.fragmento })
+        .catch(() => []);
+      const buenos = resultados.filter((r) => r.titulo && r.url);
+      if (buenos.length) return buenos.map((r, i) => `${i + 1}. ${r.titulo}\n   ${desenvolver(r.url)}\n   ${r.fragmento}`).join("\n");
+    }
+    return `sin resultados para "${consulta}" (los buscadores no respondieron o bloquearon la búsqueda)`;
   }
 
   async abrirPagina(url: string): Promise<string> {
