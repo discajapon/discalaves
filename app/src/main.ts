@@ -1,9 +1,10 @@
-import { app, BrowserWindow, ipcMain, session } from "electron";
+import { app, BrowserWindow, ipcMain, session, shell } from "electron";
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { DEFINICIONES, ejecutarHerramienta } from "./herramientas";
+import { definicionesPara, ejecutarHerramienta, verificar } from "./herramientas";
+import { COLORES, Empleados, HERRAMIENTAS, leerIdentidad, promptEmpleado, type Empleado, type Identidad } from "./empleados";
 import { apagarTodas, computadoraDe, responde, type Computadora } from "./computadora";
 import { navegadorDe } from "./navegador";
 import { rutas } from "./rutas";
@@ -23,44 +24,69 @@ const MAX_REPETICIONES = 5; // a la 5.ª se detiene y lo explica
 const OLLAMA = "http://127.0.0.1:11434"; // ponytail: dirección por defecto de Ollama; configurable cuando exista el gestor de modelos
 const CONTEXTO_OLLAMA = 10000; // Ollama recorta por defecto a ~4k tokens: se le manda menos historial
 
-// Cada conversación es con una IA: qwen (llama-server incluido) o un modelo de Ollama.
-// libre: "modo libre", decisión del usuario por IA (apagado por defecto): no pide aprobación ni pregunta qué hacer.
-interface Conversacion { id: string; nombre: string; proveedor: "qwen" | "ollama"; modelo: string; herramientas: boolean; libre?: boolean }
+// Cada conversación es con un EMPLEADO (perfil en archivos, ver empleados.ts) asignado a un modelo: qwen
+// (llama-server incluido) o uno de Ollama. Todos los de qwen comparten el mismo modelo cargado.
+// libre: "modo libre", decisión del usuario por empleado (apagado por defecto): no pide aprobación.
+interface Conversacion {
+  id: string; nombre: string; rol: string; color: string; usuario: string; libre?: boolean;
+  proveedor: "qwen" | "ollama"; modelo: string; // modelo tal como lo pide la API
+  herramientas: boolean; // el modelo sabe usar herramientas (si no, es "solo chat" aunque el perfil liste alguna)
+  permitidas: string[]; // herramientas del puesto
+}
 interface Modelo { proveedor: "qwen" | "ollama"; modelo: string; detalle: string; herramientas: boolean }
-const QWEN: Conversacion = { id: "qwen", nombre: "qwen", proveedor: "qwen", modelo: "Qwen3.5-9B", herramientas: true };
+const QWEN_MODELO = "Qwen3.5-9B";
 
-// Computadora propia de cada IA: su contenedor (se enciende la primera vez que lo usa), con la carpeta
-// IA-discalves/trabajo/<usuario> como /home/<usuario>, y el Chromium de su escritorio.
-function computadora(c: Conversacion) {
-  let usuario = c.id === QWEN.id ? "qwen" : c.nombre.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 32) || "ia";
-  if (c.id !== QWEN.id && usuario === "qwen") usuario = "qwen-ollama"; // un modelo de Ollama llamado qwen no comparte con el incluido
-  const carpeta = rutas.trabajo(usuario); // la crea la computadora al encenderse (en Windows vive dentro de WSL)
-  const pc = computadoraDe(carpeta, usuario);
-  return { usuario, carpeta, computadora: pc, navegador: navegadorDe(pc) };
+function aConversacion(e: Empleado): Conversacion {
+  const ollama = e.modelo.startsWith("ollama:");
+  return {
+    id: e.id, nombre: e.nombre, rol: e.rol, color: e.color, usuario: e.usuario, libre: e.libre,
+    proveedor: ollama ? "ollama" : "qwen",
+    modelo: ollama ? e.modelo.slice("ollama:".length) : QWEN_MODELO,
+    herramientas: ollama ? e.herramientasModelo : true,
+    permitidas: e.herramientas,
+  };
 }
 
-const sistemaConHerramientas = (nombre: string, usuario: string, libre: boolean) =>
-  `Eres ${nombre}, un empleado de Discalaves que trabaja en la computadora del usuario. ` +
+// Computadora propia de cada empleado: su contenedor (se enciende la primera vez que lo usa), con la carpeta
+// de trabajo (rutas.trabajo) como /home/<usuario>, y el Chromium de su escritorio.
+function computadora(c: Conversacion) {
+  const carpeta = rutas.trabajo(c.usuario); // la crea la computadora al encenderse (en Windows vive dentro de WSL)
+  const pc = computadoraDe(carpeta, c.usuario);
+  return { usuario: c.usuario, carpeta, computadora: pc, navegador: navegadorDe(pc) };
+}
+
+// Base común del prompt, idéntica para todos los empleados (con el mismo modo): va primero para que
+// llama-server reutilice en caché ese prefijo al cambiar de empleado. Lo propio del puesto va después.
+const baseConHerramientas = (libre: boolean) =>
+  "Eres un empleado de Discalaves que trabaja para el usuario. " +
   "Responde en el idioma del usuario, de forma breve y clara. " +
-  `Tienes tu propia computadora aislada (Debian con escritorio) con terminal, navegador e internet; tu carpeta es /home/${usuario}. ` +
-  "Para investigar en la web: buscar_web, luego abrir_pagina con las direcciones más útiles; para formularios: ver_pagina, hacer_clic y escribir_en. " +
+  "Tienes tu propia computadora aislada (Debian con escritorio) con internet; usa solo las herramientas que tienes. " +
+  "Si una tarea encaja con uno de tus procedimientos, léelo primero con leer_procedimiento y sigue sus pasos y su formato. " +
   "Cita las direcciones de donde sacas la información. " +
   "Trabaja hasta terminar la tarea completa, sin pedir permiso para continuar; entre paso y paso cuenta en una frase qué hiciste y qué encontraste. " +
   "Si algo falla, prueba otro camino en vez de repetir lo mismo. " +
-  "Si no sabes algo, un comando falla o no puedes hacerlo, dilo en vez de inventar. " +
-  "Para instalar programas o tocar el sistema, empieza el comando con sudo (eres root en tu computadora, no en la del usuario); " +
+  "Si no sabes algo, un comando falla o no puedes hacerlo, dilo en vez de inventar; nunca finjas saber lo que no sabes. " +
+  "No digas que guardaste, abriste o comprobaste algo si no lo hiciste con una herramienta en esta tarea; cita solo direcciones que abriste o que salieron en tus resultados. " +
+  "Con recordar guarda notas cortas que te sirvan en otras conversaciones (preferencias del usuario, decisiones). " +
+  "Si tienes terminal: para instalar o tocar el sistema, empieza el comando con sudo (eres root en tu computadora, no en la del usuario); " +
   "para instalar: sudo apt-get update && sudo apt-get install -y <paquete>. " +
   (libre
     ? "Trabajas en modo libre: actúa por tu cuenta, no pidas confirmación ni preguntes qué hacer; decide tú y termina la tarea. " +
       "Pregunta solo si te falta un dato imprescindible que no puedes averiguar."
     : "Borrar, enviar o pagar siempre requiere la aprobación del usuario: la app se la pide sola; si la rechaza, no insistas.");
 
-const sistemaSoloChat = (nombre: string) =>
-  `Eres ${nombre}, un empleado de Discalaves que corre en la computadora del usuario. ` +
+const BASE_SOLO_CHAT =
+  "Eres un empleado de Discalaves que trabaja para el usuario. " +
   "Responde en el idioma del usuario, de forma breve y clara. " +
   "No tienes herramientas: no puedes navegar por internet, ejecutar comandos ni ver o crear archivos. " +
-  "Si te piden algo así, dilo y sugiere hablar con un empleado que sí tenga herramientas, como qwen. " +
-  "Si no sabes algo, dilo en vez de inventar.";
+  "Si te piden algo así, dilo y sugiere pedírselo a un empleado que sí tenga herramientas. " +
+  "Si no sabes algo, dilo en vez de inventar; nunca finjas saber lo que no sabes.";
+
+function promptSistema(c: Conversacion): string {
+  const e = equipo.buscar(c.id)!;
+  const base = c.herramientas ? baseConHerramientas(c.libre === true) : BASE_SOLO_CHAT;
+  return `${base}\n\n${promptEmpleado(e, equipo.procedimientos(c.id), equipo.memoria(c.id), c.herramientas)}`;
+}
 
 interface Llamada { id: string; nombre: string; argumentos: string }
 type Mensaje =
@@ -74,7 +100,8 @@ type Estado =
 const carpetaConversaciones = () => path.join(app.getPath("userData"), "conversaciones");
 const archivoHistorial = (id: string) => path.join(carpetaConversaciones(), `${id}.json`);
 const archivoIndice = () => path.join(carpetaConversaciones(), "indice.json");
-let conversaciones: Conversacion[] = [QWEN];
+let equipo: Empleados; // se crea al arrancar (necesita la carpeta de datos)
+let conversaciones: Conversacion[] = [];
 const historiales = new Map<string, Mensaje[]>();
 let estadoServidor: Estado = { fase: "cargando" }; // el de llama-server, solo afecta a qwen
 const trabajando = new Map<string, Estado>(); // fase de las conversaciones que están respondiendo
@@ -95,19 +122,34 @@ function cambiarEstadoServidor(nuevo: Estado) {
   for (const c of conversaciones) if (c.proveedor === "qwen") avisarEstado(c);
 }
 
+// Se relee de disco en cada consulta: una edición a mano de identidad.md se nota en el siguiente mensaje.
 function leerConversaciones() {
-  try {
-    const guardadas: Conversacion[] = JSON.parse(fs.readFileSync(archivoIndice(), "utf8"));
-    const qwen = guardadas.find((c) => c.id === QWEN.id);
-    conversaciones = [{ ...QWEN, libre: qwen?.libre === true }, ...guardadas.filter((c) => c.proveedor === "ollama")];
-  } catch {
-    conversaciones = [QWEN];
-  }
+  conversaciones = equipo.listar().map(aConversacion);
 }
 
-function guardarConversaciones() {
-  fs.mkdirSync(carpetaConversaciones(), { recursive: true });
-  fs.writeFileSync(archivoIndice(), JSON.stringify(conversaciones, null, 2));
+// Primera vez con empleados: las conversaciones que ya existían (una por modelo) pasan a ser empleados
+// "Asistente" con el mismo id (su historial no se mueve) y la misma carpeta de computadora.
+function migrarConversaciones() {
+  if (equipo.existe()) return;
+  type Vieja = { id: string; nombre: string; proveedor: "qwen" | "ollama"; modelo: string; herramientas: boolean; libre?: boolean };
+  let viejas: Vieja[] = [];
+  try {
+    viejas = JSON.parse(fs.readFileSync(path.join(carpetaConversaciones(), "indice.json"), "utf8"));
+  } catch {
+    // instalación nueva
+  }
+  if (!viejas.some((v) => v.id === "qwen")) viejas.unshift({ id: "qwen", nombre: "qwen", proveedor: "qwen", modelo: QWEN_MODELO, herramientas: true });
+  const asistente = equipo.plantilla("asistente")!;
+  for (const v of viejas) {
+    if (v.proveedor === "qwen") {
+      equipo.crear({ ...asistente, modelo: "qwen" }, true, "asistente", { id: v.id, usuario: "qwen", libre: v.libre });
+    } else {
+      // misma carpeta que tenía (antes salía del nombre del modelo)
+      let usuario = v.nombre.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 32) || "ia";
+      if (usuario === "qwen") usuario = "qwen-ollama";
+      equipo.crear({ ...asistente, nombre: v.nombre, modelo: `ollama:${v.modelo}` }, v.herramientas, "asistente", { id: v.id, usuario, libre: v.libre });
+    }
+  }
 }
 
 function historialDe(id: string): Mensaje[] {
@@ -164,6 +206,9 @@ function iniciarServidor() {
     "-c", "16384", "-np", "1",
     "-ctk", "q8_0", "-ctv", "q8_0", // caché en 8 bits: 16k de contexto (páginas web) casi sin coste de VRAM
     "-fitt", "256", // margen de VRAM bajo: con el de 1 GB por defecto, en 8 GB quedan capas en CPU y va a la mitad de velocidad
+    // Caché de prompts en RAM: por defecto hasta 8 GB. Con varios empleados, cada conversación deja ahí su
+    // estado y, junto a sus computadoras, en 16 GB el sistema mató a llama-server por falta de memoria.
+    "-cram", "1024",
     "--reasoning", "off", "--no-webui",
   ], { stdio: ["ignore", log, log], windowsHide: true }); // en Windows, sin ventana de consola
   servidor.on("exit", (codigo) => {
@@ -237,9 +282,10 @@ function contexto(c: Conversacion) {
 }
 
 // Un turno del modelo: el texto se reenvía a la interfaz mientras llega; las llamadas se acumulan.
-async function turno(c: Conversacion, interfaz: Electron.WebContents, senal: AbortSignal) {
+async function turno(c: Conversacion, interfaz: Electron.WebContents, senal: AbortSignal, avisos: string[] = []) {
   const url = c.proveedor === "qwen" ? `http://127.0.0.1:${PUERTO}/v1/chat/completions` : `${OLLAMA}/v1/chat/completions`;
-  const sistema = c.herramientas ? sistemaConHerramientas(c.nombre, computadora(c).usuario, c.libre === true) : sistemaSoloChat(c.nombre);
+  const sistema = promptSistema(c);
+  const herramientas = c.herramientas ? definicionesPara(c.permitidas, equipo.procedimientos(c.id).length > 0) : [];
   const r = await fetch(url, {
     method: "POST",
     signal: senal, // Detener corta también la respuesta que está llegando
@@ -247,8 +293,8 @@ async function turno(c: Conversacion, interfaz: Electron.WebContents, senal: Abo
     body: JSON.stringify({
       model: c.modelo,
       stream: true,
-      ...(c.herramientas && { tools: DEFINICIONES }),
-      messages: [{ role: "system", content: sistema }, ...contexto(c)],
+      ...(herramientas.length && { tools: herramientas }),
+      messages: [{ role: "system", content: sistema }, ...contexto(c), ...avisos.map((a) => ({ role: "user", content: `(aviso de la app, no del usuario) ${a}` }))],
     }),
   });
   if (!r.ok) {
@@ -345,16 +391,18 @@ app.on("login", (ev, _contenido, detalles, _auth, responder) => {
   ev.preventDefault();
 });
 
-const buscar = (id: unknown) => conversaciones.find((c) => c.id === id);
+const buscar = (id: unknown) => {
+  leerConversaciones();
+  return conversaciones.find((c) => c.id === id);
+};
 
 ipcMain.handle("modo-libre", (_e, id: unknown, activo: unknown) => {
   const c = buscar(id);
   if (!c?.herramientas) return false;
-  c.libre = activo === true;
-  guardarConversaciones();
-  return c.libre;
+  equipo.cambiarLibre(c.id, activo === true);
+  return activo === true;
 });
-ipcMain.handle("conversaciones", () => conversaciones.map((c) => ({ ...c, estado: estadoDe(c), ultimo: historialDe(c.id).at(-1) })));
+ipcMain.handle("conversaciones", () => (leerConversaciones(), conversaciones).map((c) => ({ ...c, estado: estadoDe(c), ultimo: historialDe(c.id).at(-1) })));
 ipcMain.handle("historial", (_e, id: unknown) => (buscar(id) ? historialDe(String(id)) : []));
 ipcMain.handle("estado", (_e, id: unknown) => {
   const c = buscar(id);
@@ -362,22 +410,116 @@ ipcMain.handle("estado", (_e, id: unknown) => {
 });
 ipcMain.handle("modelos", async () => {
   const ollama = await modelosOllama();
-  const qwen: Modelo = { proveedor: "qwen", modelo: QWEN.modelo, detalle: "incluido · 9B · Q4_K_M", herramientas: true };
+  const qwen: Modelo = { proveedor: "qwen", modelo: QWEN_MODELO, detalle: "incluido · 9B · Q4_K_M", herramientas: true };
   return { modelos: [qwen, ...(ollama ?? [])], ollama: ollama !== null };
 });
 
-// Abre la conversación con esa IA; si ya existe, devuelve la misma (una por IA).
-ipcMain.handle("nueva-conversacion", async (_e, proveedor: unknown, modelo: unknown) => {
-  if (proveedor === "qwen") return { id: QWEN.id };
-  const m = (await modelosOllama())?.find((m) => m.modelo === modelo); // la interfaz no decide qué existe
-  if (!m) return { error: "ese modelo ya no está en Ollama" };
-  const id = `ollama-${m.modelo.replace(/[^a-z0-9._-]/gi, "_")}`;
-  if (!buscar(id)) {
-    conversaciones.push({ id, nombre: m.modelo.replace(/:latest$/, ""), proveedor: "ollama", modelo: m.modelo, herramientas: m.herramientas });
-    guardarConversaciones();
-  }
-  return { id };
+// ---- Empleados: plantillas, crear, editar, borrador redactado por el modelo y abrir su carpeta ----
+
+// La interfaz no decide qué es válido: se limpia todo lo que llega.
+function limpiarIdentidad(x: unknown): Identidad | null {
+  const d = x as Record<string, unknown>;
+  const texto = (v: unknown, max: number) => (typeof v === "string" ? v.trim().slice(0, max) : "");
+  const nombre = texto(d?.nombre, 40);
+  const modelo = texto(d?.modelo, 120);
+  if (!nombre || !(modelo === "qwen" || /^ollama:\S+$/.test(modelo))) return null;
+  return {
+    nombre,
+    rol: texto(d.rol, 80),
+    color: COLORES.includes(d.color as string) ? (d.color as string) : "violeta",
+    modelo,
+    herramientas: Array.isArray(d.herramientas) ? d.herramientas.filter((h): h is string => HERRAMIENTAS.includes(h as string)) : [],
+    instrucciones: texto(d.instrucciones, 3000),
+  };
+}
+
+// ¿El modelo asignado sabe usar herramientas? qwen sí; los de Ollama según /api/show.
+async function modeloConHerramientas(modelo: string): Promise<boolean | null> {
+  if (modelo === "qwen") return true;
+  const m = (await modelosOllama())?.find((x) => `ollama:${x.modelo}` === modelo);
+  return m ? m.herramientas : null;
+}
+
+ipcMain.handle("plantillas", () =>
+  equipo.listarPlantillas().map((p) => ({ id: p.id, ...p.identidad, procedimientos: p.procedimientos })),
+);
+ipcMain.handle("empleado", (_e, id: unknown) => {
+  const e = equipo.buscar(String(id));
+  return e && { nombre: e.nombre, rol: e.rol, color: e.color, modelo: e.modelo, herramientas: e.herramientas, instrucciones: e.instrucciones, procedimientos: equipo.procedimientos(e.id) };
 });
+ipcMain.handle("crear-empleado", async (_e, datos: unknown, plantilla: unknown) => {
+  const identidad = limpiarIdentidad(datos);
+  if (!identidad) return { error: "falta el nombre o el modelo" };
+  const conHerramientas = await modeloConHerramientas(identidad.modelo);
+  if (conHerramientas === null) return { error: "ese modelo ya no está en Ollama" };
+  const origen = typeof plantilla === "string" && equipo.plantilla(plantilla) ? plantilla : undefined;
+  return { id: equipo.crear(identidad, conHerramientas, origen).id };
+});
+ipcMain.handle("guardar-empleado", async (_e, id: unknown, datos: unknown) => {
+  const identidad = limpiarIdentidad(datos);
+  if (!identidad || !equipo.buscar(String(id))) return { error: "falta el nombre o el modelo" };
+  const conHerramientas = await modeloConHerramientas(identidad.modelo);
+  if (conHerramientas === null) return { error: "ese modelo ya no está en Ollama" };
+  equipo.actualizar(String(id), identidad, conHerramientas);
+  return {};
+});
+ipcMain.handle("abrir-carpeta", async (_e, id: unknown) => {
+  if (!equipo.buscar(String(id))) return;
+  await shell.openPath(equipo.dir(String(id)));
+});
+
+// Borrador de perfil a partir de una descripción del puesto, redactado por qwen. El usuario lo revisa.
+ipcMain.handle("borrador-empleado", async (_e, descripcion: unknown) => {
+  const texto = typeof descripcion === "string" ? descripcion.trim().slice(0, 1500) : "";
+  if (!texto) return { error: "describe el puesto" };
+  if (estadoServidor.fase !== "listo") return { error: "qwen todavía no está listo" };
+  const instrucciones =
+    "Redactas perfiles de empleados de IA para Discalaves. Responde SOLO con el archivo, sin explicaciones ni bloques de código, con este formato exacto:\n" +
+    "---\nnombre: <nombre corto del puesto>\nrol: <rol en pocas palabras>\n" +
+    `color: <uno de: ${COLORES.join(", ")}>\nmodelo: qwen\n` +
+    `herramientas: <separadas por comas, elegidas de: ${HERRAMIENTAS.join(", ")}; terminal solo si el puesto programa o administra sistemas>\n` +
+    "---\n\nTono: <una frase>\n\nReglas:\n- <de 3 a 5 reglas del puesto>\n\n" +
+    "Menos de 120 palabras en total. Una de las reglas es de honestidad: no fingir saber; si el puesto maneja normas, leyes o cifras oficiales, " +
+    "buscarlas en fuentes oficiales, citarlas y pedir confirmación antes de darlas como definitivas.";
+  try {
+    const r = await fetch(`http://127.0.0.1:${PUERTO}/v1/chat/completions`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${CLAVE}`, "content-type": "application/json" },
+      body: JSON.stringify({ model: QWEN_MODELO, max_tokens: 500, temperature: 0.4, messages: [{ role: "system", content: instrucciones }, { role: "user", content: texto }] }),
+      signal: AbortSignal.timeout(120_000),
+    });
+    const j = (await r.json()) as { choices?: { message?: { content?: string } }[] };
+    const salida = (j.choices?.[0]?.message?.content ?? "").replace(/^```\w*\n?|```\s*$/g, "").trim();
+    return { borrador: { ...leerIdentidad(salida), modelo: "qwen" } };
+  } catch (e) {
+    return { error: `no pude redactar el borrador: ${(e as Error).message}` };
+  }
+});
+
+// Las herramientas del perfil (procedimientos y memoria) se resuelven aquí; el resto, en su computadora.
+// Una herramienta que no es de su puesto no se ejecuta aunque el modelo la pida.
+async function usarHerramienta(c: Conversacion, l: Llamada, interfaz: Electron.WebContents) {
+  let args: Record<string, unknown> = {};
+  try {
+    args = JSON.parse(l.argumentos || "{}");
+  } catch {
+    return { salida: "argumentos inválidos: no son JSON", codigo: -1 };
+  }
+  const texto = (k: string) => (typeof args[k] === "string" ? (args[k] as string) : "");
+  if (l.nombre === "leer_procedimiento") {
+    cambiarEstado(c, { fase: "ejecutando", detalle: `leer procedimiento ${texto("nombre")}` });
+    const p = equipo.leerProcedimiento(c.id, texto("nombre"));
+    if (p) return { salida: p, codigo: 0 };
+    return { salida: `no existe ese procedimiento. Tienes: ${equipo.procedimientos(c.id).map((x) => x.nombre).join(", ") || "ninguno"}`, codigo: 1 };
+  }
+  if (l.nombre === "recordar") return { salida: equipo.recordar(c.id, texto("texto")), codigo: 0 };
+  if (!c.permitidas.includes(l.nombre)) return { salida: `no tienes la herramienta ${l.nombre} en tu puesto; hazlo con las que tienes o dilo.`, codigo: 1 };
+  return ejecutarHerramienta(
+    { ...computadora(c), avisar: (fase, detalle) => cambiarEstado(c, { fase, detalle }), aprobar: async (d) => c.libre === true || pedirAprobacion(c, interfaz, d) },
+    l.nombre,
+    l.argumentos,
+  );
+}
 
 ipcMain.handle("enviar", async (ev, id: unknown, entrada: unknown) => {
   const c = buscar(id);
@@ -398,15 +540,28 @@ ipcMain.handle("enviar", async (ev, id: unknown, entrada: unknown) => {
     guardarHistorial(c.id);
     return {};
   };
+  const inicioTarea = historial.length - 1;
   try {
     const veces = new Map<string, number>(); // cuántas veces pidió cada llamada exacta en esta tarea
+    const verificadas = new Set<string>();
+    let avisos: string[] = [];
     for (;;) {
       if (parar.signal.aborted) return detenida();
       cambiarEstado(c, { fase: "escribiendo" });
-      const { texto, llamadas } = await turno(c, ev.sender, parar.signal);
+      const { texto, llamadas } = await turno(c, ev.sender, parar.signal, avisos);
+      avisos = [];
       if (texto || llamadas.length) historial.push({ de: "ia", texto, t: Date.now(), ...(llamadas.length && { llamadas }) });
       guardarHistorial(c.id);
-      if (!llamadas.length) return {};
+      if (!llamadas.length) {
+        const fallo = c.herramientas ? verificar(texto, historial.slice(inicioTarea), verificadas) : null;
+        if (!fallo) return {};
+        verificadas.add(fallo.tipo);
+        historial.pop(); // la respuesta falsa no se queda en el hilo
+        guardarHistorial(c.id);
+        avisos = [fallo.aviso];
+        ev.sender.send("paso", c.id);
+        continue;
+      }
       for (const l of llamadas) {
         const firma = `${l.nombre} ${l.argumentos}`;
         const n = (veces.get(firma) ?? 0) + 1;
@@ -419,11 +574,7 @@ ipcMain.handle("enviar", async (ev, id: unknown, entrada: unknown) => {
         const r =
           n >= AVISO_REPETICION
             ? { salida: `ya hiciste exactamente esto ${n - 1} veces; no lo repito. Prueba otro camino o termina con lo que tienes.`, codigo: 1 }
-            : await ejecutarHerramienta(
-                { ...computadora(c), avisar: (fase, detalle) => cambiarEstado(c, { fase, detalle }), aprobar: async (d) => c.libre === true || pedirAprobacion(c, ev.sender, d) },
-                l.nombre,
-                l.argumentos,
-              );
+            : await usarHerramienta(c, l, ev.sender);
         historial.push({ de: "herramienta", ...l, ...r, t: Date.now() });
         guardarHistorial(c.id);
       }
@@ -476,6 +627,8 @@ registrarWsl(ipcMain); // Windows: pantalla de primer arranque (WSL); en Linux n
 app.whenReady().then(() => {
   if (!primera) return;
   apagarTodas(); // restos de una sesión que se cerró mal
+  equipo = new Empleados(app.getPath("userData"), path.join(__dirname, "..", "plantillas"));
+  migrarConversaciones();
   leerConversaciones();
   iniciarServidor();
   crearVentana();
