@@ -60,9 +60,9 @@ Grok Bot.
   [Windows](#windows-en-preparación)) y un instalador que se genera
   automáticamente, pero nadie lo ha probado todavía en un equipo con Windows y
   GPU.
-- **Un equipo que colabore:** que un empleado le pase su trabajo a otro en un
-  hilo compartido. Hoy puedes tener varios empleados, pero cada uno trabaja
-  por separado y de a uno a la vez.
+- **Un equipo que colabore de verdad:** hoy un empleado puede pasarle una
+  tarea a otro y recibir su respuesta, pero no hay un hilo compartido donde
+  veas a los dos juntos, y trabajan de a uno a la vez.
 - **Instalador:** hoy hay que preparar a mano el modelo, llama.cpp y Docker.
   La meta es un instalador nativo que traiga todo, sin Docker ni pasos
   previos.

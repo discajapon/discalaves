@@ -33,8 +33,10 @@ respuestas en streaming. Los empleados usan herramientas (bucle de agente propio
 `terminal`, `escribir_archivo`, `buscar_web`, `abrir_pagina`, `ver_pagina`,
 `hacer_clic` y `escribir_en`. Cumple el criterio 1 de "listo" (investiga en
 la web y deja un informe en un archivo, ~30 s) desde su propia computadora
-(un contenedor Debian con escritorio). Ya hay varios empleados, pero todavía
-no se pasan trabajo entre sí (falta el criterio 2). Arranque: `cd app && npm install &&
+(un contenedor Debian con escritorio). Ya hay varios empleados y, con
+`pasar_trabajo` activado, uno le pasa una tarea a otro (criterio 2 probado
+el 2026-09-29: Qwen leyó una web y el Redactor la resumió; falta el hilo
+compartido). Arranque: `cd app && npm install &&
 npm start` (requiere Docker usable sin sudo; la primera vez construye la
 imagen, ~2 min).
 
