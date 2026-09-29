@@ -1,4 +1,5 @@
-// Conversaciones con las IAs: qwen (llama-server local) y los modelos de Ollama (ver main.ts).
+// Conversaciones con los empleados: cada uno con su perfil (ver empleados.ts) y su modelo, qwen (llama-server
+// local) o uno de Ollama (ver main.ts).
 
 type MensajeChat =
   | { de: "yo" | "ia"; texto: string; t: number }
@@ -7,14 +8,21 @@ type EstadoQwen =
   | { fase: "cargando" | "listo" | "escribiendo" }
   | { fase: "ejecutando" | "esperando-aprobacion" | "error"; detalle: string };
 interface Conversacion {
-  id: string; nombre: string; proveedor: "qwen" | "ollama"; modelo: string; herramientas: boolean; libre?: boolean;
+  id: string; nombre: string; rol: string; color: string; proveedor: "qwen" | "ollama"; modelo: string; herramientas: boolean; libre?: boolean;
   estado: EstadoQwen; ultimo?: MensajeChat;
 }
 interface Modelo { proveedor: "qwen" | "ollama"; modelo: string; detalle: string; herramientas: boolean }
+interface Identidad { nombre: string; rol: string; color: string; modelo: string; herramientas: string[]; instrucciones: string }
+interface Plantilla extends Identidad { id: string; procedimientos: string[] }
 declare const discalaves: {
   conversaciones(): Promise<Conversacion[]>;
   modelos(): Promise<{ modelos: Modelo[]; ollama: boolean }>;
-  nuevaConversacion(proveedor: string, modelo: string): Promise<{ id?: string; error?: string }>;
+  plantillas(): Promise<Plantilla[]>;
+  empleado(id: string): Promise<(Identidad & { procedimientos: { nombre: string; descripcion: string }[] }) | undefined>;
+  crearEmpleado(datos: Identidad, plantilla?: string): Promise<{ id?: string; error?: string }>;
+  guardarEmpleado(id: string, datos: Identidad): Promise<{ error?: string }>;
+  borradorEmpleado(descripcion: string): Promise<{ borrador?: Identidad; error?: string }>;
+  abrirCarpeta(id: string): Promise<void>;
   historial(id: string): Promise<MensajeChat[]>;
   estado(id: string): Promise<EstadoQwen>;
   enviar(id: string, texto: string): Promise<{ error?: string }>;
@@ -67,7 +75,7 @@ function crear(etiqueta: string, clase = "", texto = ""): HTMLElement {
 function avatarIA(c: Conversacion): HTMLElement {
   const grupo = crear("span", "avatares");
   const a = crear("span", "avatar");
-  a.style.setProperty("--acento", `var(--acento-${ACENTOS[conversaciones.indexOf(c) % ACENTOS.length]})`);
+  a.style.setProperty("--acento", `var(--acento-${ACENTOS.includes(c.color) ? c.color : ACENTOS[0]})`);
   a.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${GLIFO_IA}</svg>`;
   grupo.append(a);
   return grupo;
@@ -132,7 +140,7 @@ function dibujarLista() {
     const arriba = crear("span", "fila-arriba");
     arriba.append(crear("span", "nombre", c.nombre), crear("span", "hora", ultimo ? horaCorta(ultimo.t) : ""));
     const ocupado = !["listo", "cargando", "error"].includes(c.estado.fase);
-    const vista = ocupado ? TEXTO_ESTADO[c.estado.fase] + "…" : ultimo ? (ultimo.de === "yo" ? "tú: " : "") + resumen(ultimo) : "sin mensajes";
+    const vista = ocupado ? TEXTO_ESTADO[c.estado.fase] + "…" : c.rol || "sin rol";
     cuerpo.append(arriba, crear("span", "vista", vista));
     fila.append(avatarIA(c), cuerpo);
     fila.addEventListener("click", () => seleccionar(c.id));
@@ -227,6 +235,7 @@ function dibujarCabecera() {
   entrada.placeholder = `Mensaje a ${c.nombre}`;
   // Sin herramientas no hay computadora que mirar.
   document.getElementById("ver-pantalla")!.hidden = !c.herramientas;
+  document.getElementById("cab-nombre")!.title = c.rol;
   dibujarModoLibre();
   // Cada IA tiene su computadora: si la pantalla está abierta, pasa a mostrar la de esta conversación.
   if (!pantalla.hidden) void mostrarPantalla(c.herramientas);
@@ -334,53 +343,162 @@ document.getElementById("detener")!.addEventListener("click", (ev) => {
   void discalaves.detener(activa);
 });
 
-// ---- Menú del +: IAs instaladas (qwen incluido y los modelos de Ollama) ----
+// ---- Menú del +: nuevo empleado desde una plantilla o describiendo el puesto ----
 const menuIA = document.getElementById("menu-ia")!;
+const NOMBRES_HERRAMIENTAS: Record<string, string> = {
+  terminal: "terminal",
+  escribir_archivo: "escribir archivos",
+  buscar_web: "buscar en la web",
+  abrir_pagina: "abrir páginas",
+  ver_pagina: "ver páginas",
+  hacer_clic: "hacer clic",
+  escribir_en: "escribir en formularios",
+};
 
-// Cada IA es una tarjeta tipo widget: ícono y nombre arriba (y "abierta" a la derecha), el modelo con
-// sus datos en negrita, y el estado en color: con computadora (herramientas) o solo chat.
-function opcionIA(m: Modelo): HTMLElement {
+// Cada plantilla es una tarjeta tipo widget: ícono y nombre arriba, el rol, y sus datos en negrita.
+function tarjetaPlantilla(p: Plantilla): HTMLElement {
   const b = crear("button", "opcion-ia");
   b.setAttribute("type", "button");
-  const nombre = m.proveedor === "qwen" ? "qwen" : m.modelo.replace(/:latest$/, "");
-  const abierta = conversaciones.some((c) => c.proveedor === m.proveedor && (c.proveedor === "qwen" || c.modelo === m.modelo));
-
   const arriba = crear("span", "tarjeta-arriba");
   const icono = crear("span", "tarjeta-icono");
+  icono.style.setProperty("--acento", `var(--acento-${p.color})`);
   icono.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${GLIFO_IA}</svg>`;
-  arriba.append(icono, crear("span", "nombre", nombre));
-  if (abierta) arriba.append(crear("span", "etiqueta", "abierta"));
-
-  const partes = m.detalle.split(" · ").filter((p) => p && p !== "incluido");
-  const dato = crear("span", "dato", partes.length ? "modelo " : "");
-  partes.forEach((p, i) => dato.append(i ? " · " : "", crear("strong", "", p)));
-
-  const estado = m.herramientas
-    ? crear("span", "estado con-computadora", "con su computadora")
-    : crear("strong", "estado solo-chat", "solo chat: sin navegador, terminal ni archivos");
-  b.append(arriba, ...(partes.length ? [dato] : []), estado);
-  b.addEventListener("click", async () => {
-    const r = await discalaves.nuevaConversacion(m.proveedor, m.modelo);
+  arriba.append(icono, crear("span", "nombre", p.nombre));
+  const dato = crear("span", "dato", "herramientas ");
+  dato.append(crear("strong", "", String(p.herramientas.length)), " · procedimientos ", crear("strong", "", String(p.procedimientos.length)));
+  const terminal = p.herramientas.includes("terminal");
+  b.append(arriba, crear("span", "rol-tarjeta", p.rol), dato, crear("span", `estado ${terminal ? "con-computadora" : "sin-terminal"}`, terminal ? "con terminal" : "sin terminal"));
+  b.addEventListener("click", () => {
     menuIA.hidePopover();
-    if (r.error) return aviso(r.error);
-    await seleccionar(r.id!);
+    void abrirDialogoEmpleado({ modo: "plantilla", plantilla: p });
+  });
+  return b;
+}
+
+function tarjetaAMedida(): HTMLElement {
+  const b = crear("button", "opcion-ia");
+  b.setAttribute("type", "button");
+  const arriba = crear("span", "tarjeta-arriba");
+  const icono = crear("span", "tarjeta-icono");
+  icono.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20l4-1 11-11-3-3L5 16z"/></svg>';
+  arriba.append(icono, crear("span", "nombre", "Describir el puesto"));
+  b.append(arriba, crear("span", "rol-tarjeta", "cuéntalo con tus palabras y qwen redacta un borrador que revisas"));
+  b.addEventListener("click", () => {
+    menuIA.hidePopover();
+    void abrirDialogoEmpleado({ modo: "describir" });
   });
   return b;
 }
 
 async function llenarMenuIA() {
-  menuIA.replaceChildren(crear("p", "detalle", "buscando modelos…"));
-  const { modelos, ollama } = await discalaves.modelos();
-  const incluidos = modelos.filter((m) => m.proveedor === "qwen");
-  const deOllama = modelos.filter((m) => m.proveedor === "ollama");
-  menuIA.replaceChildren(crear("p", "menu-titulo", "incluido"), ...incluidos.map(opcionIA), crear("p", "menu-titulo", "Ollama"));
-  if (!ollama) menuIA.append(crear("p", "detalle", "Ollama no responde en este equipo; ¿está en marcha?"));
-  else if (!deOllama.length) menuIA.append(crear("p", "detalle", "no hay modelos instalados (ollama pull …)"));
-  else menuIA.append(...deOllama.map(opcionIA));
+  menuIA.replaceChildren(crear("p", "detalle", "cargando plantillas…"));
+  const plantillas = (await discalaves.plantillas()).filter((p) => p.id !== "asistente");
+  menuIA.replaceChildren(crear("p", "menu-titulo", "a medida"), tarjetaAMedida(), crear("p", "menu-titulo", "plantillas"), ...plantillas.map(tarjetaPlantilla));
   // Las opciones entran escalonadas (ver .menu-ia > * en estilos.css).
   [...menuIA.children].forEach((el, i) => (el as HTMLElement).style.setProperty("--orden", String(i)));
   menuIA.querySelector("button")?.focus();
 }
+
+// ---- Diálogo de empleado: crear (plantilla o descripción) y editar ----
+const dialogoEmpleado = document.getElementById("empleado") as HTMLDialogElement;
+const formEmpleado = document.getElementById("empleado-form") as HTMLFormElement;
+const campo = <T extends HTMLElement>(id: string) => document.getElementById(`empleado-${id}`) as T;
+const avisoEmpleado = campo<HTMLElement>("aviso");
+let edicion: { modo: "plantilla" | "describir" | "editar"; plantilla?: string; id?: string } = { modo: "describir" };
+
+function rellenar(i: Identidad) {
+  campo<HTMLInputElement>("nombre").value = i.nombre;
+  campo<HTMLInputElement>("rol").value = i.rol;
+  campo<HTMLSelectElement>("color").value = ACENTOS.includes(i.color) ? i.color : ACENTOS[0];
+  const modelo = campo<HTMLSelectElement>("modelo");
+  if ([...modelo.options].some((o) => o.value === i.modelo)) modelo.value = i.modelo;
+  for (const c of campo<HTMLElement>("herramientas").querySelectorAll<HTMLInputElement>("input")) c.checked = i.herramientas.includes(c.value);
+  campo<HTMLTextAreaElement>("instrucciones").value = i.instrucciones;
+}
+
+function leerFormulario(): Identidad {
+  return {
+    nombre: campo<HTMLInputElement>("nombre").value,
+    rol: campo<HTMLInputElement>("rol").value,
+    color: campo<HTMLSelectElement>("color").value,
+    modelo: campo<HTMLSelectElement>("modelo").value,
+    herramientas: [...campo<HTMLElement>("herramientas").querySelectorAll<HTMLInputElement>("input:checked")].map((c) => c.value),
+    instrucciones: campo<HTMLTextAreaElement>("instrucciones").value,
+  };
+}
+
+async function abrirDialogoEmpleado(d: { modo: "plantilla"; plantilla: Plantilla } | { modo: "describir" } | { modo: "editar"; id: string }) {
+  // Opciones fijas (colores, herramientas) y los modelos que haya ahora mismo.
+  campo<HTMLSelectElement>("color").replaceChildren(...ACENTOS.map((a) => Object.assign(document.createElement("option"), { value: a, textContent: a })));
+  campo<HTMLElement>("herramientas").replaceChildren(
+    ...Object.entries(NOMBRES_HERRAMIENTAS).map(([valor, texto]) => {
+      const l = crear("label", "casilla");
+      l.append(Object.assign(document.createElement("input"), { type: "checkbox", value: valor }), ` ${texto}`);
+      return l;
+    }),
+  );
+  const { modelos } = await discalaves.modelos();
+  campo<HTMLSelectElement>("modelo").replaceChildren(
+    ...modelos.map((m) =>
+      Object.assign(document.createElement("option"), {
+        value: m.proveedor === "qwen" ? "qwen" : `ollama:${m.modelo}`,
+        textContent: m.proveedor === "qwen" ? "qwen (incluido)" : `${m.modelo.replace(/:latest$/, "")}${m.herramientas ? "" : " — solo chat"}`,
+      }),
+    ),
+  );
+  avisoEmpleado.textContent = "";
+  campo<HTMLElement>("redactando").textContent = "";
+  campo<HTMLElement>("describir").hidden = d.modo !== "describir";
+  campo<HTMLTextAreaElement>("descripcion").value = "";
+  if (d.modo === "plantilla") {
+    edicion = { modo: "plantilla", plantilla: d.plantilla.id };
+    campo<HTMLElement>("titulo").textContent = `Nuevo empleado: ${d.plantilla.nombre}`;
+    rellenar(d.plantilla);
+  } else if (d.modo === "describir") {
+    edicion = { modo: "describir" };
+    campo<HTMLElement>("titulo").textContent = "Nuevo empleado a medida";
+    rellenar({ nombre: "", rol: "", color: ACENTOS[0], modelo: "qwen", herramientas: ["buscar_web", "abrir_pagina", "escribir_archivo"], instrucciones: "" });
+  } else {
+    const e = await discalaves.empleado(d.id);
+    if (!e) return;
+    edicion = { modo: "editar", id: d.id };
+    campo<HTMLElement>("titulo").textContent = `Perfil de ${e.nombre}`;
+    rellenar(e);
+  }
+  dialogoEmpleado.showModal();
+  (d.modo === "describir" ? campo<HTMLTextAreaElement>("descripcion") : campo<HTMLInputElement>("nombre")).focus();
+}
+
+campo<HTMLButtonElement>("redactar").addEventListener("click", async (ev) => {
+  const boton = ev.currentTarget as HTMLButtonElement;
+  const descripcion = campo<HTMLTextAreaElement>("descripcion").value.trim();
+  if (!descripcion) return campo<HTMLTextAreaElement>("descripcion").focus();
+  boton.disabled = true;
+  campo<HTMLElement>("redactando").textContent = "qwen está redactando el borrador…";
+  const r = await discalaves.borradorEmpleado(descripcion);
+  boton.disabled = false;
+  campo<HTMLElement>("redactando").textContent = r.error ?? "borrador listo: revísalo antes de guardar";
+  if (r.borrador) rellenar({ ...r.borrador, modelo: campo<HTMLSelectElement>("modelo").value });
+});
+
+formEmpleado.addEventListener("submit", async (ev) => {
+  if ((ev.submitter as HTMLButtonElement | null)?.value !== "guardar") return; // Cancelar cierra sin más
+  ev.preventDefault();
+  const datos = leerFormulario();
+  const r =
+    edicion.modo === "editar"
+      ? await discalaves.guardarEmpleado(edicion.id!, datos)
+      : await discalaves.crearEmpleado(datos, edicion.plantilla);
+  if (r.error) {
+    avisoEmpleado.textContent = r.error;
+    return;
+  }
+  dialogoEmpleado.close();
+  await seleccionar((r as { id?: string }).id ?? activa);
+});
+
+document.getElementById("editar-empleado")!.addEventListener("click", () => abrirDialogoEmpleado({ modo: "editar", id: activa }));
+document.getElementById("carpeta-empleado")!.addEventListener("click", () => discalaves.abrirCarpeta(activa));
 
 menuIA.addEventListener("toggle", (ev) => {
   if ((ev as ToggleEvent).newState === "open") void llenarMenuIA();

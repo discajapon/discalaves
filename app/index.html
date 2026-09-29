@@ -31,16 +31,16 @@
   <div class="app">
     <aside class="lateral vidrio">
       <div class="lateral-arriba">
-        <button id="nueva" class="icono" type="button" aria-label="Nueva conversación" title="Nueva conversación con una IA" popovertarget="menu-ia">
+        <button id="nueva" class="icono" type="button" aria-label="Nuevo empleado" title="Nuevo empleado" popovertarget="menu-ia">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
         </button>
-        <div id="menu-ia" class="menu-ia" popover aria-label="Elegir IA"></div>
+        <div id="menu-ia" class="menu-ia" popover aria-label="Nuevo empleado"></div>
       </div>
       <label class="buscador">
         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></svg>
-        <input type="search" placeholder="buscar" aria-label="Buscar conversaciones">
+        <input type="search" placeholder="buscar" aria-label="Buscar empleados">
       </label>
-      <nav id="lista" class="lista" aria-label="Conversaciones"></nav>
+      <nav id="lista" class="lista" aria-label="Empleados"></nav>
       <button id="usuario" class="usuario" type="button" title="Editar perfil">
         <span id="usuario-iniciales" class="iniciales" aria-hidden="true"></span>
         <span id="usuario-nombre" class="nombre"></span>
@@ -54,6 +54,12 @@
           <h1 id="cab-nombre" class="nombre"></h1>
           <span id="cab-estado" class="cab-estado" role="status"></span>
         </div>
+        <button id="editar-empleado" class="icono" type="button" aria-label="Editar su perfil" title="Editar su perfil">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20l4-1 11-11-3-3L5 16z"/></svg>
+        </button>
+        <button id="carpeta-empleado" class="icono" type="button" aria-label="Abrir su carpeta" title="Abrir su carpeta (perfil, procedimientos y memoria)">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+        </button>
         <button id="modo-libre" class="modo-libre" type="button" role="switch" aria-checked="false">
           <span>modo libre</span>
           <span class="interruptor" aria-hidden="true"><span class="lente"></span></span>
@@ -124,6 +130,41 @@
       <div class="acciones">
         <button id="wsl-ahora-no" type="button" class="boton secundario">Ahora no</button>
         <button id="wsl-preparar" type="button" class="boton">Preparar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Crear o editar un empleado: diálogo sólido (en la capa superior el vidrio no refracta). -->
+  <dialog id="empleado" class="perfil empleado" aria-labelledby="empleado-titulo">
+    <form id="empleado-form" method="dialog">
+      <h2 id="empleado-titulo">Nuevo empleado</h2>
+      <div id="empleado-describir" class="describir" hidden>
+        <label class="campo" for="empleado-descripcion">Describe el puesto con tus palabras</label>
+        <textarea id="empleado-descripcion" rows="3" maxlength="1500" placeholder="por ejemplo: alguien que me ayude a responder los correos de los clientes de mi tienda"></textarea>
+        <div class="acciones">
+          <span id="empleado-redactando" class="detalle" role="status"></span>
+          <button id="empleado-redactar" type="button" class="boton">redactar borrador</button>
+        </div>
+      </div>
+      <div class="campos-dobles">
+        <label class="campo">Nombre <input id="empleado-nombre" type="text" maxlength="40" required pattern=".*\S.*" autocomplete="off"></label>
+        <label class="campo">Rol <input id="empleado-rol" type="text" maxlength="80" autocomplete="off"></label>
+      </div>
+      <div class="campos-dobles">
+        <label class="campo">Color <select id="empleado-color"></select></label>
+        <label class="campo">Modelo <select id="empleado-modelo"></select></label>
+      </div>
+      <fieldset class="campo casillas">
+        <legend>Herramientas</legend>
+        <div id="empleado-herramientas"></div>
+      </fieldset>
+      <label class="campo">Tono y reglas del puesto
+        <textarea id="empleado-instrucciones" rows="8" maxlength="3000"></textarea>
+      </label>
+      <span id="empleado-aviso" class="aviso-dialogo" role="status"></span>
+      <div class="acciones">
+        <button value="cancelar" formnovalidate class="boton secundario">Cancelar</button>
+        <button value="guardar" class="boton">Guardar</button>
       </div>
     </form>
   </dialog>
