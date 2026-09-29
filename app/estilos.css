@@ -635,6 +635,7 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 .casillas { margin: 0; padding: 0; border: 0; }
 .casillas legend { margin-bottom: var(--e1); }
 #empleado-herramientas { display: grid; grid-template-columns: 1fr 1fr; gap: var(--e1) var(--e3); }
+#empleado-herramientas .subtitulo { grid-column: 1 / -1; margin-top: var(--e2); color: var(--secundario); font-size: var(--texto-chico); }
 .casilla { display: flex; align-items: center; gap: var(--e2); color: var(--tinta); font-size: var(--texto); }
 .casilla input { accent-color: var(--burbuja-mia); }
 .aviso-dialogo { min-height: 1em; font-size: var(--texto-chico); color: var(--notificacion-texto); }

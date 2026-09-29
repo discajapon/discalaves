@@ -158,7 +158,8 @@ function descripcion(m: { nombre: string; argumentos: string }): string {
   try {
     const a = JSON.parse(m.argumentos);
     if (m.nombre === "escribir_en") return `${a.campo}: ${a.texto}${a.enviar ? " ⏎" : ""}`;
-    return a.comando ?? a.ruta ?? a.consulta ?? a.url ?? a.texto ?? "";
+    if (m.nombre === "pasar_trabajo") return `${a.empleado}: ${a.tarea}`;
+    return a.comando ?? a.ruta ?? a.consulta ?? a.url ?? a.texto ?? a.pregunta ?? "";
   } catch {
     return m.argumentos;
   }
@@ -354,6 +355,14 @@ const NOMBRES_HERRAMIENTAS: Record<string, string> = {
   hacer_clic: "hacer clic",
   escribir_en: "escribir en formularios",
 };
+// Apagadas al principio: el usuario las activa si el puesto las necesita (cada una ocupa contexto del modelo).
+const NOMBRES_ADICIONALES: Record<string, string> = {
+  leer_archivo: "leer archivos",
+  editar_archivo: "editar archivos",
+  leer_web: "leer web sin navegador",
+  preguntar: "preguntarte",
+  pasar_trabajo: "pasar trabajo a otro",
+};
 
 // Cada plantilla es una tarjeta tipo widget: ícono y nombre arriba, el rol, y sus datos en negrita.
 function tarjetaPlantilla(p: Plantilla): HTMLElement {
@@ -430,12 +439,16 @@ function leerFormulario(): Identidad {
 async function abrirDialogoEmpleado(d: { modo: "plantilla"; plantilla: Plantilla } | { modo: "describir" } | { modo: "editar"; id: string }) {
   // Opciones fijas (colores, herramientas) y los modelos que haya ahora mismo.
   campo<HTMLSelectElement>("color").replaceChildren(...ACENTOS.map((a) => Object.assign(document.createElement("option"), { value: a, textContent: a })));
-  campo<HTMLElement>("herramientas").replaceChildren(
-    ...Object.entries(NOMBRES_HERRAMIENTAS).map(([valor, texto]) => {
+  const casillas = (nombres: Record<string, string>) =>
+    Object.entries(nombres).map(([valor, texto]) => {
       const l = crear("label", "casilla");
       l.append(Object.assign(document.createElement("input"), { type: "checkbox", value: valor }), ` ${texto}`);
       return l;
-    }),
+    });
+  campo<HTMLElement>("herramientas").replaceChildren(
+    ...casillas(NOMBRES_HERRAMIENTAS),
+    crear("span", "subtitulo", "adicionales: actívalas solo si el puesto las necesita"),
+    ...casillas(NOMBRES_ADICIONALES),
   );
   const { modelos } = await discalaves.modelos();
   campo<HTMLSelectElement>("modelo").replaceChildren(
