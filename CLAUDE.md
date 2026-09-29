@@ -66,7 +66,16 @@ imagen, ~2 min).
   (`usuario`), modo libre y si su modelo usa herramientas. Se relee de disco
   en cada mensaje: una edición a mano se nota en el siguiente. Al modelo solo
   se le envían las herramientas del puesto (más `leer_procedimiento` y
-  `recordar`) y la app rechaza cualquier otra. Prompt de sistema = base común
+  `recordar`) y la app rechaza cualquier otra. Herramientas **adicionales**
+  (inspiradas en OpenClaw, 2026-09-29), apagadas en todas las plantillas y
+  activables por empleado en su perfil: `leer_archivo`, `editar_archivo`
+  (reemplazo exacto y único), `leer_web` (curl desde su computadora, solo
+  http/https, HTML a texto), `preguntar` (para la tarea y deja la pregunta en
+  el hilo) y `pasar_trabajo` (la tarea entra en el hilo del compañero como
+  "(tarea de X)", trabaja con sus herramientas y su respuesta vuelve como
+  resultado; sin encargos en círculo; Detener corta la cadena). Probadas con
+  Qwen 9B: las cinco funcionan; `preguntar` solo la usa si se le pide
+  explícitamente (si no, pregunta en texto). Prompt de sistema = base común
   (`baseConHerramientas` en `main.ts`) + lo propio del empleado
   (`promptEmpleado`). 7 plantillas en `app/plantillas/`: asistente,
   investigador, redactor, marketing, contador, talento-humano y

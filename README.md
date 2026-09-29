@@ -42,6 +42,9 @@ Grok Bot.
 - **Trabaja hasta acabar.** No se detiene a preguntar "¿sigo?"; te cuenta
   cada paso, y un botón **Detener** lo corta cuando quieras. Si se queda
   repitiendo lo mismo, se frena solo y te lo explica.
+- **Herramientas adicionales, a tu elección.** En el perfil de cada empleado
+  puedes activar leer y editar archivos, leer una web sin navegador, que te
+  pregunte, o que le pase trabajo a un compañero y reciba su respuesta.
 - **Tú apruebas lo delicado.** Antes de borrar, enviar o pagar algo, te pide
   permiso. Hay un **modo libre** opcional por empleado que quita esas
   aprobaciones; está apagado por defecto.
