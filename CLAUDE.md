@@ -23,17 +23,18 @@ nombre o identidad del proyecto.
 ## Estado actual
 
 En diseño. Hay un prototipo en `app/` (Electron + TypeScript, sin framework
-de UI) con un contacto principal, **qwen**, con el que se conversa de verdad:
+de UI) con **empleados** (perfiles con rol propio, ver abajo) con los que se
+conversa de verdad; por defecto todos usan **qwen** (Qwen 3.5 9B):
 el proceso principal (`app/src/main.ts`) lanza `llama-server` (llama.cpp,
 API compatible con OpenAI) en `127.0.0.1:8089` con una clave aleatoria por
 sesión, y la interfaz habla con él solo por IPC (`app/src/preload.ts`), con
-respuestas en streaming. qwen ya usa herramientas (bucle de agente propio en
+respuestas en streaming. Los empleados usan herramientas (bucle de agente propio en
 `main.ts`, sin límite de pasos: trabaja hasta acabar; ver `app/src/herramientas.ts`):
 `terminal`, `escribir_archivo`, `buscar_web`, `abrir_pagina`, `ver_pagina`,
 `hacer_clic` y `escribir_en`. Cumple el criterio 1 de "listo" (investiga en
 la web y deja un informe en un archivo, ~30 s) desde su propia computadora
-(un contenedor Debian con escritorio). Todavía no hay varios empleados (el
-criterio 2 necesita un segundo empleado). Arranque: `cd app && npm install &&
+(un contenedor Debian con escritorio). Ya hay varios empleados, pero todavía
+no se pasan trabajo entre sí (falta el criterio 2). Arranque: `cd app && npm install &&
 npm start` (requiere Docker usable sin sudo; la primera vez construye la
 imagen, ~2 min).
 
@@ -44,19 +45,68 @@ imagen, ~2 min).
   futuro deberá traer ambos.
 - Servidor: contexto 16384 con caché KV en q8_0, 1 slot, razonamiento desactivado,
   `-fitt 256` (con el margen por defecto de 1 GB, en 8 GB de VRAM quedaban
-  capas en CPU: ~13 tok/s frente a ~32 tok/s). Log en
+  capas en CPU: ~13 tok/s frente a ~32 tok/s) y `-cram 1024` (la caché de
+  prompts en RAM llega por defecto a 8 GB: con 3 empleados y sus
+  computadoras, en 16 GB el sistema mató a llama-server por falta de
+  memoria, 2026-09-28). Log en
   `~/.config/discalaves/llama-server.log`.
-- Historial: una conversación por IA en `~/.config/discalaves/conversaciones/`
-  (`<id>.json`, más `indice.json` con la lista); al modelo se le envían los
+- Historial: una conversación por empleado en `~/.config/discalaves/conversaciones/<id>.json`
+  (el `indice.json` antiguo de esa carpeta ya no se usa: solo sirve para migrar); al modelo se le envían los
   últimos ~32 000 caracteres (~10 000 con Ollama, que recorta a ~4k tokens por
   defecto), siempre empezando en un mensaje del usuario.
-- Otras IAs vía **Ollama** (si el usuario lo tiene instalado): el botón + del
-  lateral abre un menú con qwen y los modelos de `127.0.0.1:11434`
-  (`/api/tags`; `/api/show` dice si admiten herramientas). Elegir uno abre su
-  conversación (una por IA) y habla con su API compatible con OpenAI. Los
-  modelos sin herramientas se marcan "solo chat" en negrita y reciben un
+- **Empleados como perfiles** (desde 2026-09-28, ver la decisión abajo):
+  cada empleado es una carpeta de texto en `~/.config/discalaves/empleados/<id>/`
+  (`empleados.ts`): `identidad.md` (encabezado `nombre`, `rol`, `color`,
+  `modelo` = `qwen` u `ollama:<modelo>`, `herramientas`; debajo, tono y 3–5
+  reglas, <150 palabras), `procedimientos/*.md` (el oficio: pasos y formato
+  de salida; NO van en el prompt, solo un índice nombre + descripción, y se
+  leen con la herramienta `leer_procedimiento`) y `memoria.md` (notas que
+  añade `recordar`; al prompt van las más recientes hasta 1500 caracteres).
+  `empleados/indice.json` guarda orden, carpeta de su computadora
+  (`usuario`), modo libre y si su modelo usa herramientas. Se relee de disco
+  en cada mensaje: una edición a mano se nota en el siguiente. Al modelo solo
+  se le envían las herramientas del puesto (más `leer_procedimiento` y
+  `recordar`) y la app rechaza cualquier otra. Prompt de sistema = base común
+  (`baseConHerramientas` en `main.ts`) + lo propio del empleado
+  (`promptEmpleado`). 7 plantillas en `app/plantillas/`: asistente,
+  investigador, redactor, marketing, contador, talento-humano y
+  desarrollador (2–3 procedimientos cada una; contador y talento humano sin
+  terminal). El botón + abre "nuevo empleado": una plantilla o "describir el
+  puesto" (qwen redacta un borrador que el usuario revisa); en ambos casos se
+  elige el modelo. Desde la cabecera: editar el perfil y abrir su carpeta.
+  Migración (una vez, si no existe `empleados/`): la conversación de qwen
+  pasa a "Asistente" (id `qwen`, misma computadora) y las de Ollama a
+  asistentes con su modelo, sin perder historial.
+  - Verificación de honestidad (`verificar()` en `herramientas.ts`): al
+    terminar una tarea, si el empleado dice que guardó un archivo sin
+    `escribir_archivo`, o cita una dirección que no salió de ninguna
+    herramienta ni del usuario, la app retira esa respuesta y le pide que lo
+    haga o diga que no pudo (una vez por tipo y tarea). Hacía falta: Qwen 9B
+    afirmó guardar un informe que no guardó y dio una web oficial "confirmada"
+    sin abrirla.
+  - Mediciones (qwen, 2026-09-28): prompt de sistema 526–549 tokens por
+    empleado (303 de la base común + 223–246 propios) más los esquemas de 6–7
+    herramientas (~1300–1400 tokens en total con el primer mensaje). Primer
+    token al estrenar un empleado: ~0,95 s; al seguir con el mismo o volver a
+    uno anterior: 0,24–0,35 s (la caché en RAM recupera su estado). La base
+    común **no** se reutiliza al cambiar a un empleado distinto: Qwen 3.5 es
+    híbrido (capas recurrentes) y llama.cpp no puede recortar su estado a un
+    prefijo; los puntos de control solo guardan el final de cada prompt.
+  - Cómo sigue Qwen 9B los procedimientos: los lee antes de la tarea (3 de 3
+    empleados probados) y copia el formato de salida; el Desarrollador cumplió
+    todos los pasos (README, prueba, ejecución). Falla en: saltarse pasos
+    obligatorios si cree saber la respuesta (el Contador respondía de memoria
+    sin buscar; se corrigió endureciendo el procedimiento y con la
+    verificación), llamar "fuente oficial" a una web que él mismo dice que no
+    lo es, y aplicar una regla añadida a mano (2 de 3 veces). Los borradores
+    de "describir el puesto" salen usables pero a veces con herramientas de más
+    (`hacer_clic`, `escribir_en`).
+- Otras IAs vía **Ollama** (si el usuario lo tiene instalado): cualquier
+  empleado se puede asignar a un modelo de `127.0.0.1:11434` (`/api/tags`;
+  `/api/show` dice si admiten herramientas) y habla con su API compatible con
+  OpenAI. Los modelos sin herramientas se marcan "solo chat" en negrita y reciben un
   mensaje de sistema que les prohíbe fingir que navegan o ejecutan comandos.
-  Cada IA con herramientas tiene su propia computadora (contenedor, ver
+  Cada empleado con herramientas tiene su propia computadora (contenedor, ver
   abajo; `computadora()` en `main.ts`) con su carpeta
   `IA-discalves/trabajo/<usuario>` como `/home/<usuario>` y su propio
   navegador (`Navegador` en `navegador.ts`). La pantalla en vivo muestra la de la
@@ -93,8 +143,11 @@ imagen, ~2 min).
 - Navegador (`app/src/navegador.ts`): Playwright se conecta por CDP al
   Chromium con ventana del escritorio del contenedor (se abre en su primer
   uso; `socat` reenvía el CDP porque Chromium solo escucha en su loopback) y
-  lo controla por el árbol de accesibilidad. Búsquedas en Bing (DuckDuckGo y
-  Mojeek bloquean el navegador automatizado). Chromium corre con
+  lo controla por el árbol de accesibilidad. Búsquedas en DuckDuckGo (versión
+  HTML) con Yahoo de respaldo: Bing le sirve resultados de relleno sin
+  relación con la consulta al navegador automatizado (probado 2026-09-28,
+  también con perfil limpio); Brave, Startpage y Qwant no devuelven nada y
+  Mojeek pide captcha. Chromium corre con
   `--no-sandbox`: el aislamiento lo da el contenedor.
 - Pantalla en vivo: el ícono de monitor muestra el escritorio entero con el
   cliente web de KasmVNC en un iframe; solo hay conexión mientras el panel
@@ -241,6 +294,11 @@ propia.
   trabajo en hilos compartidos. Sin empleado coordinador automático.
 - **Memoria:** cada empleado guarda su memoria en archivos locales legibles
   y editables.
+- **Empleados como perfiles** (decisión del usuario, 2026-09-28): un empleado
+  es un perfil en archivos (identidad corta, herramientas permitidas,
+  procedimientos que se leen bajo demanda y memoria) asignado a un modelo;
+  por defecto todos comparten el mismo Qwen 9B cargado, así especializarse no
+  cuesta VRAM. Nada de adaptadores LoRA ni varios slots por ahora.
 - **Interfaz:** web local propia, instalable como app en el celular.
   Matrix/Discord/Telegram quedan como conectores opcionales futuros.
 

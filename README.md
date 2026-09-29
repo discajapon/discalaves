@@ -1,9 +1,9 @@
 # Discalaves
 
 > **Estado: prototipo funcional, todavía sin instalador.** El prototipo de
-> [`app/`](app/) ya trabaja de verdad: un empleado con un modelo local usa su
+> [`app/`](app/) ya trabaja de verdad: empleados con un modelo local usan su
 > propia computadora aislada para investigar en la web y dejar informes en
-> archivos. Todavía no hay equipo de empleados que colaboren entre sí ni un
+> archivos. Todavía no colaboran entre sí (cada uno trabaja por separado) ni hay un
 > instalador para el público: hoy solo lo puede arrancar alguien que prepare
 > el entorno a mano (ver [Probarlo hoy](#probarlo-hoy)).
 
@@ -15,9 +15,20 @@ Grok Bot.
 
 ## Qué funciona hoy
 
-- **Un empleado de verdad, con modelo local.** qwen (Qwen 3.5 9B) corre en tu
-  GPU con llama.cpp; nada sale de tu equipo. Conversas con él desde una app
+- **Empleados con modelo local.** qwen (Qwen 3.5 9B) corre en tu GPU con
+  llama.cpp; nada sale de tu equipo. Conversas con cada empleado desde una app
   de escritorio y ves sus respuestas mientras las escribe.
+- **Cada uno con su puesto.** Un empleado es un perfil en archivos de texto
+  que puedes leer y editar: nombre, rol, tono y reglas, las herramientas que
+  puede usar, sus procedimientos (cómo hace su trabajo y en qué formato lo
+  entrega) y su memoria. Hay plantillas (investigador, redactor, marketing,
+  contador, talento humano, desarrollador) o puedes describir el puesto con
+  tus palabras para que qwen redacte un borrador que tú revisas. Todos
+  comparten el mismo modelo cargado: especializarse no gasta más memoria de
+  la GPU.
+- **Honestidad comprobada.** Si un empleado dice que guardó un archivo que no
+  guardó, o cita una web que no abrió, la app lo detecta y le pide que lo haga
+  de verdad o que diga que no pudo.
 - **Su propia computadora.** Cada empleado trabaja en un contenedor Debian
   con escritorio XFCE, terminal y Chromium. No ve tus carpetas personales
   (solo la suya) ni tu sistema, y puede instalar programas dentro de su
@@ -34,10 +45,10 @@ Grok Bot.
 - **Tú apruebas lo delicado.** Antes de borrar, enviar o pagar algo, te pide
   permiso. Hay un **modo libre** opcional por empleado que quita esas
   aprobaciones; está apagado por defecto.
-- **Otras IAs vía Ollama.** Si tienes [Ollama](https://ollama.com), el botón
-  + muestra tus modelos instalados y abre una conversación con cada uno. Los
-  que saben usar herramientas tienen su propia computadora; los que no, se
-  marcan como "solo chat".
+- **Otras IAs vía Ollama.** Si tienes [Ollama](https://ollama.com), puedes
+  asignar cualquiera de tus modelos a un empleado. Los que saben usar
+  herramientas tienen su propia computadora; los que no, se marcan como "solo
+  chat".
 - **Tu perfil.** Tu nombre y tu foto, guardados solo en tu equipo.
 
 ## Qué falta
@@ -47,14 +58,13 @@ Grok Bot.
   automáticamente, pero nadie lo ha probado todavía en un equipo con Windows y
   GPU.
 - **Un equipo que colabore:** que un empleado le pase su trabajo a otro en un
-  hilo compartido. Hoy puedes hablar con varias IAs, pero cada una por
-  separado y de a una trabajando a la vez.
+  hilo compartido. Hoy puedes tener varios empleados, pero cada uno trabaja
+  por separado y de a uno a la vez.
 - **Instalador:** hoy hay que preparar a mano el modelo, llama.cpp y Docker.
   La meta es un instalador nativo que traiga todo, sin Docker ni pasos
   previos.
 - **Gestor de modelos** dentro de la app (buscar, ver la VRAM necesaria,
-  descargar) y elegir el modelo de cada empleado.
-- **Memoria de cada empleado** en archivos que puedas leer y editar.
+  descargar). Hoy se elige entre qwen y los modelos que ya tengas en Ollama.
 - **Aislamiento de red:** hoy la computadora de un empleado puede llegar a tu
   red local (tu router, por ejemplo). Está pendiente cerrarlo.
 - **Interfaz web** para abrirla desde el navegador y el celular (hoy es una
