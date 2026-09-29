@@ -58,6 +58,27 @@ export const DEFINICIONES = [
   }),
 ];
 
+// Herramientas del perfil de cada empleado (no usan su computadora: las resuelve main.ts con empleados.ts).
+export const LEER_PROCEDIMIENTO = herramienta(
+  "leer_procedimiento",
+  "Devuelve el texto de uno de tus procedimientos (pasos y formato de salida). Léelo antes de una tarea de ese tipo.",
+  { nombre: { type: "string", description: "nombre del procedimiento, tal como aparece en tu lista" } },
+);
+export const RECORDAR = herramienta(
+  "recordar",
+  "Guarda una nota corta en tu memoria para otras conversaciones: preferencias del usuario, decisiones, datos que te pidió recordar.",
+  { texto: { type: "string", description: "la nota, en una frase" } },
+);
+
+// Solo se envían al modelo las herramientas del puesto: menos opciones, menos errores.
+export function definicionesPara(permitidas: string[], conProcedimientos: boolean) {
+  return [
+    ...DEFINICIONES.filter((d) => permitidas.includes(d.function.name)),
+    ...(conProcedimientos ? [LEER_PROCEDIMIENTO] : []),
+    RECORDAR,
+  ];
+}
+
 function herramienta(name: string, description: string, properties: Record<string, object>) {
   const required = Object.keys(properties).filter((k) => k !== "enviar");
   return { type: "function", function: { name, description, parameters: { type: "object", properties, required } } };
@@ -154,4 +175,29 @@ export async function ejecutarHerramienta(ctx: Contexto, nombre: string, argumen
     return { salida: `error del navegador: ${(e as Error).message.split("\n")[0]}`, codigo: 1 };
   }
   return { salida: `herramienta o argumentos no válidos: ${nombre}`, codigo: -1 };
+}
+
+// Un paso de la tarea tal como queda en el historial (solo los campos que mira verificar).
+export interface PasoTarea { de: string; texto?: string; nombre?: string; argumentos?: string; salida?: string; codigo?: number }
+
+// Verificación de honestidad al terminar una tarea (un modelo de 9B a veces lo necesita): si dice que guardó
+// un archivo sin haberlo guardado, o cita una dirección que no salió de ninguna herramienta en esta tarea,
+// se retira esa respuesta y se le pide que lo haga de verdad o que diga que no pudo. Una vez por tipo y tarea.
+export function verificar(texto: string, tarea: PasoTarea[], hechas: Set<string>): { tipo: string; aviso: string } | null {
+  const usadas = tarea.filter((m) => m.de === "herramienta");
+  const guardo = usadas.some((m) => m.nombre === "escribir_archivo" && m.codigo === 0);
+  const redirige = usadas.some((m) => m.nombre === "terminal" && m.codigo === 0 && /(>|\btee\b|\bcp\b|\bmv\b|\btouch\b)/.test(m.argumentos ?? ""));
+  if (!hechas.has("archivo") && !guardo && !redirige && /\b(he guardado|lo guard[eé]|guard[eé] (el|un|tu|la)|qued[oó] guardad|est[aá] guardad|dej[eé] (el|un) (informe|archivo)|he (dejado|creado) (el|un) (informe|archivo))/i.test(texto)) {
+    return { tipo: "archivo", aviso: "Dijiste que guardaste un archivo, pero en esta tarea no usaste escribir_archivo: el archivo no existe. Guárdalo ahora con escribir_archivo, o di claramente que no lo guardaste." };
+  }
+  if (!hechas.has("fuente")) {
+    const delUsuario = tarea.filter((m) => m.de === "yo").map((m) => m.texto ?? "");
+    const vistas = [...usadas.map((m) => `${m.argumentos ?? ""}\n${m.salida ?? ""}`), ...delUsuario].join("\n").toLowerCase();
+    const dominios = [...texto.matchAll(/https?:\/\/(?:www\.)?([a-z0-9.-]+\.[a-z]{2,})/gi), ...texto.matchAll(/\bwww\.([a-z0-9.-]+\.[a-z]{2,})/gi)].map((m) => m[1].toLowerCase());
+    const inventadas = [...new Set(dominios)].filter((d) => !vistas.includes(d));
+    if (inventadas.length) {
+      return { tipo: "fuente", aviso: `Citaste ${inventadas.join(", ")}, pero no lo abriste ni salió en tus búsquedas en esta tarea. Búscalo y ábrelo antes de citarlo, o di que no pudiste comprobarlo.` };
+    }
+  }
+  return null;
 }

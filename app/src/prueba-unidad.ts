@@ -1,6 +1,11 @@
 // Pruebas que no necesitan GPU, Docker ni WSL: rutas y adaptadores por sistema. Corren en Linux y en el
 // runner de Windows de GitHub Actions: npm run prueba:unidad
 import assert from "node:assert/strict";
+import { Empleados, leerIdentidad, promptEmpleado, textoIdentidad } from "./empleados";
+import { verificar } from "./herramientas";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { ordenMotor } from "./computadora";
 import { rutasPara } from "./rutas";
 import { distrosDe, textoWsl } from "./wsl";
@@ -46,5 +51,46 @@ assert.deepEqual(distrosDe(utf16("Ubuntu\r\ndiscalaves\r\n")), ["Ubuntu", "disca
 assert.deepEqual(distrosDe(Buffer.concat([Buffer.from([0xff, 0xfe]), utf16("discalaves\r\n")])), ["discalaves"]);
 assert.deepEqual(distrosDe(Buffer.from("")), []);
 assert.equal(textoWsl(Buffer.from("hola ñ\n", "utf8")), "hola ñ\n", "la salida de los comandos de la distro es UTF-8");
+
+// ---- Empleados: formato de los perfiles, procedimientos, memoria y plantillas ----
+const identidad = leerIdentidad("---\r\nnombre: Contadora\r\nrol: impuestos\r\ncolor: turquesa\r\nmodelo: ollama:llama3.2\r\nherramientas: buscar_web, terminal, inventada\r\n---\r\n\r\nTono: prudente.\r\n");
+assert.deepEqual(identidad, { nombre: "Contadora", rol: "impuestos", color: "turquesa", modelo: "ollama:llama3.2", herramientas: ["buscar_web", "terminal"], instrucciones: "Tono: prudente." }, "herramientas desconocidas fuera");
+assert.deepEqual(leerIdentidad(textoIdentidad(identidad)), identidad, "escribir y leer da lo mismo");
+assert.equal(leerIdentidad("sin encabezado").color, "violeta", "valores por defecto");
+assert.equal(leerIdentidad(textoIdentidad({ ...identidad, rol: "uno\nnombre: otro" })).nombre, "Contadora", "un salto de línea no inyecta campos");
+
+const datos = fs.mkdtempSync(path.join(os.tmpdir(), "discalaves-empleados-"));
+const equipo = new Empleados(datos, path.join(__dirname, "..", "plantillas"));
+assert.ok(equipo.listarPlantillas().length >= 7, "plantillas del repositorio");
+for (const p of equipo.listarPlantillas()) {
+  const palabras = p.identidad.instrucciones.split(/\s+/).length;
+  assert.ok(palabras < 150, `la identidad de ${p.id} es corta (${palabras} palabras)`);
+}
+assert.ok(!equipo.plantilla("contador")!.herramientas.includes("terminal"), "el Contador no tiene terminal");
+assert.ok(equipo.plantilla("desarrollador")!.herramientas.includes("terminal"));
+const e = equipo.crear(equipo.plantilla("contador")!, true, "contador");
+assert.equal(e.id, "contador");
+assert.equal(equipo.crear(equipo.plantilla("contador")!, true, "contador").id, "contador-2", "ids únicos");
+assert.equal(equipo.crear({ ...identidad, nombre: "3D Diseño" }, true).id, "e-3d-diseno", "el id empieza por letra y sin tildes");
+assert.ok(equipo.procedimientos("contador").some((p) => p.nombre === "consulta-tributaria" && p.descripcion));
+assert.match(equipo.leerProcedimiento("contador", "consulta-tributaria")!, /fuente oficial/);
+assert.equal(equipo.leerProcedimiento("contador", "../identidad"), null, "solo procedimientos de su lista");
+for (let i = 0; i < 60; i++) equipo.recordar("contador", `nota número ${i} con algo de texto para ocupar sitio`);
+const memoria = equipo.memoria("contador");
+assert.ok(memoria.length <= 1500 && memoria.includes("nota número 59") && !memoria.includes("nota número 0 "), "memoria: las más recientes, con tope");
+const prompt = promptEmpleado(e, equipo.procedimientos("contador"), memoria, true);
+assert.match(prompt, /Te llamas Contador/);
+assert.match(prompt, /consulta-tributaria: /);
+assert.ok(!/## Procedimientos/.test(promptEmpleado(e, equipo.procedimientos("contador"), "", false)), "solo chat: sin procedimientos");
+fs.rmSync(datos, { recursive: true, force: true });
+
+// ---- Verificación de honestidad al terminar una tarea ----
+const pedido = { de: "yo", texto: "investiga y deja un informe" };
+assert.equal(verificar("Listo, he guardado el informe en informes/a.md", [pedido], new Set())?.tipo, "archivo", "dice que guardó sin guardar");
+assert.equal(verificar("He guardado el informe", [pedido, { de: "herramienta", nombre: "escribir_archivo", argumentos: "{}", salida: "guardado", codigo: 0 }], new Set()), null);
+assert.equal(verificar("Lo guardé", [pedido], new Set(["archivo"])), null, "una sola vez por tarea");
+assert.equal(verificar("Fuente: https://www.sri.gob.ec", [pedido], new Set())?.tipo, "fuente", "cita una web que no abrió");
+assert.equal(verificar("Fuente: https://www.sri.gob.ec/iva", [pedido, { de: "herramienta", nombre: "abrir_pagina", argumentos: '{"url":"https://www.sri.gob.ec/iva"}', salida: "…", codigo: 0 }], new Set()), null);
+assert.equal(verificar("como dijiste, mira www.ejemplo.com", [{ de: "yo", texto: "revisa www.ejemplo.com" }], new Set()), null, "la dirección la dio el usuario");
 
 console.log("unidad: ok");
