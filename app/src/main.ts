@@ -4,7 +4,7 @@ import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { definicionesPara, ejecutarHerramienta, verificar } from "./herramientas";
-import { COLORES, Empleados, HERRAMIENTAS, leerIdentidad, promptEmpleado, type Empleado, type Identidad } from "./empleados";
+import { COLORES, Empleados, HERRAMIENTAS, PRINCIPALES, leerIdentidad, promptEmpleado, type Empleado, type Identidad } from "./empleados";
 import { apagarTodas, computadoraDe, responde, type Computadora } from "./computadora";
 import { navegadorDe } from "./navegador";
 import { rutas } from "./rutas";
@@ -285,7 +285,8 @@ function contexto(c: Conversacion) {
 async function turno(c: Conversacion, interfaz: Electron.WebContents, senal: AbortSignal, avisos: string[] = []) {
   const url = c.proveedor === "qwen" ? `http://127.0.0.1:${PUERTO}/v1/chat/completions` : `${OLLAMA}/v1/chat/completions`;
   const sistema = promptSistema(c);
-  const herramientas = c.herramientas ? definicionesPara(c.permitidas, equipo.procedimientos(c.id).length > 0) : [];
+  const companeros = conversaciones.filter((o) => o.id !== c.id).map((o) => ({ nombre: o.nombre, rol: o.rol }));
+  const herramientas = c.herramientas ? definicionesPara(c.permitidas, equipo.procedimientos(c.id).length > 0, companeros) : [];
   const r = await fetch(url, {
     method: "POST",
     signal: senal, // Detener corta también la respuesta que está llegando
@@ -343,9 +344,11 @@ ipcMain.handle("aprobar", (_e, id: unknown, si: unknown) => {
 // (un comando no se mata a medias) y después ya no sigue.
 const tareas = new Map<string, AbortController>();
 ipcMain.handle("detener", (_e, id: unknown) => {
-  tareas.get(String(id))?.abort();
+  const parar = tareas.get(String(id));
+  parar?.abort();
   for (const [clave, a] of aprobaciones) {
-    if (a.conversacion !== id) continue;
+    // también las del compañero al que le pasó trabajo (comparten la misma tarea)
+    if (a.conversacion !== id && (!parar || tareas.get(a.conversacion) !== parar)) continue;
     a.resolver(false); // una aprobación pendiente cuenta como "no"
     aprobaciones.delete(clave);
   }
@@ -477,7 +480,7 @@ ipcMain.handle("borrador-empleado", async (_e, descripcion: unknown) => {
     "Redactas perfiles de empleados de IA para Discalaves. Responde SOLO con el archivo, sin explicaciones ni bloques de código, con este formato exacto:\n" +
     "---\nnombre: <nombre corto del puesto>\nrol: <rol en pocas palabras>\n" +
     `color: <uno de: ${COLORES.join(", ")}>\nmodelo: qwen\n` +
-    `herramientas: <separadas por comas, elegidas de: ${HERRAMIENTAS.join(", ")}; terminal solo si el puesto programa o administra sistemas>\n` +
+    `herramientas: <separadas por comas, elegidas de: ${PRINCIPALES.join(", ")}; terminal solo si el puesto programa o administra sistemas>\n` +
     "---\n\nTono: <una frase>\n\nReglas:\n- <de 3 a 5 reglas del puesto>\n\n" +
     "Menos de 120 palabras en total. Una de las reglas es de honestidad: no fingir saber; si el puesto maneja normas, leyes o cifras oficiales, " +
     "buscarlas en fuentes oficiales, citarlas y pedir confirmación antes de darlas como definitivas.";
@@ -498,7 +501,7 @@ ipcMain.handle("borrador-empleado", async (_e, descripcion: unknown) => {
 
 // Las herramientas del perfil (procedimientos y memoria) se resuelven aquí; el resto, en su computadora.
 // Una herramienta que no es de su puesto no se ejecuta aunque el modelo la pida.
-async function usarHerramienta(c: Conversacion, l: Llamada, interfaz: Electron.WebContents) {
+async function usarHerramienta(c: Conversacion, l: Llamada, interfaz: Electron.WebContents, parar: AbortController, cadena: string[]) {
   let args: Record<string, unknown> = {};
   try {
     args = JSON.parse(l.argumentos || "{}");
@@ -514,6 +517,21 @@ async function usarHerramienta(c: Conversacion, l: Llamada, interfaz: Electron.W
   }
   if (l.nombre === "recordar") return { salida: equipo.recordar(c.id, texto("texto")), codigo: 0 };
   if (!c.permitidas.includes(l.nombre)) return { salida: `no tienes la herramienta ${l.nombre} en tu puesto; hazlo con las que tienes o dilo.`, codigo: 1 };
+  if (l.nombre === "pasar_trabajo") {
+    const quien = texto("empleado").trim().toLowerCase();
+    const otro = conversaciones.find((o) => o.id !== c.id && (o.nombre.toLowerCase() === quien || o.id === quien));
+    if (!otro) return { salida: `no hay ningún compañero llamado "${texto("empleado")}". Tienes: ${conversaciones.filter((o) => o.id !== c.id).map((o) => o.nombre).join(", ")}.`, codigo: 1 };
+    if (cadena.includes(otro.id)) return { salida: `${otro.nombre} está esperando tu resultado: no puede encargarse de esto ahora.`, codigo: 1 };
+    if (!texto("tarea").trim()) return { salida: "falta la tarea", codigo: -1 };
+    cambiarEstado(c, { fase: "ejecutando", detalle: `esperando a ${otro.nombre}` });
+    try {
+      const respuesta = await tarea(otro, `(tarea de ${c.nombre}) ${texto("tarea").trim()}`, interfaz, parar, [...cadena, c.id]);
+      return { salida: `${otro.nombre} respondió:\n${respuesta.slice(0, 4000)}`, codigo: 0 };
+    } catch (e) {
+      if (parar.signal.aborted) throw e;
+      return { salida: `${otro.nombre} no pudo hacerlo: ${(e as Error).message}`, codigo: 1 };
+    }
+  }
   return ejecutarHerramienta(
     { ...computadora(c), avisar: (fase, detalle) => cambiarEstado(c, { fase, detalle }), aprobar: async (d) => c.libre === true || pedirAprobacion(c, interfaz, d) },
     l.nombre,
@@ -529,67 +547,88 @@ ipcMain.handle("enviar", async (ev, id: unknown, entrada: unknown) => {
   // ponytail: una conversación trabajando a la vez (la VRAM de 8 GB no da para más); cola real cuando haya varios empleados
   const otra = conversaciones.find((o) => trabajando.has(o.id));
   if (otra) return { error: `${otra.nombre} está trabajando; espera a que termine` };
+  const parar = new AbortController();
+  try {
+    await tarea(c, texto, ev.sender, parar);
+    return {};
+  } catch (e) {
+    if (parar.signal.aborted) return {};
+    const detalle = c.proveedor === "ollama" && (e as Error).message === "fetch failed" ? "Ollama no responde; ¿está en marcha?" : (e as Error).message;
+    return { error: `no pude obtener respuesta: ${detalle}` };
+  }
+});
 
+// Una tarea: el mensaje entra en el hilo del empleado y trabaja hasta terminar; devuelve su última respuesta.
+// cadena: los compañeros que esperan su resultado (pasar_trabajo), para que no se encarguen trabajo en círculo.
+async function tarea(c: Conversacion, texto: string, interfaz: Electron.WebContents, parar: AbortController, cadena: string[] = []): Promise<string> {
   const historial = historialDe(c.id);
   historial.push({ de: "yo", texto, t: Date.now() });
   guardarHistorial(c.id);
-  const parar = new AbortController();
-  tareas.set(c.id, parar);
-  const detenida = () => {
-    historial.push({ de: "ia", texto: "me detuviste. Aquí lo dejo; dime si sigo o cambio algo.", t: Date.now() });
+  const decir = (t: string) => {
+    historial.push({ de: "ia", texto: t, t: Date.now() });
     guardarHistorial(c.id);
-    return {};
+    return t;
   };
+  tareas.set(c.id, parar);
   const inicioTarea = historial.length - 1;
   try {
     const veces = new Map<string, number>(); // cuántas veces pidió cada llamada exacta en esta tarea
     const verificadas = new Set<string>();
     let avisos: string[] = [];
     for (;;) {
-      if (parar.signal.aborted) return detenida();
+      if (parar.signal.aborted) throw new Error("detenida");
       cambiarEstado(c, { fase: "escribiendo" });
-      const { texto, llamadas } = await turno(c, ev.sender, parar.signal, avisos);
+      const { texto, llamadas } = await turno(c, interfaz, parar.signal, avisos);
       avisos = [];
       if (texto || llamadas.length) historial.push({ de: "ia", texto, t: Date.now(), ...(llamadas.length && { llamadas }) });
       guardarHistorial(c.id);
       if (!llamadas.length) {
         const fallo = c.herramientas ? verificar(texto, historial.slice(inicioTarea), verificadas) : null;
-        if (!fallo) return {};
+        if (!fallo) return texto;
         verificadas.add(fallo.tipo);
         historial.pop(); // la respuesta falsa no se queda en el hilo
         guardarHistorial(c.id);
         avisos = [fallo.aviso];
-        ev.sender.send("paso", c.id);
+        interfaz.send("paso", c.id);
         continue;
       }
+      let pregunta = ""; // preguntar: la tarea se para hasta que el usuario responda
       for (const l of llamadas) {
         const firma = `${l.nombre} ${l.argumentos}`;
         const n = (veces.get(firma) ?? 0) + 1;
         veces.set(firma, n);
-        if (n >= MAX_REPETICIONES) {
-          historial.push({ de: "ia", texto: `me detuve: intenté ${n} veces lo mismo (${l.nombre}) sin avanzar. ¿Me das otra pista?`, t: Date.now() });
-          guardarHistorial(c.id);
-          return {};
-        }
-        const r =
-          n >= AVISO_REPETICION
-            ? { salida: `ya hiciste exactamente esto ${n - 1} veces; no lo repito. Prueba otro camino o termina con lo que tienes.`, codigo: 1 }
-            : await usarHerramienta(c, l, ev.sender);
+        if (n >= MAX_REPETICIONES) return decir(`me detuve: intenté ${n} veces lo mismo (${l.nombre}) sin avanzar. ¿Me das otra pista?`);
+        let r: { salida: string; codigo: number };
+        if (pregunta) r = { salida: "no se hizo: esperas la respuesta del usuario", codigo: 1 };
+        else if (n >= AVISO_REPETICION) r = { salida: `ya hiciste exactamente esto ${n - 1} veces; no lo repito. Prueba otro camino o termina con lo que tienes.`, codigo: 1 };
+        else if (l.nombre === "preguntar" && c.permitidas.includes("preguntar")) {
+          pregunta = argumento(l, "pregunta");
+          r = pregunta ? { salida: "pregunta hecha; su respuesta llega en el próximo mensaje", codigo: 0 } : { salida: "falta la pregunta", codigo: -1 };
+        } else r = await usarHerramienta(c, l, interfaz, parar, cadena);
         historial.push({ de: "herramienta", ...l, ...r, t: Date.now() });
         guardarHistorial(c.id);
       }
-      ev.sender.send("paso", c.id);
+      interfaz.send("paso", c.id);
+      if (pregunta) return decir(pregunta);
     }
   } catch (e) {
-    if (parar.signal.aborted) return detenida();
-    const detalle = c.proveedor === "ollama" && (e as Error).message === "fetch failed" ? "Ollama no responde; ¿está en marcha?" : (e as Error).message;
-    return { error: `no pude obtener respuesta: ${detalle}` };
+    if (parar.signal.aborted) decir("me detuviste. Aquí lo dejo; dime si sigo o cambio algo.");
+    throw e;
   } finally {
     tareas.delete(c.id);
     trabajando.delete(c.id);
     avisarEstado(c);
   }
-});
+}
+
+function argumento(l: Llamada, clave: string): string {
+  try {
+    const v = JSON.parse(l.argumentos || "{}")[clave];
+    return typeof v === "string" ? v.trim() : "";
+  } catch {
+    return "";
+  }
+}
 
 function crearVentana() {
   ventana = new BrowserWindow({
