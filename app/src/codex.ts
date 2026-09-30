@@ -45,7 +45,7 @@ function salidaDe(args: string[], home: string): Promise<{ codigo: number; salid
 }
 
 export class Codex {
-  private revisada?: Promise<string | null>; // resultado de la sonda (null = segura)
+  private revisadas = new Map<string, Promise<string | null>>(); // sonda por modelo (null = segura y utilizable)
   constructor(readonly home: string) {}
 
   async instalado(): Promise<boolean> {
@@ -107,7 +107,7 @@ export class Codex {
   }
 
   // ¿Qué herramientas le ofrece Codex al modelo con esta configuración? Contra un servidor falso local.
-  async herramientasOfrecidas(nuestras: Herramienta[]): Promise<string[]> {
+  async herramientasOfrecidas(nuestras: Herramienta[], modelo: string): Promise<string[]> {
     const vistas: string[] = [];
     const falso = await servir((req, cuerpo, res) => {
       if (!req.url?.endsWith("/responses")) return void res.writeHead(404).end("{}");
@@ -124,7 +124,6 @@ export class Codex {
     });
     const mcp = await servidorMcp(nuestras, async () => ({ salida: "", codigo: 0 }));
     try {
-      const modelo = (await this.modelos())[0]?.modelo ?? "gpt-5.5";
       const args = await this.argumentos(modelo, mcp.url, "sonda");
       args.splice(args.indexOf("-m"), 0,
         "-c", 'model_provider="sonda"',
@@ -143,18 +142,25 @@ export class Codex {
     return vistas;
   }
 
-  // null si Codex solo ofrece las herramientas de Discalaves (y las inofensivas); si no, el motivo.
-  sonda(nuestras: Herramienta[]): Promise<string | null> {
-    return (this.revisada ??= this.herramientasOfrecidas(nuestras).then((vistas) => {
-      if (!vistas.length) return "no pude comprobar las herramientas de Codex (¿está instalado?)";
-      const ajenas = vistas.filter((v) => !INOFENSIVAS.includes(v) && !v.startsWith(`mcp__${MCP}/`));
-      return ajenas.length ? `esta versión de Codex ofrece herramientas propias que actuarían en tu equipo (${ajenas.join(", ")}); no la uso` : null;
-    }));
+  // null si con ese modelo Codex solo ofrece las herramientas de Discalaves (y las inofensivas); si no, el motivo.
+  sonda(nuestras: Herramienta[], modelo: string): Promise<string | null> {
+    let r = this.revisadas.get(modelo);
+    if (!r) {
+      r = this.herramientasOfrecidas(nuestras, modelo).then((vistas) => {
+        const ajenas = vistas.filter((v) => !INOFENSIVAS.includes(v) && !v.startsWith(`mcp__${MCP}/`));
+        if (ajenas.length) return `esta versión de Codex ofrece herramientas propias que actuarían en tu equipo (${ajenas.join(", ")}); no la uso`;
+        // p. ej. los modelos que solo trabajan en "modo código" (apagado): no reciben ninguna herramienta
+        if (!vistas.some((v) => v.startsWith(`mcp__${MCP}/`))) return `con ${modelo}, Codex no le da al modelo las herramientas de Discalaves; elige otro modelo`;
+        return null;
+      });
+      this.revisadas.set(modelo, r);
+    }
+    return r;
   }
 
   // Una tarea completa con el bucle de Codex. Las herramientas llegan a llamar(); el texto, a alTexto().
   async ejecutar(o: { modelo: string; instrucciones: string; prompt: string; herramientas: Herramienta[]; llamar: Llamar; alTexto: (t: string) => void; senal: AbortSignal }): Promise<{ texto: string; uso: Uso }> {
-    const motivo = await this.sonda(o.herramientas);
+    const motivo = await this.sonda(o.herramientas, o.modelo);
     if (motivo) throw new Error(motivo);
     const mcp = await servidorMcp(o.herramientas, o.llamar);
     try {

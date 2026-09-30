@@ -23,6 +23,8 @@ const PUERTO = 8089;
 const RANURAS = 3; // empleados de qwen que generan a la vez; ponytail: fijo, según la VRAM cuando exista el gestor de modelos
 // Instancia con datos aparte (DISCALAVES_DATOS, p. ej. las pruebas): no apaga las computadoras de otra instancia.
 const APARTE = !!process.env.DISCALAVES_DATOS;
+// Almacén de claves de Linux para la bóveda (gnome-libsecret, kwallet5…): por defecto lo elige Chromium según el escritorio.
+if (process.env.DISCALAVES_LLAVERO) app.commandLine.appendSwitch("password-store", process.env.DISCALAVES_LLAVERO);
 const CLAVE = randomBytes(24).toString("hex"); // sin clave, cualquier web abierta en el navegador podría usar el servidor
 const CONTEXTO_CARACTERES = 32000; // ponytail: ventana por tamaño (~9k tokens de 16k); resumir cuando las conversaciones crezcan
 // Sin límite de pasos (decisión del usuario, 2026-09-27): la IA trabaja hasta acabar. Frenos: el botón
@@ -475,8 +477,8 @@ ipcMain.handle("modelos", async () => {
     const origen: Origen = esRemoto(p.tipo) ? "remoto" : "nube";
     const donde = dondeDe(p);
     let lista = modelosNube.get(p.id);
-    // ponytail: los túneles no se abren solos al abrir el diálogo (ssh podría pedir contraseña): se listan al "probar"
-    if (!lista && p.tipo !== "tunel") lista = await (p.tipo === "codex" ? codex.modelos() : baseDe(p).then((u) => listarModelos(p.tipo, u, p.clave))).catch(() => undefined);
+    // Túneles (ssh podría pedir contraseña) y Codex (la sonda tarda) se listan al pulsar "probar", no al abrir el diálogo.
+    if (!lista && p.tipo !== "tunel" && p.tipo !== "codex") lista = await baseDe(p).then((u) => listarModelos(p.tipo, u, p.clave)).catch(() => undefined);
     if (lista) modelosNube.set(p.id, lista);
     for (const m of lista ?? []) {
       nube.push({
@@ -503,7 +505,8 @@ ipcMain.handle("guardar-proveedor", async (_e, datos: unknown) => {
   if (!(tipo in NOMBRE_TIPO)) return { error: "tipo de proveedor desconocido" };
   const actual = proveedores().find((x) => x.id === texto(d.id));
   const p: Proveedor = { id: actual?.id ?? `p${randomBytes(4).toString("hex")}`, nombre: texto(d.nombre, 60) || NOMBRE_TIPO[tipo] || tipo, tipo };
-  if (tipo === "compatible" || tipo === "remoto" || tipo === "tunel") {
+  // openai/gemini/claude: dirección opcional (un proxy propio; o el servidor falso de las pruebas)
+  if (tipo === "compatible" || tipo === "remoto" || tipo === "tunel" || (tipo !== "codex" && texto(d.url))) {
     p.url = texto(d.url);
     let u: URL;
     try {
@@ -554,10 +557,16 @@ ipcMain.handle("probar-proveedor", async (_e, id: unknown) => {
     if (p.tipo === "codex") {
       if (!(await codex.instalado())) return { error: "no encuentro Codex: instálalo con npm i -g @openai/codex" };
       if (!(await codex.conSesion())) return { error: "no hay sesión de ChatGPT en Codex: pulsa «iniciar sesión»" };
-      const motivo = await codex.sonda(definicionesPara(HERRAMIENTAS, true, [{ nombre: "otro", rol: "" }]));
-      if (motivo) return { error: motivo };
     }
-    const lista = p.tipo === "codex" ? await codex.modelos() : await listarModelos(p.tipo, await baseDe(p), p.clave);
+    let lista = p.tipo === "codex" ? await codex.modelos() : await listarModelos(p.tipo, await baseDe(p), p.clave);
+    if (p.tipo === "codex") {
+      // Solo se ofrecen los modelos con los que la sonda confirma: sin herramientas propias y con las de Discalaves.
+      const nuestras = definicionesPara(HERRAMIENTAS, true, [{ nombre: "otro", rol: "" }]);
+      const motivos = await Promise.all(lista.map((m) => codex.sonda(nuestras, m.modelo)));
+      const ajena = motivos.find((m) => m?.includes("herramientas propias"));
+      if (ajena) return { error: ajena };
+      lista = lista.filter((_, i) => !motivos[i]);
+    }
     modelosNube.set(p.id, lista);
     return { modelos: lista.length };
   } catch (e) {
