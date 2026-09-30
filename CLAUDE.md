@@ -121,8 +121,12 @@ imagen, ~2 min).
   abajo; `computadora()` en `main.ts`) con su carpeta
   `IA-discalves/trabajo/<usuario>` como `/home/<usuario>` y su propio
   navegador (`Navegador` en `navegador.ts`). La pantalla en vivo muestra la de la
-  conversación abierta. Limitaciones: solo una conversación trabaja a la vez
-  (las demás reciben "está trabajando; espera"). Con qwen cargado, Ollama no
+  conversación abierta. Paralelo (decisión del usuario, 2026-09-30): los
+  empleados de qwen trabajan a la vez con el mismo modelo cargado
+  (`RANURAS` = 3 ranuras de llama-server, `-c 32768 -kvu`: contexto
+  compartido; los que no caben esperan en la cola del servidor; VRAM y
+  velocidad **sin medir todavía**). Un empleado de Ollama no trabaja a la vez
+  que otro local (carga otro modelo en la misma VRAM). Con qwen cargado, Ollama no
   tuvo RAM para gemma3:4b (necesitaba 3,9 GiB, había 2,2): la app lo explica
   en el hilo.
 - Computadora de cada IA (desde 2026-09-27): un contenedor con **Debian 13
@@ -161,8 +165,13 @@ imagen, ~2 min).
   Mojeek pide captcha. Chromium corre con
   `--no-sandbox`: el aislamiento lo da el contenedor.
 - Pantalla en vivo: el ícono de monitor muestra el escritorio entero con el
-  cliente web de KasmVNC en un iframe; solo hay conexión mientras el panel
-  está abierto. KasmVNC tiene dos usuarios con claves aleatorias por sesión
+  cliente web de KasmVNC. Cambio instantáneo (decisión del usuario,
+  2026-09-30: prima la inmediatez sobre el consumo): al arrancar, la app
+  enciende todas las computadoras (una tras otra) y la interfaz tiene un
+  iframe por empleado, siempre conectado y apilado con los demás; cambiar de
+  empleado o abrir el panel solo cambia cuál se ve (~0,1 s medido; ocultos con
+  `visibility`, no `display`, para que no pierdan su tamaño). Coste: ~220 MB
+  de RAM por computadora en reposo y transmisión continua. KasmVNC tiene dos usuarios con claves aleatorias por sesión
   (como la de llama-server), que el proceso principal entrega en el evento
   `login`: "ver" solo mira y "control" usa teclado y ratón ("tomar el
   control"). Mientras el usuario tiene el control, las herramientas del
@@ -320,7 +329,8 @@ propia.
   instalador trae su propio motor de contenedores rootless. La "computadora"
   es una pieza intercambiable: las microVMs entrarán después como modo seguro.
 - **Escritorios en vivo:** visibles desde la interfaz web, con opción de
-  tomar el control. Solo se transmiten cuando el usuario está mirando.
+  tomar el control. Se transmiten siempre para que cambiar de empleado sea
+  instantáneo (decisión del usuario, 2026-09-30; antes: solo mientras mira).
 - **Cómo actúan los agentes:** por terminal y controlando el navegador por
   su estructura (DOM/accesibilidad), no haciendo clic por píxeles.
 - **Modelos:** pieza enchufable — runtime local incluido, servidor local
@@ -342,7 +352,8 @@ propia.
   es un perfil en archivos (identidad corta, herramientas permitidas,
   procedimientos que se leen bajo demanda y memoria) asignado a un modelo;
   por defecto todos comparten el mismo Qwen 9B cargado, así especializarse no
-  cuesta VRAM. Nada de adaptadores LoRA ni varios slots por ahora.
+  cuesta VRAM. Nada de adaptadores LoRA. Varios slots sí (decisión del
+  usuario, 2026-09-30): para que trabajen a la vez.
 - **Interfaz:** web local propia, instalable como app en el celular.
   Matrix/Discord/Telegram quedan como conectores opcionales futuros.
 
