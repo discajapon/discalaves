@@ -1,9 +1,11 @@
 // Conversaciones con los empleados: cada uno con su perfil (ver empleados.ts) y su modelo, qwen (llama-server
 // local) o uno de Ollama (ver main.ts).
 
-type MensajeChat =
-  | { de: "yo" | "ia"; texto: string; t: number }
-  | { de: "herramienta"; nombre: string; argumentos: string; salida: string; codigo: number; t: number };
+// quien / a: solo en el hilo Equipo (quién lo dijo y a quién iba dirigido).
+type MensajeChat = (
+  | { de: "yo" | "ia" | "separador"; texto: string; t: number }
+  | { de: "herramienta"; nombre: string; argumentos: string; salida: string; codigo: number; t: number }
+) & { quien?: string; a?: string };
 type EstadoQwen =
   | { fase: "cargando" | "listo" | "escribiendo" }
   | { fase: "ejecutando" | "esperando-aprobacion" | "error"; detalle: string };
@@ -11,6 +13,7 @@ interface Conversacion {
   id: string; nombre: string; rol: string; color: string; proveedor: string; modelo: string; herramientas: boolean; libre?: boolean;
   origen: "local" | "nube" | "remoto"; donde: string;
   estado: EstadoQwen; ultimo?: MensajeChat;
+  equipo?: boolean; colores?: string[]; // el hilo compartido del equipo
 }
 interface Modelo { proveedor: string; modelo: string; valor: string; detalle: string; herramientas: boolean; origen: "local" | "nube" | "remoto"; donde: string; aviso?: string }
 interface Identidad { nombre: string; rol: string; color: string; modelo: string; herramientas: string[]; instrucciones: string; motor?: string }
@@ -41,7 +44,8 @@ declare const discalaves: {
   alRecibirTrozo(f: (t: { id: string; texto: string }) => void): void;
   alPaso(f: (id: string) => void): void;
   aprobar(id: string, si: boolean): Promise<void>;
-  alAprobacion(f: (p: { id: string; conversacion: string; descripcion: string }) => void): void;
+  alAprobacion(f: (p: { id: string; conversacion: string; descripcion: string; enHilo: boolean }) => void): void;
+  alEquipo(f: (activos: string[]) => void): void;
   verPantalla(id: string, ver: boolean): Promise<{ url?: string; error?: string }>;
   controlPantalla(id: string, activo: boolean): Promise<{ url?: string }>;
   modoLibre(id: string, activo: boolean): Promise<boolean>;
@@ -83,12 +87,28 @@ function crear(etiqueta: string, clase = "", texto = ""): HTMLElement {
 }
 
 function avatarIA(c: Conversacion): HTMLElement {
-  const grupo = crear("span", "avatares");
-  const a = crear("span", "avatar");
-  a.style.setProperty("--acento", `var(--acento-${ACENTOS.includes(c.color) ? c.color : ACENTOS[0]})`);
-  a.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${GLIFO_IA}</svg>`;
-  grupo.append(a);
+  const grupo = crear("span", c.equipo ? "avatares grupo" : "avatares");
+  for (const color of c.colores ?? [c.color]) {
+    const a = crear("span", "avatar");
+    a.style.setProperty("--acento", `var(--acento-${ACENTOS.includes(color) ? color : ACENTOS[0]})`);
+    a.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${GLIFO_IA}</svg>`;
+    grupo.append(a);
+  }
   return grupo;
+}
+
+// ---- Hilo Equipo: quién habla en cada mensaje ----
+const HILO = "_equipo";
+let enEquipo = new Set<string>(); // empleados que ahora mismo trabajan en una colaboración
+let burbujaDe = ""; // en el hilo Equipo, de quién es la burbuja que se está escribiendo
+
+function autor(quien?: string, a?: string): HTMLElement | null {
+  if (!quien && !a) return null;
+  const c = conversaciones.find((x) => x.id === (quien ?? a));
+  const para = a && conversaciones.find((x) => x.id === a)?.nombre;
+  const el = crear("span", "autor", quien ? `${c?.nombre ?? quien}${para ? ` → ${para}` : ""}` : `para ${para}`);
+  el.style.setProperty("--acento", `var(--acento-${ACENTOS.includes(c?.color ?? "") ? c!.color : ACENTOS[0]})`);
+  return el;
 }
 
 const hora = (t: number) => new Date(t).toLocaleTimeString("es", { hour: "numeric", minute: "2-digit" });
@@ -175,6 +195,7 @@ function marcaOrigen(c: Conversacion): Element[] {
 }
 
 function resumen(m: MensajeChat): string {
+  if (m.quien && m.de !== "herramienta") return `${conversaciones.find((c) => c.id === m.quien)?.nombre ?? m.quien}: ${m.texto}`;
   return m.de === "herramienta" ? `${m.nombre}: ${descripcion(m)}` : m.texto;
 }
 
@@ -192,6 +213,8 @@ function descripcion(m: { nombre: string; argumentos: string }): string {
 // Paso de herramienta: "✓ terminal → comando", con la salida desplegable.
 function tarjeta(m: Extract<MensajeChat, { de: "herramienta" }>): HTMLElement {
   const fila = crear("div", "mensaje");
+  const quien = autor(m.quien);
+  if (quien) fila.append(quien);
   const d = document.createElement("details");
   d.className = m.codigo === 0 ? "burbuja herramienta" : "burbuja herramienta fallo";
   const s = crear("summary", "", m.codigo === 0 ? "✓ " : "✗ ");
@@ -202,8 +225,10 @@ function tarjeta(m: Extract<MensajeChat, { de: "herramienta" }>): HTMLElement {
   return fila;
 }
 
-function burbuja(de: "yo" | "ia", texto: string): HTMLElement {
+function burbuja(de: "yo" | "ia", texto: string, quien?: string, a?: string): HTMLElement {
   const fila = crear("div", de === "yo" ? "mensaje mio" : "mensaje");
+  const etiqueta = autor(quien, a);
+  if (etiqueta) fila.append(etiqueta);
   const b = crear("div", "burbuja");
   // ponytail: del markdown del modelo solo se interpretan las **negritas**; el resto se ve tal cual.
   const p = crear("p");
@@ -221,16 +246,24 @@ function aviso(texto: string) {
 function dibujarHilo() {
   hilo.replaceChildren();
   const c = actual();
-  if (!mensajes.length) {
+  if (!mensajes.length && c.equipo) {
+    hilo.append(crear("p", "separador", "aquí ves al equipo colaborar: cuando un empleado le pasa trabajo a otro, los dos aparecen en este hilo. " +
+      "Encarga algo empezando con @ y su nombre, por ejemplo: @Investigador busca… y pásaselo al Redactor."));
+  } else if (!mensajes.length) {
     const vacio = crear("p", "separador", `escríbele a ${c.nombre} para empezar. corre en tu computadora: nada sale de ella.`);
     if (!c.herramientas) vacio.append(" ", crear("strong", "", "solo chat: no puede navegar, usar la terminal ni crear archivos."));
     hilo.append(vacio);
   }
   let anterior = 0;
   for (const m of mensajes) {
-    if (m.t - anterior > 60 * 60 * 1000) hilo.append(crear("p", "separador", etiquetaDia(m.t)));
+    if (m.de === "separador") hilo.append(crear("p", "separador colaboracion", `${etiquetaDia(m.t)} · ${m.texto}`));
+    else if (m.t - anterior > 60 * 60 * 1000) hilo.append(crear("p", "separador", etiquetaDia(m.t)));
+    if (m.de === "separador") {
+      anterior = m.t;
+      continue;
+    }
     if (m.de === "herramienta") hilo.append(tarjeta(m));
-    else if (m.texto) hilo.append(burbuja(m.de, m.texto));
+    else if (m.texto) hilo.append(burbuja(m.de, m.texto, m.quien, m.a));
     anterior = m.t;
   }
   hilo.scrollTop = hilo.scrollHeight;
@@ -241,9 +274,9 @@ function dibujarEstado() {
   const e = c.estado;
   const el = document.getElementById("cab-estado")!;
   const lugar = c.origen === "nube" ? `nube (${c.donde})` : c.origen === "remoto" ? `servidor remoto (${c.donde})` : c.proveedor === "ollama" ? "local (Ollama)" : "local";
-  const texto = e.fase === "listo" ? `en línea · ${lugar}` : TEXTO_ESTADO[e.fase];
+  const texto = c.equipo ? (e.fase === "listo" ? "hilo compartido del equipo" : "el equipo está trabajando") : e.fase === "listo" ? `en línea · ${lugar}` : TEXTO_ESTADO[e.fase];
   el.textContent = "detalle" in e ? `${texto}: ${e.detalle}` : texto;
-  if (!c.herramientas) el.append(" · ", crear("strong", "", "solo chat"));
+  if (!c.herramientas && !c.equipo) el.append(" · ", crear("strong", "", "solo chat"));
   el.dataset.fase = e.fase;
   (document.getElementById("enviar") as HTMLButtonElement).disabled = e.fase !== "listo";
   // Mientras trabaja, el botón de enviar se cambia por el de detener.
@@ -258,7 +291,10 @@ function dibujarCabecera() {
   const c = actual();
   document.getElementById("cab-avatar")!.replaceChildren(avatarIA(c));
   document.getElementById("cab-nombre")!.textContent = c.nombre;
-  entrada.placeholder = `Mensaje a ${c.nombre}`;
+  entrada.placeholder = c.equipo ? "@nombre y la tarea, por ejemplo: @Investigador busca…" : `Mensaje a ${c.nombre}`;
+  // El hilo Equipo no es un empleado: no tiene perfil ni carpeta.
+  document.getElementById("editar-empleado")!.hidden = !!c.equipo;
+  document.getElementById("carpeta-empleado")!.hidden = !!c.equipo;
   // Sin herramientas no hay computadora que mirar.
   document.getElementById("ver-pantalla")!.hidden = !c.herramientas;
   document.getElementById("cab-nombre")!.title = c.rol;
@@ -299,8 +335,9 @@ discalaves.alCambiarEstado(({ id, estado }) => {
   dibujarLista();
 });
 
-function burbujaPendiente() {
-  const respuesta = burbuja("ia", "");
+function burbujaPendiente(quien?: string) {
+  burbujaDe = quien ?? "";
+  const respuesta = burbuja("ia", "", quien);
   burbujaEnCurso = respuesta.querySelector("p")!;
   burbujaEnCurso.classList.add("pensando");
   hilo.append(respuesta);
@@ -310,13 +347,24 @@ function burbujaPendiente() {
 // Tras cada ronda de herramientas: se redibuja lo guardado y se abre otra burbuja para lo que siga.
 // Si el usuario cambió de conversación, lo que llega de la otra no se dibuja: se verá al volver.
 discalaves.alPaso(async (id) => {
-  if (id !== activa) return;
+  const enHilo = activa === HILO && enEquipo.has(id);
+  if (id !== activa && !enHilo) return;
   await recargar();
-  burbujaPendiente();
+  if (enHilo) burbujaEnCurso = null; // la siguiente burbuja la abre el primer trozo, con su autor
+  else burbujaPendiente();
+});
+
+// Hilo Equipo: cuando alguien empieza o termina su parte, se redibuja (se ve el encargo y la respuesta).
+discalaves.alEquipo(async (activos) => {
+  enEquipo = new Set(activos);
+  if (activa !== HILO) return;
+  await recargar();
+  burbujaEnCurso = null;
 });
 
 discalaves.alRecibirTrozo(({ id, texto }) => {
-  if (!burbujaEnCurso || id !== activa) return;
+  if (activa === HILO && enEquipo.has(id) && (!burbujaEnCurso || burbujaDe !== id)) burbujaPendiente(id);
+  if (!burbujaEnCurso || (id !== activa && !(activa === HILO && burbujaDe === id))) return;
   burbujaEnCurso.classList.remove("pensando");
   burbujaEnCurso.textContent += texto;
   hilo.scrollTop = hilo.scrollHeight;
@@ -329,7 +377,7 @@ document.getElementById("redactor")!.addEventListener("submit", async (ev) => {
   if (!texto || actual().estado.fase !== "listo") return;
   entrada.value = "";
   hilo.append(burbuja("yo", texto));
-  burbujaPendiente();
+  if (id !== HILO) burbujaPendiente(); // en el hilo Equipo la abre el primero que escriba
 
   const { error } = await discalaves.enviar(id, texto);
   if (id !== activa) {
@@ -344,8 +392,8 @@ document.getElementById("redactor")!.addEventListener("submit", async (ev) => {
 
 // Acción delicada: la IA espera a que el usuario la permita o la rechace. Si la pide otra
 // conversación, se cambia a ella para que la tarjeta se vea donde corresponde.
-discalaves.alAprobacion(async ({ id, conversacion, descripcion }) => {
-  if (conversacion !== activa) await seleccionar(conversacion);
+discalaves.alAprobacion(async ({ id, conversacion, descripcion, enHilo }) => {
+  if (conversacion !== activa && !(enHilo && activa === HILO)) await seleccionar(conversacion);
   const nombre = conversaciones.find((c) => c.id === conversacion)?.nombre ?? "la IA";
   const fila = crear("div", "mensaje");
   const t = crear("div", "burbuja aprobacion");
