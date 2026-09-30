@@ -1,11 +1,11 @@
 # Discalaves
 
-> **Estado: prototipo funcional, todavía sin instalador.** El prototipo de
-> [`app/`](app/) ya trabaja de verdad: empleados con un modelo local usan su
-> propia computadora aislada para investigar en la web y dejar informes en
-> archivos. Todavía no colaboran entre sí (cada uno trabaja por separado) ni hay un
-> instalador para el público: hoy solo lo puede arrancar alguien que prepare
-> el entorno a mano (ver [Probarlo hoy](#probarlo-hoy)).
+> **Estado: la v1 cumple sus dos criterios de "listo".** Un empleado
+> investiga un tema en la web y deja un informe en un archivo, y un empleado
+> investiga y le pasa el resultado a otro, que lo resume. Probado con Qwen 3.5
+> 9B en una RTX 3060 Ti de 8 GB. Sigue sin instalador para el público: hoy solo
+> lo puede arrancar alguien que prepare el entorno a mano (ver
+> [Probarlo hoy](#probarlo-hoy)).
 
 Discalaves es un equipo de "empleados" de IA que corre en tu propia
 computadora. Les asignas tareas como a compañeros de trabajo; cada empleado
@@ -66,7 +66,7 @@ Grok Bot.
   GPU.
 - **Un equipo que colabore de verdad:** hoy un empleado puede pasarle una
   tarea a otro y recibir su respuesta, pero no hay un hilo compartido donde
-  veas a los dos juntos, y trabajan de a uno a la vez.
+  veas a los dos juntos.
 - **Instalador:** hoy hay que preparar a mano el modelo, llama.cpp y Docker.
   La meta es un instalador nativo que traiga todo, sin Docker ni pasos
   previos.
