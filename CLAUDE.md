@@ -26,7 +26,7 @@ En diseño. Hay un prototipo en `app/` (Electron + TypeScript, sin framework
 de UI) con **empleados** (perfiles con rol propio, ver abajo) con los que se
 conversa de verdad; por defecto todos usan **qwen** (Qwen 3.5 9B):
 el proceso principal (`app/src/main.ts`) lanza `llama-server` (llama.cpp,
-API compatible con OpenAI) en `127.0.0.1:8089` con una clave aleatoria por
+API compatible con OpenAI) en `127.0.0.1` con un puerto libre y una clave aleatoria por
 sesión, y la interfaz habla con él solo por IPC (`app/src/preload.ts`), con
 respuestas en streaming. Los empleados usan herramientas (bucle de agente propio en
 `main.ts`, sin límite de pasos: trabaja hasta acabar; ver `app/src/herramientas.ts`):
