@@ -10,8 +10,7 @@
 //
 // El contenedor persiste entre sesiones (lo que instale con sudo se conserva): se detiene al cerrar la
 // app y se reanuda al volver; se recrea si cambia la imagen.
-// ponytail: la red del contenedor llega a la red local de la casa; hace falta un motor rootless con
-// red propia (o reglas de firewall) para cerrarla.
+// Red: sale a internet, pero no a la red local de la casa ni al propio equipo (cortafuegos(), abajo).
 import { execFileSync, spawn } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import fs from "node:fs";
@@ -89,6 +88,58 @@ const construirBase = () =>
       imagenBase = undefined;
       throw e;
     }));
+
+// Cortafuegos de cada computadora: nftables en SU espacio de red, puesto desde fuera por un contenedor auxiliar
+// (misma base Debian fijada, solo con nftables) que es el único con NET_ADMIN. La computadora no tiene esa
+// capacidad (ni su root con sudo): no puede quitar las reglas. Las respuestas a conexiones ya abiertas pasan
+// (la pantalla y el CDP que abre el equipo); lo nuevo hacia direcciones privadas, locales o de multidifusión se
+// rechaza, incluida la puerta de enlace (el propio equipo), salvo el DNS que el motor le asigna.
+const IMAGEN_RED = `${IMAGEN}-red`;
+let imagenRed: Promise<string> | undefined;
+const construirRed = () =>
+  (imagenRed ??= (async () => {
+    const base = fs.readFileSync(path.join(DIR_IMAGEN, "Dockerfile"), "utf8").match(/^FROM \S+$/m)![0];
+    const archivo = `${base}\nRUN apt-get update && apt-get install -y --no-install-recommends nftables && rm -rf /var/lib/apt/lists/*\n`;
+    await motorOk(["build", "-q", "-t", IMAGEN_RED, "-"], { entrada: archivo, tiempo: 10 * 60_000 });
+    return IMAGEN_RED;
+  })().catch((e) => {
+    imagenRed = undefined;
+    throw e;
+  }));
+
+export const PRIVADAS_V4 = ["0.0.0.0/8", "10.0.0.0/8", "100.64.0.0/10", "127.0.0.0/8", "169.254.0.0/16", "172.16.0.0/12", "192.168.0.0/16", "224.0.0.0/4", "240.0.0.0/4"];
+export const PRIVADAS_V6 = ["::1/128", "fc00::/7", "fe80::/10", "ff00::/8"];
+
+// dns: los servidores de su /etc/resolv.conf (Docker: 127.0.0.11; Podman: la puerta de enlace).
+export function reglasRed(dns: string[]): string {
+  const v4 = dns.filter((d) => /^\d+\.\d+\.\d+\.\d+$/.test(d));
+  const v6 = dns.filter((d) => d.includes(":"));
+  return [
+    "table inet discalaves {",
+    "  chain salida {",
+    "    type filter hook output priority 0; policy accept;",
+    "    ct state established,related accept",
+    '    oifname "lo" accept',
+    ...(v4.length ? [`    meta l4proto { udp, tcp } th dport 53 ip daddr { ${v4.join(", ")} } accept`] : []),
+    ...(v6.length ? [`    meta l4proto { udp, tcp } th dport 53 ip6 daddr { ${v6.join(", ")} } accept`] : []),
+    "    icmpv6 type { nd-neighbor-solicit, nd-neighbor-advert, nd-router-solicit } accept",
+    `    ip daddr { ${PRIVADAS_V4.join(", ")} } reject with icmpx admin-prohibited`,
+    `    ip6 daddr { ${PRIVADAS_V6.join(", ")} } reject with icmpx admin-prohibited`,
+    "  }",
+    "}",
+    "",
+  ].join("\n");
+}
+
+async function cortafuegos(nombre: string) {
+  const imagen = await construirRed();
+  const resolv = await motorOk(["exec", nombre, "cat", "/etc/resolv.conf"]);
+  const dns = [...resolv.matchAll(/^nameserver\s+(\S+)/gm)].map((m) => m[1]);
+  await motorOk(
+    ["run", "--rm", "-i", "--network", `container:${nombre}`, "--cap-drop=ALL", "--cap-add", "NET_ADMIN", "--security-opt", "no-new-privileges", imagen, "nft", "-f", "-"],
+    { entrada: reglasRed(dns), tiempo: 60_000 },
+  );
+}
 
 // Capa mínima con el usuario de la IA: así /etc/passwd lo conoce sin darle permisos para editarlo.
 async function construirUsuario(usuario: string): Promise<string> {
@@ -190,6 +241,13 @@ export class Computadora {
         imagen,
         ...(PODMAN ? [...SIN_CAPACIDADES, "/usr/local/bin/iniciar"] : []), // el mismo CMD de la imagen, sin capacidades
       ]);
+    }
+    // En cada arranque (su espacio de red es nuevo). Si no se puede poner, la computadora no se usa.
+    try {
+      await cortafuegos(this.nombre);
+    } catch (e) {
+      await motor(["stop", "-t", "2", this.nombre]);
+      throw new Error(`no pude cerrarle la red local a su computadora, así que no la enciendo: ${(e as Error).message}`);
     }
     this.puertoPantalla = await this.puerto(6901);
     for (let i = 0; i < 120; i++) {
