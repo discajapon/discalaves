@@ -1,0 +1,12 @@
+{
+  "id": "discalaves",
+  "name": "Discalaves",
+  "description": "Puente con la app de Discalaves: aprobaciones, pasos de herramienta, Detener y el navegador de cada empleado.",
+  "activation": { "onStartup": true },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": { "url": { "type": "string" }, "token": { "type": "string" } },
+    "required": ["url", "token"]
+  }
+}
