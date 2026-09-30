@@ -2,6 +2,8 @@
 // La primera vez construye la imagen de Debian (varios minutos).
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import http from "node:http";
+import type { AddressInfo } from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { borrar, computadoraDe } from "./computadora";
@@ -87,6 +89,33 @@ async function main() {
   const ip = (await ejecutarHerramienta(ctx2, "terminal", JSON.stringify({ comando: "hostname -I" }))).salida.trim().split(/\s+/)[0];
   r = await correr("terminal", { comando: `curl -s -m 3 http://${ip}:9223/json/version` });
   assert.notEqual(r.codigo, 0, `una IA llegó al navegador de otra: ${r.salida}`);
+
+  // Red local cerrada: ni el propio equipo (un servidor que escucha en todas sus interfaces, visto por la
+  // puerta de enlace) ni el router de casa; internet sí. Y ni como root puede quitar el cortafuegos.
+  const equipo = http.createServer((_q, s) => s.end("equipo")).listen(0, "0.0.0.0");
+  await new Promise((r) => equipo.once("listening", r));
+  const puertoEquipo = (equipo.address() as AddressInfo).port;
+  // Dirección de un gateway en /proc/net/route (hex en little endian) → "a.b.c.d".
+  const gateway = (tabla: string) => {
+    const h = tabla.split("\n").map((l) => l.trim().split(/\s+/)).find((c) => c[1] === "00000000")?.[2];
+    return h && Buffer.from(h, "hex").reverse().join(".");
+  };
+  const gwComputadora = gateway((await correr("terminal", { comando: "cat /proc/net/route" })).salida);
+  assert.ok(gwComputadora, "no encontré la puerta de enlace de la computadora");
+  r = await correr("terminal", { comando: `curl -s -m 4 http://${gwComputadora}:${puertoEquipo}/` });
+  equipo.close();
+  assert.doesNotMatch(r.salida, /equipo$/, `la computadora llegó a un servicio del equipo: ${r.salida}`);
+  const router = gateway(fs.readFileSync("/proc/net/route", "utf8"));
+  if (router) {
+    r = await correr("terminal", { comando: `curl -s -m 4 -o /dev/null -w '%{http_code}' http://${router}/` });
+    assert.notEqual(r.codigo, 0, `la computadora llegó al router de casa (${router}): ${r.salida}`);
+  }
+  r = await correr("terminal", { comando: "curl -s -m 10 -o /dev/null -w '%{http_code}' https://example.com" });
+  assert.equal(r.salida.trim(), "200", `sin internet: ${r.salida}`);
+  r = await correr("terminal", { comando: "sudo apt-get install -y -q nftables >/dev/null 2>&1; sudo nft flush ruleset" });
+  assert.notEqual(r.codigo, 0, "root de la computadora pudo quitar el cortafuegos");
+  r = await correr("terminal", { comando: `curl -s -m 4 http://192.168.0.1/ http://10.0.0.1/; echo fin` });
+  assert.doesNotMatch(r.salida, /<html/i);
 
   for (const c of [ctx, ctx2]) {
     await borrar(c.computadora);
