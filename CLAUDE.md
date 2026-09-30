@@ -324,7 +324,14 @@ imagen, ~2 min).
   - **ChatGPT vía Codex** ("no oficial, puede dejar de funcionar"): el usuario instala el CLI
     aparte (Apache-2.0) e inicia sesión con `codex login`; Discalaves no toca sus tokens. Corre
     en el equipo con TODAS sus herramientas propias apagadas y solo las de Discalaves, servidas
-    por MCP hacia el contenedor; `sonda()` lo comprueba antes de usarlo.
+    por MCP hacia el contenedor; `sonda()` lo comprueba antes de usarlo, **por modelo**: Codex
+    habla con un servidor falso local y se mira qué herramientas ofrece. Cómo se apagan (Codex
+    0.159.1): `--disable` de cada función activa (`codex features list`), `web_search=disabled`,
+    `--ignore-user-config`, `CODEX_HOME` propio y un catálogo de modelos sin `apply_patch` ni
+    `tool_search`. Aprobaciones: Codex aprueba solo el MCP (`default_tools_approval_mode`) y
+    las pide Discalaves en cada herramienta, igual que con su bucle. Con 0.159.1 solo `gpt-5.5`
+    recibe las herramientas de Discalaves; los demás (p. ej. `gpt-6-*`, en "modo código",
+    apagado) no reciben ninguna y la app no los ofrece.
   - **Claude por suscripción (Agent SDK): NO implementado** (revisado 2026-09-30). Las
     condiciones oficiales ([Legal y cumplimiento de Claude Code](https://code.claude.com/docs/en/legal-and-compliance))
     dicen que Anthropic no permite a terceros "route requests through Free, Pro, or Max plan
@@ -335,8 +342,13 @@ imagen, ~2 min).
   - Probado con un servidor falso (`npm run prueba:nube`, dentro de `npm run prueba`): respuestas,
     herramientas, tokens, cuota, caídas, bóveda, túnel contra un sshd local, sonda de Codex y la
     app real (criterio 1 en contenedor, local y nube a la vez, tope, claves ausentes del disco
-    en claro). **No probado:** ningún proveedor ni servidor real, Codex con cuenta real, túnel con
-    ProxyJump real, Windows. **RAM con varios contenedores trabajando a la vez: sin medir.**
+    en claro). El túnel se probó con ProxyJump contra un sshd local (sin sudo, solo llaves).
+    Playwright lanza Electron con `--password-store=basic` (clave fija de Chromium, prefijo
+    `v10`): la prueba pone `DISCALAVES_LLAVERO=gnome-libsecret` y comprueba que la bóveda no
+    sale con `v10`. **No probado:** ningún proveedor ni servidor real, Codex con cuenta real
+    (la sonda sí, con el CLI 0.159.1 sin sesión), contraseña SSH (un sshd sin root no la
+    admite), ProxyJump contra hosts reales, Windows (el askpass es un script de sh).
+    **RAM con varios contenedores trabajando a la vez: sin medir.**
 
 **Diseño:** antes de tocar estilos, filtros SVG o animaciones, lee
 `GUIA_DE_DISEÑO.md` (reglas del vidrio líquido, tokens, recetas de
