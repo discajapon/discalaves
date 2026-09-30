@@ -123,9 +123,16 @@ imagen, ~2 min).
   navegador (`Navegador` en `navegador.ts`). La pantalla en vivo muestra la de la
   conversación abierta. Paralelo (decisión del usuario, 2026-09-30): los
   empleados de qwen trabajan a la vez con el mismo modelo cargado
-  (`RANURAS` = 3 ranuras de llama-server, `-c 32768 -kvu`: contexto
-  compartido; los que no caben esperan en la cola del servidor; VRAM y
-  velocidad **sin medir todavía**). Un empleado de Ollama no trabaja a la vez
+  (`RANURAS` ranuras de llama-server, 2 por defecto o `DISCALAVES_RANURAS`;
+  `-kvu` con 12k por ranura compartidos, `-ub 256`, `-fitt 128`; los que no
+  caben esperan en la cola del servidor). Medido 2026-09-30 en la 3060 Ti
+  con ~2 GB de VRAM ocupados por otras apps (300 tokens): 1 ranura 16k =
+  32/33 capas en GPU, 50 tok/s; 2 ranuras = 31/33, 40 tok/s solo y ~31 tok/s
+  cada uno a la vez (~62 en total); 3 ranuras con contexto para
+  conversaciones largas (35k) = 29/33, 26 tok/s solo. Con `-fitt 0` caben
+  más capas (2 ranuras: 53 tok/s solo, ~40 a la vez) pero el servidor se cayó
+  una vez al cargar. Con 16k compartidos entre 3 ranuras, tres conversaciones
+  largas a la vez fallan ("failed to find a memory slot"). Un empleado de Ollama no trabaja a la vez
   que otro local (carga otro modelo en la misma VRAM). Con qwen cargado, Ollama no
   tuvo RAM para gemma3:4b (necesitaba 3,9 GiB, había 2,2): la app lo explica
   en el hilo.
@@ -255,6 +262,40 @@ imagen, ~2 min).
   con "permitir"/"no". Es por palabras clave: puede dejar pasar acciones
   delicadas con otros nombres.
 
+- **Motor OpenClaw** (decisión del usuario, 2026-09-29: "motor por empleado"):
+  un empleado de qwen con `motor: openclaw` en su `identidad.md` usa el bucle y
+  las herramientas de OpenClaw 2026.6.9 (dependencia de la app, corre con el
+  Node de Electron); los demás siguen con el bucle propio. `openclaw.ts` arranca
+  un Gateway propio (estado en `<datos>/openclaw`, nunca `~/.openclaw`; solo
+  loopback, token aleatorio; API compatible con OpenAI en streaming) con un
+  agente por empleado. Medido con Qwen 9B: prompt de OpenClaw ~11,7k tokens por
+  defecto (no cabe: su reserva deja 8k) → 5,3k con `skipBootstrap`, sin skills
+  y perfil `minimal` + las del puesto; compactación ajustada a 16k
+  (`reserveTokens` 3000, `keepRecentTokens` 4000), si no la respuesta acaba en
+  "internal error".
+  - Herramientas: principales `exec`, `read`, `write`, `edit`, `web_fetch`,
+    `browser`; adicionales (`ADICIONALES_OC`) las activa el usuario; siempre
+    bloqueadas las que salen de la computadora (`gateway`, `nodes`, `message`,
+    `canvas`, `tts`, `skill_workshop`, `file_*`, `dir_*`) y `tools.elevated`.
+  - exec/read/write/edit corren en SU computadora: sandbox SSH de OpenClaw
+    cuyo "ssh" es `scriptEntrar()` de `computadora.ts` (exec en el contenedor,
+    sin servidor SSH; solo Linux por ahora). `browser` controla el Chromium de
+    su escritorio (se ve en vivo) por un reenvío en un puerto fijo de
+    127.0.0.1 (OpenClaw no recarga perfiles de navegador en caliente) y el
+    plugin fuerza el perfil del propio empleado (nunca el Chrome del usuario
+    ni el de otro). `web_fetch` corre en el equipo con el bloqueo de
+    direcciones privadas de OpenClaw.
+  - Plugin `app/openclaw/discalaves` (`before_tool_call`/`after_tool_call`)
+    → servidor del puente en 127.0.0.1 con token: pasos en el hilo, Detener,
+    control del usuario, freno de repeticiones (3.ª bloquea, 5.ª corta) y
+    aprobación para borrar (`exec` con rm…, parches que borran) y enviar
+    formularios con el navegador. Sin respuesta de la app, bloquea. Límite:
+    los clics de su navegador van por referencia sin texto, así que un clic en
+    "pagar" no se detecta.
+  - Probado con Qwen 9B y un contenedor real: `exec` (whoami dentro del
+    contenedor), `write`/`edit`, `web_fetch`, `browser` (example.com en el
+    Chromium del empleado) y el bloqueo de un `rm`. Qwen repite llamadas
+    fallidas sin fin si nada lo frena (visto: 80 veces), de ahí el freno.
 - **Orígenes de modelo fuera del equipo** (decisión del usuario, 2026-09-29; código en
   `proveedores.ts`, `boveda.ts`, `gasto.ts`, `tunel.ts`, `codex.ts`): el usuario elige el
   origen de cada empleado y la app **nunca lo cambia por su cuenta** (ni por velocidad, ni
@@ -389,9 +430,10 @@ propia.
   con CUDA (~0,6 GB), que todavía se colocan a mano.
 - **Lenguaje:** TypeScript en todo el proyecto. Supuesto provisional, porque
   OpenClaw trae Node.
-- **OpenClaw con modelos pequeños:** verificar que funcione con modelos
-  locales pequeños y medir el peso de su runtime. Si falla, se hará un bucle
-  de agente propio. Lo investiga otra sesión.
+- **OpenClaw con modelos pequeños** (medido 2026-09-29/30, ver "Motor
+  OpenClaw"): funciona con Qwen 9B si se recorta su prompt; con la
+  configuración por defecto no cabe en 16k. Falta medir tareas largas (varias
+  páginas) y la RAM del Gateway.
 - **Riesgo abierto (ya observado con Ollama + qwen):** consumo de RAM del sistema con varios escritorios y
   navegadores a la vez.
 

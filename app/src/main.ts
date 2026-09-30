@@ -21,7 +21,10 @@ const SERVIDOR = rutas.servidor;
 const MODELO = rutas.modelo;
 if (rutas.datos) app.setPath("userData", rutas.datos); // Windows: datos locales, antes de usar userData
 const PUERTO = 8089;
-const RANURAS = 3; // empleados de qwen que generan a la vez; ponytail: fijo, según la VRAM cuando exista el gestor de modelos
+// Empleados de qwen que generan a la vez. 2 en 8 GB de VRAM (medido 2026-09-30, RTX 3060 Ti con ~2 GB ocupados
+// por otras apps): con 3 y contexto para conversaciones largas quedan capas en CPU y uno solo va a la mitad.
+// ponytail: en equipos con más VRAM se sube con DISCALAVES_RANURAS; automático cuando exista el gestor de modelos.
+const RANURAS = Math.max(1, Number(process.env.DISCALAVES_RANURAS) || 2);
 // Instancia con datos aparte (DISCALAVES_DATOS, p. ej. las pruebas): no apaga las computadoras de otra instancia.
 const APARTE = !!process.env.DISCALAVES_DATOS;
 // Almacén de claves de Linux para la bóveda (gnome-libsecret, kwallet5…): por defecto lo elige Chromium según el escritorio.
@@ -282,11 +285,14 @@ function iniciarServidor() {
   servidor = spawn(SERVIDOR, [
     "-m", MODELO, "--host", "127.0.0.1", "--port", String(PUERTO), "--api-key", CLAVE,
     // Varias ranuras: los empleados de qwen trabajan a la vez con el mismo modelo cargado (sin más VRAM de pesos).
-    // Caché KV unificada: las ranuras comparten 32k de contexto; cada conversación manda ~10k como mucho. Si
-    // hay más empleados trabajando que ranuras, llama-server los pone en cola.
-    "-c", "32768", "-np", String(RANURAS), "-kvu",
+    // Caché KV unificada: 12k por ranura, compartidos; cada conversación manda ~11k como mucho (con 16k para 3
+    // conversaciones largas a la vez, llama-server rechazaba las peticiones). Si hay más empleados trabajando
+    // que ranuras, llama-server los pone en cola. -ub 256: búfer de cálculo menor, para que quepan más capas.
+    "-c", String(12288 * RANURAS), "-np", String(RANURAS), "-kvu", "-ub", "256",
     "-ctk", "q8_0", "-ctv", "q8_0", // caché en 8 bits: 16k de contexto (páginas web) casi sin coste de VRAM
-    "-fitt", "256", // margen de VRAM bajo: con el de 1 GB por defecto, en 8 GB quedan capas en CPU y va a la mitad de velocidad
+    // Margen de VRAM bajo: con el de 1 GB por defecto, en 8 GB quedan capas en CPU y va a la mitad de velocidad.
+    // Con 0 cabe una capa más (53 tok/s frente a 40) pero una vez se cayó al cargar: 128 es el término medio.
+    "-fitt", "128",
     // Caché de prompts en RAM: por defecto hasta 8 GB. Con varios empleados, cada conversación deja ahí su
     // estado y, junto a sus computadoras, en 16 GB el sistema mató a llama-server por falta de memoria.
     "-cram", "1024",
