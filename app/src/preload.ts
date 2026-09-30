@@ -6,6 +6,8 @@ contextBridge.exposeInMainWorld("discalaves", {
   wslEstado: () => ipcRenderer.invoke("wsl:estado"),
   wslActivar: () => ipcRenderer.invoke("wsl:activar"),
   wslPreparar: () => ipcRenderer.invoke("wsl:preparar"),
+  instalarEstado: () => ipcRenderer.invoke("instalar:estado"),
+  instalarEjecutar: () => ipcRenderer.invoke("instalar:ejecutar"),
   alProgresoWsl: (f: (texto: string) => void) => ipcRenderer.on("wsl:progreso", (_e, texto) => f(texto)),
   conversaciones: () => ipcRenderer.invoke("conversaciones"),
   modelos: () => ipcRenderer.invoke("modelos"),

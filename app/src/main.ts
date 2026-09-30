@@ -1020,7 +1020,12 @@ app.on("second-instance", () => {
   ventana?.focus();
 });
 
-registrarWsl(ipcMain); // Windows: pantalla de primer arranque (WSL); en Linux no hace nada
+// Primer arranque: WSL (Windows) y descarga del runtime, el modelo y Podman. Al terminar, arranca el modelo
+// (o reinicia la app si cambió el motor de contenedores, que se elige al cargar).
+registrarWsl(ipcMain, (reiniciar) => {
+  if (reiniciar) return setTimeout(() => { app.relaunch(); app.quit(); }, 1500).unref();
+  if (!servidor) iniciarServidor();
+});
 
 app.whenReady().then(() => {
   if (!primera) return;
