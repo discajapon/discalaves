@@ -412,24 +412,23 @@ ipcMain.handle("detener", (_e, id: unknown) => {
   }
 });
 
-// Vista en vivo: el cliente web de KasmVNC de su escritorio, dentro del panel de la interfaz. Solo hay
-// transmisión mientras el panel está abierto (la interfaz quita el iframe al cerrarlo). Las credenciales
-// se dan aquí (evento "login"): "ver" solo mira; "control" usa teclado y ratón.
-let mirando: Computadora | undefined;
+// Vista en vivo: el cliente web de KasmVNC de cada escritorio. La interfaz tiene un iframe por empleado siempre
+// conectado, así cambiar de empleado es instantáneo (decisión del usuario, 2026-09-30: prima la inmediatez
+// sobre el consumo). Las credenciales se dan aquí (evento "login") según el origen: "ver" solo mira; "control"
+// usa teclado y ratón.
+const pantallas = new Map<string, Computadora>(); // origen de su KasmVNC → su computadora
 const computadoraConHerramientas = (id: unknown) => {
   const c = buscar(id);
   return c?.herramientas ? computadora(c).computadora : undefined;
 };
 async function abrirPantalla(pc: Computadora) {
-  mirando = pc;
-  await session.defaultSession.clearAuthCache(); // al cambiar de "ver" a "control" hay que volver a autenticarse
-  return { url: (await pc.pantalla()).url };
+  const p = await pc.pantalla();
+  pantallas.set(p.origen, pc);
+  return { url: p.url };
 }
-ipcMain.handle("pantalla:ver", async (_e, id: unknown, ver: unknown) => {
-  if (mirando) mirando.controlUsuario = false;
-  mirando = undefined;
+ipcMain.handle("pantalla:ver", async (_e, id: unknown) => {
   const pc = computadoraConHerramientas(id);
-  if (ver !== true || !pc) return {};
+  if (!pc) return {};
   try {
     return await abrirPantalla(pc);
   } catch (e) {
@@ -438,18 +437,16 @@ ipcMain.handle("pantalla:ver", async (_e, id: unknown, ver: unknown) => {
 });
 ipcMain.handle("pantalla:control", async (_e, id: unknown, activo: unknown) => {
   const pc = computadoraConHerramientas(id);
-  if (!pc || pc !== mirando) return {};
+  if (!pc) return {};
   pc.controlUsuario = activo === true;
+  await session.defaultSession.clearAuthCache(); // al cambiar de "ver" a "control" hay que volver a autenticarse
   return abrirPantalla(pc);
 });
 app.on("login", (ev, _contenido, detalles, _auth, responder) => {
-  const pc = mirando;
-  if (!pc) return;
-  void pc.pantalla().then((p) => {
-    if (new URL(detalles.url).origin === p.origen) responder(p.usuario, p.clave);
-    else responder(); // cualquier otro sitio: sin credenciales
-  });
+  const pc = pantallas.get(new URL(detalles.url).origin);
+  if (!pc) return; // cualquier otro sitio: sin credenciales
   ev.preventDefault();
+  void pc.pantalla().then((p) => responder(p.usuario, p.clave));
 });
 
 const buscar = (id: unknown) => {

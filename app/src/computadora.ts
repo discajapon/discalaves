@@ -265,7 +265,7 @@ export class Computadora {
     // La calidad de imagen la fija el servidor (kasmvnc.yaml): KasmVNC ignora los ajustes de calidad del cliente.
     // logging=error: sus avisos de funciones opcionales que aquí no aplican (códecs de vídeo que Electron no
     // trae, canales de impresora y tarjeta inteligente) no llenan la consola; los errores sí se ven.
-    const opciones = "autoconnect=true&resize=scale&show_control_bar=false&show_dot=false&logging=error" +
+    const opciones = "autoconnect=true&reconnect=true&resize=scale&show_control_bar=false&show_dot=false&logging=error" +
       "&clipboard_up=false&clipboard_down=false&clipboard_seamless=false";
     return {
       url: `http://${this.puertoPantalla}/?${opciones}`,

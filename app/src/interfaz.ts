@@ -240,6 +240,7 @@ function dibujarCabecera() {
   dibujarModoLibre();
   // Cada IA tiene su computadora: si la pantalla está abierta, pasa a mostrar la de esta conversación.
   if (!pantalla.hidden) void mostrarPantalla(c.herramientas);
+  else if (c.herramientas) void escritorio(c.id);
   dibujarEstado();
 }
 
@@ -526,37 +527,62 @@ menuIA.addEventListener("keydown", (ev) => {
   opciones[(i + (ev.key === "ArrowDown" ? 1 : -1) + opciones.length) % opciones.length]?.focus();
 });
 
-// ---- Pantalla en vivo: el escritorio de su computadora (KasmVNC), solo mientras está abierta ----
+// ---- Pantalla en vivo: el escritorio de su computadora (KasmVNC) ----
+// Un iframe por empleado, conectado desde que arranca la app y apilados: cambiar de empleado (o abrir el panel)
+// solo cambia cuál se ve, sin reconectar (decisión del usuario, 2026-09-30: instantáneo aunque consuma más).
 const panel = document.querySelector(".panel")!;
 const pantalla = document.getElementById("pantalla")!;
-const vnc = document.getElementById("pantalla-vnc") as HTMLIFrameElement;
+const contenedorVnc = document.getElementById("pantalla-vnc")!;
 const botonVer = document.getElementById("ver-pantalla")!;
 const botonControl = document.getElementById("tomar-control")!;
 const textoPantalla = document.getElementById("pantalla-url")!;
+const escritorios = new Map<string, Promise<HTMLIFrameElement | string>>(); // iframe, o el error al encender
+let controlado: string | null = null; // empleado cuyo escritorio controla el usuario
 
-// Quitar el iframe corta la conexión: sin panel abierto no hay transmisión.
-function mostrarEn(url?: string) {
-  vnc.src = url ?? "about:blank";
+function escritorio(id: string) {
+  let e = escritorios.get(id);
+  if (!e) {
+    e = discalaves.verPantalla(id, true).then(({ url, error }) => {
+      if (!url) {
+        escritorios.delete(id); // se reintenta la próxima vez
+        return error ?? "no tiene computadora";
+      }
+      const f = document.createElement("iframe");
+      f.allow = "keyboard-map";
+      f.hidden = true;
+      f.title = `Escritorio de ${conversaciones.find((c) => c.id === id)?.nombre ?? "la IA"} en vivo`;
+      f.src = url;
+      contenedorVnc.append(f);
+      return f;
+    });
+    escritorios.set(id, e);
+  }
+  return e;
+}
+
+// Enciende y conecta todos los escritorios en segundo plano, uno tras otro (el primero construye la imagen).
+async function precargarEscritorios() {
+  for (const c of conversaciones.filter((c) => c.herramientas)) await escritorio(c.id);
 }
 
 async function mostrarPantalla(ver: boolean) {
+  if (controlado && (!ver || controlado !== activa)) await controlar(false);
   pantalla.hidden = !ver;
   panel.classList.toggle("viendo", ver);
   botonVer.setAttribute("aria-pressed", String(ver));
-  marcarControl(false);
-  mostrarEn(); // no mostrar el escritorio de otra IA mientras llega el nuevo
-  vnc.title = `Escritorio de ${actual().nombre} en vivo`;
-  pantalla.setAttribute("aria-label", `Pantalla de ${actual().nombre}`);
-  textoPantalla.textContent = `encendiendo la computadora de ${actual().nombre}…`;
-  const { url, error } = await discalaves.verPantalla(activa, ver);
-  if (error) {
-    aviso(`no pude abrir su pantalla: ${error}`);
+  if (!ver) return;
+  const c = actual();
+  pantalla.setAttribute("aria-label", `Pantalla de ${c.nombre}`);
+  textoPantalla.textContent = `encendiendo la computadora de ${c.nombre}…`;
+  for (const f of contenedorVnc.children) (f as HTMLElement).hidden = true; // nunca el escritorio de otra IA
+  const f = await escritorio(c.id);
+  if (c.id !== activa || pantalla.hidden) return;
+  if (typeof f === "string") {
+    aviso(`no pude abrir su pantalla: ${f}`);
     return mostrarPantalla(false);
   }
-  if (ver && url && !pantalla.hidden) {
-    mostrarEn(url);
-    textoPantalla.textContent = `escritorio de ${actual().nombre} · solo ver`;
-  }
+  f.hidden = false;
+  textoPantalla.textContent = `escritorio de ${c.nombre} · solo ver`;
 }
 
 function marcarControl(activo: boolean) {
@@ -565,14 +591,17 @@ function marcarControl(activo: boolean) {
   pantalla.classList.toggle("controlando", activo);
 }
 
-// Tomar el control vuelve a conectar con el usuario de KasmVNC que puede usar teclado y ratón.
+// Tomar el control reconecta ese escritorio con el usuario de KasmVNC que puede usar teclado y ratón.
 async function controlar(activo: boolean) {
+  const id = activo ? activa : controlado;
+  if (!id) return;
+  controlado = activo ? id : null;
   marcarControl(activo);
-  const { url } = await discalaves.controlPantalla(activa, activo);
-  if (!url) return;
-  mostrarEn(url);
-  textoPantalla.textContent = `escritorio de ${actual().nombre} · ${activo ? "tienes el control" : "solo ver"}`;
-  if (activo) vnc.focus();
+  const [{ url }, f] = await Promise.all([discalaves.controlPantalla(id, activo), escritorio(id)]);
+  if (!url || typeof f === "string") return;
+  f.src = url;
+  if (id === activa) textoPantalla.textContent = `escritorio de ${actual().nombre} · ${activo ? "tienes el control" : "solo ver"}`;
+  if (activo) f.focus();
 }
 
 const enControl = () => botonControl.getAttribute("aria-pressed") === "true";
@@ -597,4 +626,4 @@ botonLibre.addEventListener("click", async () => {
   dibujarModoLibre();
 });
 
-void seleccionar(activa);
+void seleccionar(activa).then(precargarEscritorios);
