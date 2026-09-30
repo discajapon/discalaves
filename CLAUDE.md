@@ -246,6 +246,39 @@ imagen, ~2 min).
   con "permitir"/"no". Es por palabras clave: puede dejar pasar acciones
   delicadas con otros nombres.
 
+- **Orígenes de modelo fuera del equipo** (decisión del usuario, 2026-09-29; código en
+  `proveedores.ts`, `boveda.ts`, `gasto.ts`, `tunel.ts`, `codex.ts`): el usuario elige el
+  origen de cada empleado y la app **nunca lo cambia por su cuenta** (ni por velocidad, ni
+  por cola, ni si algo falla). Mismo prompt base y reglas que los locales.
+  - API con clave: OpenAI, Gemini, Claude (adaptador nativo) y cualquier servidor compatible
+    con OpenAI. Modelos listados desde el proveedor; los que no admiten herramientas son
+    "solo chat". Perfil: `modelo: nube:<id>:<modelo>`.
+  - Servidor remoto del usuario: URL directa (HTTPS con clave) o túnel SSH con su configuración
+    (alias, ProxyJump). Huella del host confirmada en el primer contacto; contraseña solo en
+    memoria; si el túnel cae, el empleado se detiene y avisa, sin reconexión. Sin SLURM.
+  - Claves y URLs con credenciales: un único archivo cifrado (`safeStorage`); sin almacén
+    seguro no se guarda nada. Nunca en perfiles, contenedor, prompt ni logs.
+  - Privacidad: aviso concreto al asignar un origen externo y marca permanente en la lista
+    (distinta para nube y servidor remoto). Gasto por empleado con tabla de precios editable
+    y tope mensual (13 USD por defecto) que pausa y pregunta; un corte del proveedor detiene
+    y avisa, sin reintentos. Los externos no esperan en la cola de VRAM.
+  - **ChatGPT vía Codex** ("no oficial, puede dejar de funcionar"): el usuario instala el CLI
+    aparte (Apache-2.0) e inicia sesión con `codex login`; Discalaves no toca sus tokens. Corre
+    en el equipo con TODAS sus herramientas propias apagadas y solo las de Discalaves, servidas
+    por MCP hacia el contenedor; `sonda()` lo comprueba antes de usarlo.
+  - **Claude por suscripción (Agent SDK): NO implementado** (revisado 2026-09-30). Las
+    condiciones oficiales ([Legal y cumplimiento de Claude Code](https://code.claude.com/docs/en/legal-and-compliance))
+    dicen que Anthropic no permite a terceros "route requests through Free, Pro, or Max plan
+    credentials on behalf of their users" y piden clave de API para productos con el Agent SDK.
+    Otra página ([Agent SDK con tu plan](https://support.claude.com/en/articles/15036540-use-the-claude-agent-sdk-with-your-claude-plan))
+    dice lo contrario y está marcada como en pausa; ante la contradicción manda la más
+    restrictiva. Claude se usa solo con clave de API. Revisar si Anthropic las aclara.
+  - Probado con un servidor falso (`npm run prueba:nube`, dentro de `npm run prueba`): respuestas,
+    herramientas, tokens, cuota, caídas, bóveda, túnel contra un sshd local, sonda de Codex y la
+    app real (criterio 1 en contenedor, local y nube a la vez, tope, claves ausentes del disco
+    en claro). **No probado:** ningún proveedor ni servidor real, Codex con cuenta real, túnel con
+    ProxyJump real, Windows. **RAM con varios contenedores trabajando a la vez: sin medir.**
+
 **Diseño:** antes de tocar estilos, filtros SVG o animaciones, lee
 `GUIA_DE_DISEÑO.md` (reglas del vidrio líquido, tokens, recetas de
 materiales, patrones de movimiento y plantillas de componentes).
