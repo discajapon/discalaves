@@ -20,6 +20,7 @@ const SERVIDOR = rutas.servidor;
 const MODELO = rutas.modelo;
 if (rutas.datos) app.setPath("userData", rutas.datos); // Windows: datos locales, antes de usar userData
 const PUERTO = 8089;
+const RANURAS = 3; // empleados de qwen que generan a la vez; ponytail: fijo, según la VRAM cuando exista el gestor de modelos
 // Instancia con datos aparte (DISCALAVES_DATOS, p. ej. las pruebas): no apaga las computadoras de otra instancia.
 const APARTE = !!process.env.DISCALAVES_DATOS;
 const CLAVE = randomBytes(24).toString("hex"); // sin clave, cualquier web abierta en el navegador podría usar el servidor
@@ -276,7 +277,10 @@ function iniciarServidor() {
   const log = fs.openSync(path.join(app.getPath("userData"), "llama-server.log"), "w");
   servidor = spawn(SERVIDOR, [
     "-m", MODELO, "--host", "127.0.0.1", "--port", String(PUERTO), "--api-key", CLAVE,
-    "-c", "16384", "-np", "1",
+    // Varias ranuras: los empleados de qwen trabajan a la vez con el mismo modelo cargado (sin más VRAM de pesos).
+    // Caché KV unificada: las ranuras comparten 32k de contexto; cada conversación manda ~10k como mucho. Si
+    // hay más empleados trabajando que ranuras, llama-server los pone en cola.
+    "-c", "32768", "-np", String(RANURAS), "-kvu",
     "-ctk", "q8_0", "-ctv", "q8_0", // caché en 8 bits: 16k de contexto (páginas web) casi sin coste de VRAM
     "-fitt", "256", // margen de VRAM bajo: con el de 1 GB por defecto, en 8 GB quedan capas en CPU y va a la mitad de velocidad
     // Caché de prompts en RAM: por defecto hasta 8 GB. Con varios empleados, cada conversación deja ahí su
@@ -718,9 +722,9 @@ ipcMain.handle("enviar", async (ev, id: unknown, entrada: unknown) => {
   const texto = typeof entrada === "string" ? entrada.trim().slice(0, 8000) : "";
   if (!c || !texto) return { error: "mensaje vacío" };
   if (estadoDe(c).fase !== "listo") return { error: `${c.nombre} no está listo` };
-  // ponytail: un empleado LOCAL trabajando a la vez (la VRAM de 8 GB no da para más); cola real cuando haya varios.
-  // Los de la nube y los de servidores remotos no usan la VRAM: trabajan a la vez, sin límite fijo.
-  const otra = c.origen === "local" && conversaciones.find((o) => o.origen === "local" && trabajando.has(o.id));
+  // Los de qwen trabajan a la vez (ranuras de llama-server). Ollama carga otro modelo en la misma VRAM: no
+  // trabaja a la vez que ningún otro local. Los de la nube y los remotos no usan la VRAM: sin límite.
+  const otra = c.origen === "local" && conversaciones.find((o) => o.origen === "local" && trabajando.has(o.id) && (o.proveedor === "ollama" || c.proveedor === "ollama"));
   if (otra) return { error: `${otra.nombre} está trabajando; espera a que termine` };
   const parar = new AbortController();
   try {

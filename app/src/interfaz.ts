@@ -260,6 +260,8 @@ async function seleccionar(id: string) {
   burbujaEnCurso = null;
   dibujarCabecera();
   await recargar(); // el hilo cambia sin animación: el movimiento está solo en la lista (moverLente)
+  // Si está trabajando (varios a la vez), lo que escriba a partir de ahora se ve en su burbuja.
+  if (!["listo", "cargando", "error"].includes(actual().estado.fase)) burbujaPendiente();
   entrada.focus();
 }
 
