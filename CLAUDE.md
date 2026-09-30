@@ -245,7 +245,8 @@ imagen, ~2 min).
     `prueba-unidad` y sube el instalador como artefacto (sin GPU ni WSL).
   - **Instalador que trae todo** (decisión del usuario, 2026-09-30: por encima de los principios "sin
     Docker" y de los pendientes del motor): el instalador (`npm run instalador:linux` → AppImage,
-    `instalador:win` → NSIS; workflows `linux.yml` y `windows.yml`) lleva solo la app. `instalar.ts`
+    `instalador:win` → NSIS; workflow `windows.yml`; el de Linux está escrito en `.github/workflows/linux.yml` pero sin subir: el `gh`
+    configurado no tiene el permiso `workflow`, hay que ejecutar `gh auth refresh -s workflow`) lleva solo la app. `instalar.ts`
     descarga en el primer arranque, con sha256 fijado y reanudable (`.parte` + Range): llama.cpp `b11191`
     (CUDA 12.8/12.4 con NVIDIA; Vulkan si no), el modelo Qwen3.5-9B-Q4_K_M (hash = el `x-linked-etag` de
     Hugging Face) y, en Linux sin Docker ni Podman usable, Podman por `pkexec` con el gestor de la distro
