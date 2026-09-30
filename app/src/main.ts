@@ -3,7 +3,8 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { definicionesPara, ejecutarHerramienta, verificar } from "./herramientas";
+import { BORRADO, definicionesPara, ejecutarHerramienta, verificar } from "./herramientas";
+import { ADICIONALES_OC, OpenClaw, PRINCIPALES_OC } from "./openclaw";
 import { COLORES, Empleados, HERRAMIENTAS, PRINCIPALES, leerIdentidad, promptEmpleado, type Empleado, type Identidad } from "./empleados";
 import { apagarTodas, computadoraDe, responde, type Computadora } from "./computadora";
 import { navegadorDe } from "./navegador";
@@ -50,6 +51,7 @@ interface Conversacion {
   herramientas: boolean; // el modelo sabe usar herramientas (si no, es "solo chat" aunque el perfil liste alguna)
   permitidas: string[]; // herramientas del puesto
   tope: number; // USD al mes (solo nube)
+  openclaw?: boolean; // su bucle lo hace OpenClaw (solo con qwen, ver tareaOpenClaw)
 }
 interface Modelo { proveedor: Conversacion["proveedor"]; modelo: string; valor: string; detalle: string; herramientas: boolean; origen: Origen; donde: string; aviso?: string }
 const QWEN_MODELO = "Qwen3.5-9B";
@@ -67,7 +69,7 @@ function aConversacion(e: Empleado): Conversacion {
       origen: p && esRemoto(p.tipo) ? "remoto" : "nube", donde: p ? dondeDe(p) : `${cuenta} (proveedor borrado)`,
     };
   }
-  return { ...base, proveedor: "qwen", modelo: QWEN_MODELO, origen: "local", donde: "este equipo", herramientas: true };
+  return { ...base, proveedor: "qwen", modelo: QWEN_MODELO, origen: "local", donde: "este equipo", herramientas: true, openclaw: e.motor === "openclaw" };
 }
 
 // ---- Proveedores fuera de este equipo: bóveda cifrada (claves), gasto, túneles y Codex ----
@@ -586,8 +588,9 @@ function limpiarIdentidad(x: unknown): Identidad | null {
     rol: texto(d.rol, 80),
     color: COLORES.includes(d.color as string) ? (d.color as string) : "violeta",
     modelo,
-    herramientas: Array.isArray(d.herramientas) ? d.herramientas.filter((h): h is string => HERRAMIENTAS.includes(h as string)) : [],
+    herramientas: Array.isArray(d.herramientas) ? d.herramientas.filter((h): h is string => [...HERRAMIENTAS, ...PRINCIPALES_OC, ...ADICIONALES_OC].includes(h as string)) : [],
     instrucciones: texto(d.instrucciones, 3000),
+    ...(d.motor === "openclaw" && modelo === "qwen" && { motor: "openclaw" as const }),
   };
 }
 
@@ -611,7 +614,7 @@ ipcMain.handle("empleado", (_e, id: unknown) => {
   if (!e) return undefined;
   const clavePrecio = e.modelo.startsWith("nube:") ? e.modelo.slice(5) : "";
   return {
-    nombre: e.nombre, rol: e.rol, color: e.color, modelo: e.modelo, herramientas: e.herramientas, instrucciones: e.instrucciones, procedimientos: equipo.procedimientos(e.id),
+    nombre: e.nombre, rol: e.rol, color: e.color, modelo: e.modelo, herramientas: e.herramientas, instrucciones: e.instrucciones, motor: e.motor, procedimientos: equipo.procedimientos(e.id),
     tope: e.tope ?? TOPE_POR_DEFECTO, gastado: gasto.delMes(e.id), precio: clavePrecio ? gasto.precio(clavePrecio) : undefined,
   };
 });
@@ -750,6 +753,7 @@ ipcMain.handle("enviar", async (ev, id: unknown, entrada: unknown) => {
 // cadena: los compañeros que esperan su resultado (pasar_trabajo), para que no se encarguen trabajo en círculo.
 async function tarea(c: Conversacion, texto: string, interfaz: Electron.WebContents, parar: AbortController, cadena: string[] = []): Promise<string> {
   if (c.proveedor === "codex") return tareaCodex(c, texto, interfaz, parar, cadena);
+  if (c.openclaw) return tareaOpenClaw(c, texto, interfaz, parar);
   const historial = historialDe(c.id);
   historial.push({ de: "yo", texto, t: Date.now() });
   guardarHistorial(c.id);
@@ -890,6 +894,76 @@ async function tareaCodex(c: Conversacion, texto: string, interfaz: Electron.Web
   }
 }
 
+// OpenClaw: el bucle y las herramientas son de OpenClaw (openclaw.ts); la app ve cada herramienta antes y después
+// por su plugin (puenteOpenClaw) y pone en el hilo los pasos, las aprobaciones y Detener, como con el bucle propio.
+let openclaw: OpenClaw;
+async function tareaOpenClaw(c: Conversacion, texto: string, interfaz: Electron.WebContents, parar: AbortController): Promise<string> {
+  const historial = historialDe(c.id);
+  const decir = (t: string) => (historial.push({ de: "ia", texto: t, t: Date.now() }), guardarHistorial(c.id), t);
+  historial.push({ de: "yo", texto, t: Date.now() });
+  guardarHistorial(c.id);
+  tareas.set(c.id, parar);
+  try {
+    cambiarEstado(c, { fase: "escribiendo" });
+    openclaw.configurar(conversaciones.filter((o) => o.openclaw).map((o) => ({ id: o.id, usuario: o.usuario, herramientas: o.permitidas })));
+    await computadora(c).computadora.encender((d) => cambiarEstado(c, { fase: "ejecutando", detalle: d }));
+    cambiarEstado(c, { fase: "escribiendo" });
+    return decir(await openclaw.enviar(c.id, texto, (t) => interfaz.send("trozo", { id: c.id, texto: t }), parar.signal));
+  } catch (e) {
+    if (parar.signal.aborted) decir("me detuviste. Aquí lo dejo; dime si sigo o cambio algo.");
+    else if ((e as Error).message.startsWith("me detuve")) return decir((e as Error).message);
+    throw e;
+  } finally {
+    tareas.delete(c.id);
+    trabajando.delete(c.id);
+    avisarEstado(c);
+  }
+}
+
+// Acciones delicadas con herramientas de OpenClaw (misma regla que delicado() en herramientas.ts).
+// ponytail: los clics de su navegador van por referencia (e12), sin texto: solo se aprueba enviar formularios.
+function delicadoOC(herramienta: string, p: Record<string, unknown>): string | null {
+  const orden = String(p.command ?? "");
+  if (herramienta === "exec" && BORRADO.test(orden)) return `borrar con: ${orden}`;
+  if (herramienta === "apply_patch" && /\*\*\* Delete File/.test(String(p.input ?? ""))) return "borrar archivos con un parche";
+  const r = (p.request ?? {}) as Record<string, unknown>;
+  if (herramienta === "browser" && (r.submit === true || (r.kind === "press" && /enter/i.test(String(r.key))))) return "enviar un formulario con el navegador";
+  return null;
+}
+
+function puenteOpenClaw() {
+  const conv = (agente: string) => {
+    const c = buscar(agente);
+    if (!c) throw new Error(`empleado desconocido: ${agente}`);
+    return c;
+  };
+  return {
+    cdp: (agente: string) => computadora(conv(agente)).computadora.cdp(),
+    async antes(agente: string, herramienta: string, parametros: Record<string, unknown>) {
+      const c = conv(agente);
+      if (tareas.get(c.id)?.signal.aborted) return { bloquear: true, motivo: "el usuario te detuvo" };
+      const pc = computadora(c).computadora;
+      if (herramienta === "browser" && pc.controlUsuario) return { bloquear: true, motivo: "el usuario tomó el control de tu navegador; espera a que lo devuelva o pregúntale." };
+      cambiarEstado(c, { fase: "ejecutando", detalle: `${herramienta} ${String(parametros.command ?? parametros.path ?? parametros.url ?? parametros.targetUrl ?? "")}`.trim() });
+      const accion = delicadoOC(herramienta, parametros);
+      if (accion && c.libre !== true && ventana && !(await pedirAprobacion(c, ventana.webContents, accion))) return { bloquear: true, motivo: "el usuario no lo permitió; no se hizo nada" };
+      return {};
+    },
+    despues(agente: string, herramienta: string, parametros: Record<string, unknown>, resultado: unknown, error: unknown) {
+      const c = buscar(agente);
+      if (!c) return;
+      const contenido = (resultado as { content?: { text?: string }[] })?.content?.map((x) => x.text ?? "").join("\n") ?? "";
+      const l: Llamada = { id: `openclaw-${Date.now()}`, nombre: herramienta, argumentos: JSON.stringify(parametros) };
+      const h = historialDe(c.id);
+      h.push({ de: "ia", texto: "", t: Date.now(), llamadas: [l] }); // mismo formato que el bucle propio
+      h.push({ de: "herramienta", ...l, salida: (error ? String(typeof error === "string" ? error : JSON.stringify(error)) : contenido).slice(0, 3000) || "(sin salida)", codigo: error ? 1 : 0, t: Date.now() });
+      guardarHistorial(c.id);
+      ventana?.webContents.send("paso", c.id);
+      cambiarEstado(c, { fase: "escribiendo" });
+    },
+  };
+}
+
 // ponytail: Codex empieza cada tarea sin memoria; se le pasa la conversación reciente como texto.
 function transcripcion(c: Conversacion, avisos: string[]): string {
   const lineas = contexto(c).map((m) => {
@@ -955,6 +1029,8 @@ app.whenReady().then(() => {
   });
   gasto = new Gasto(datos);
   codex = new Codex(path.join(datos, "codex"));
+  // ponytail: contexto por empleado fijo en 16k (el servidor tiene 32k compartidos entre RANURAS)
+  openclaw = new OpenClaw(path.join(datos, "openclaw"), { url: `http://127.0.0.1:${PUERTO}`, clave: CLAVE, modelo: QWEN_MODELO, contexto: 16384 }, puenteOpenClaw());
   migrarConversaciones();
   leerConversaciones();
   iniciarServidor();
@@ -981,5 +1057,6 @@ app.on("will-quit", () => {
   saliendo = true;
   servidor?.kill();
   for (const t of tuneles.values()) t.cerrar();
+  openclaw?.apagar();
   if (!APARTE) apagarTodas(); // no deja contenedores corriendo
 });
