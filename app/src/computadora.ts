@@ -276,6 +276,27 @@ export class Computadora {
   }
 }
 
+// "ssh" para OpenClaw (motor "openclaw" de un empleado): su sandbox SSH lo llama como
+// `ssh -F <config> -T openclaw-sandbox "<orden>"`; este script entra en la computadora del empleado con el
+// motor de contenedores, como su usuario y sin capacidades, sin servidor SSH ni claves. El contenedor
+// (HostName) y el usuario (User) salen del config que escribe OpenClaw con lo que le da openclaw.ts.
+// ponytail: script de sh, solo Linux; en Windows hará falta un .cmd equivalente.
+export function scriptEntrar(): string {
+  const q = (a: string) => `'${a.replace(/'/g, `'\\''`)}'`;
+  return `#!/bin/sh
+set -eu
+config=""; tty=""
+while [ $# -gt 2 ]; do
+  case "$1" in -F) config=$2; shift 2 ;; -o) shift 2 ;; -tt) tty=-t; shift ;; *) shift ;; esac
+done
+orden=$2
+nombre=$(awk '$1=="HostName"{print $2}' "$config")
+usuario=$(awk '$1=="User"{print $2}' "$config")
+case "$nombre" in discalaves-*) ;; *) echo "no es una computadora de Discalaves: $nombre" >&2; exit 255 ;; esac
+exec ${ORDEN.map(q).join(" ")} exec -i $tty -w "/home/$usuario" "$nombre" ${SIN_CAPACIDADES.map(q).join(" ")} bash -c "$orden"
+`;
+}
+
 const computadoras = new Map<string, Computadora>();
 
 export function computadoraDe(carpeta: string, usuario: string): Computadora {
