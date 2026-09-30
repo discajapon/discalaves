@@ -58,27 +58,6 @@ Grok Bot.
   chat".
 - **Tu perfil.** Tu nombre y tu foto, guardados solo en tu equipo.
 
-## Qué falta
-
-- **Probar Windows en una PC real.** Ya existe el soporte (ver
-  [Windows](#windows-en-preparación)) y un instalador que se genera
-  automáticamente, pero nadie lo ha probado todavía en un equipo con Windows y
-  GPU.
-- **Un equipo que colabore de verdad:** hoy un empleado puede pasarle una
-  tarea a otro y recibir su respuesta, pero no hay un hilo compartido donde
-  veas a los dos juntos.
-- **Instalador:** hoy hay que preparar a mano el modelo, llama.cpp y Docker.
-  La meta es un instalador nativo que traiga todo, sin Docker ni pasos
-  previos.
-- **Gestor de modelos** dentro de la app (buscar, ver la VRAM necesaria,
-  descargar). Hoy se elige entre qwen y los modelos que ya tengas en Ollama.
-- **Aislamiento de red:** hoy la computadora de un empleado puede llegar a tu
-  red local (tu router, por ejemplo). Está pendiente cerrarlo.
-- **Interfaz web** para abrirla desde el navegador y el celular (hoy es una
-  app de escritorio).
-- **Uso de memoria RAM:** con el modelo cargado y varios escritorios
-  abiertos, 16 GB se quedan justos.
-
 ## Modelos fuera de tu equipo (opcional)
 
 Por defecto todo es local. Si quieres, puedes asignar a un empleado una API con
