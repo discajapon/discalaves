@@ -243,6 +243,17 @@ imagen, ~2 min).
   - Instalador: `npm run instalador:win` (electron-builder, NSIS x64, menú
     Inicio). El workflow `.github/workflows/windows.yml` compila, pasa
     `prueba-unidad` y sube el instalador como artefacto (sin GPU ni WSL).
+  - **Instalador que trae todo** (decisión del usuario, 2026-09-30: por encima de los principios "sin
+    Docker" y de los pendientes del motor): el instalador (`npm run instalador:linux` → AppImage,
+    `instalador:win` → NSIS; workflows `linux.yml` y `windows.yml`) lleva solo la app. `instalar.ts`
+    descarga en el primer arranque, con sha256 fijado y reanudable (`.parte` + Range): llama.cpp `b11191`
+    (CUDA 12.8/12.4 con NVIDIA; Vulkan si no), el modelo Qwen3.5-9B-Q4_K_M (hash = el `x-linked-etag` de
+    Hugging Face) y, en Linux sin Docker ni Podman usable, Podman por `pkexec` con el gestor de la distro
+    (apt, dnf, pacman o zypper; más uidmap y subuids). `primer-arranque.ts` lo muestra y la app se
+    reinicia si cambió el motor (`ordenMotor` usa Podman si Docker no responde). Probado: descarga real de
+    llama.cpp y arranque de `llama-server`, reanudación y hash malo con servidor local, AppImage abierto
+    con carpeta vacía. **Sin probar:** descarga completa del modelo, `pkexec`+Podman en una distro limpia,
+    Windows. El AppImage pesa ~179 MB con OpenClaw dentro (376 MB en `node_modules`, sin comprimir).
 - `sudo` (decisión del usuario, 2026-09-27; reemplaza la del 2026-09-25 con
   `pkexec`): un comando que empieza por `sudo` corre como **root de su
   contenedor** (`exec -u 0`), sin contraseña, y nunca toca el sistema del

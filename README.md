@@ -3,9 +3,9 @@
 > **Estado: la v1 cumple sus dos criterios de "listo".** Un empleado
 > investiga un tema en la web y deja un informe en un archivo, y un empleado
 > investiga y le pasa el resultado a otro, que lo resume. Probado con Qwen 3.5
-> 9B en una RTX 3060 Ti de 8 GB. Sigue sin instalador para el público: hoy solo
-> lo puede arrancar alguien que prepare el entorno a mano (ver
-> [Probarlo hoy](#probarlo-hoy)).
+> 9B en una RTX 3060 Ti de 8 GB. Hay instaladores para Linux y Windows que
+> descargan solos lo que falta en el primer arranque (ver
+> [Instalar](#instalar)); el de Windows sigue sin probarse en una PC real.
 
 Discalaves es un equipo de "empleados" de IA que corre en tu propia
 computadora. Les asignas tareas como a compañeros de trabajo; cada empleado
@@ -91,11 +91,31 @@ hacia dónde, marca a esos empleados en la lista y nunca cambia su origen sola.
 - Linux o Windows 10/11 (Windows todavía sin probar; Mac después).
 - GPU NVIDIA con al menos 8 GB de VRAM.
 - 16 GB de RAM recomendados.
-- Para el prototipo actual en Linux, además: Docker usable sin `sudo` y
-  Node.js 24 o superior. En Windows no hace falta Docker (ver abajo).
+- Con el instalador no necesitas nada más: Discalaves descarga llama.cpp, el
+  modelo y, en Linux, Podman. Para seguir el desarrollo desde el código, además:
+  Node.js 24 o superior.
 
 El desarrollo y las pruebas se hacen con Qwen 3.5 9B (Q4) en una RTX 3060 Ti
 de 8 GB.
+
+## Instalar
+
+En Windows, descarga el `.exe` de los artefactos de GitHub Actions
+(`discalaves-instalador-windows`). En Linux, por ahora se genera con
+`cd app && npm ci && npm run instalador:linux` (un AppImage en
+`app/instalador/`); aún no hay descarga publicada. Ábrelo. La primera vez, Discalaves te muestra qué falta y lo prepara
+cuando pulsas **Preparar**:
+
+- **llama.cpp** (730 MB con CUDA si tienes NVIDIA; 30 MB con Vulkan en otra GPU).
+- **Qwen 3.5 9B** (5,4 GB). Todo se verifica con sha256 y, si se corta, continúa
+  donde se quedó.
+- **Podman** en Linux si no hay Docker ni Podman usable (pide tu contraseña de
+  administrador una vez) o, en Windows, una distro WSL propia con Podman.
+
+Probado: la descarga y extracción de llama.cpp de verdad en Linux, la descarga
+reanudable contra un servidor local y la pantalla de preparación en la app
+empaquetada. **Sin probar:** la descarga completa del modelo desde Hugging Face,
+la instalación de Podman con `pkexec` en una distro sin él, y Windows.
 
 ## Probarlo hoy
 
