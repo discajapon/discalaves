@@ -35,8 +35,8 @@ respuestas en streaming. Los empleados usan herramientas (bucle de agente propio
 la web y deja un informe en un archivo, ~30 s) desde su propia computadora
 (un contenedor Debian con escritorio). Ya hay varios empleados y, con
 `pasar_trabajo` activado, uno le pasa una tarea a otro (criterio 2 probado
-el 2026-09-29: Qwen leyó una web y el Redactor la resumió; falta el hilo
-compartido). Arranque: `cd app && npm install &&
+el 2026-09-29: Qwen leyó una web y el Redactor la resumió) y el hilo
+compartido **Equipo** muestra la colaboración (probado 2026-09-30, ver abajo). Arranque: `cd app && npm install &&
 npm start` (requiere Docker usable sin sudo; la primera vez construye la
 imagen, ~2 min).
 
@@ -75,7 +75,19 @@ imagen, ~2 min).
   http/https, HTML a texto), `preguntar` (para la tarea y deja la pregunta en
   el hilo) y `pasar_trabajo` (la tarea entra en el hilo del compañero como
   "(tarea de X)", trabaja con sus herramientas y su respuesta vuelve como
-  resultado; sin encargos en círculo; Detener corta la cadena). Probadas con
+  resultado; sin encargos en círculo ni a un compañero ocupado con otra
+  tarea; Detener corta la cadena). **Hilo compartido "Equipo"** (id `_equipo`,
+  primero de la lista cuando hay 2 empleados o más; `hiloEquipo()` en
+  `main.ts`): no copia mensajes; `conversaciones/_equipo.json` guarda los
+  tramos de cada colaboración (empleado, desde, hasta) y el hilo se arma con
+  sus historiales dentro de esos tramos. Una colaboración empieza con el primer
+  `pasar_trabajo` de una tarea del usuario (incluye esa tarea desde su inicio)
+  o al escribir en el hilo con `@nombre`. El encargo se ve como "X → Y" (no se
+  repite la llamada a `pasar_trabajo`); los avances llegan en vivo (evento
+  `equipo` con quién trabaja ahora); las aprobaciones de sus participantes se
+  ven en el hilo; Detener corta todas sus tareas. Probado con Qwen 9B:
+  Investigador leyó Wikipedia, se lo pasó al Redactor y devolvió su resumen,
+  todo visible en el hilo; también Detener y el error sin `@nombre`. Probadas con
   Qwen 9B: las cinco funcionan; `preguntar` solo la usa si se le pide
   explícitamente (si no, pregunta en texto). Prompt de sistema = base común
   (`baseConHerramientas` en `main.ts`) + lo propio del empleado

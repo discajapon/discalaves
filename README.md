@@ -45,6 +45,12 @@ Grok Bot.
 - **Herramientas adicionales, a tu elección.** En el perfil de cada empleado
   puedes activar leer y editar archivos, leer una web sin navegador, que te
   pregunte, o que le pase trabajo a un compañero y reciba su respuesta.
+- **Trabajan en equipo, y lo ves.** Con "pasar trabajo" activado, un
+  empleado le encarga una parte a un compañero. En el hilo **Equipo** ves a
+  los dos colaborar: quién le encarga qué a quién, sus pasos y sus respuestas,
+  mientras ocurre. Desde ahí también puedes encargar algo con `@nombre`.
+  Varios empleados pueden trabajar a la vez con el mismo modelo (2 en una GPU
+  de 8 GB, algo más lentos que uno solo).
 - **Motor OpenClaw, a tu elección.** Cada empleado puede trabajar con el
   bucle propio de Discalaves o con [OpenClaw](https://openclaw.ai) y sus
   herramientas (terminal, archivos, web, navegador), siempre dentro de su
