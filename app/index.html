@@ -154,6 +154,18 @@
         <label class="campo">Color <select id="empleado-color"></select></label>
         <label class="campo">Modelo <select id="empleado-modelo"></select></label>
       </div>
+      <button id="empleado-proveedores" type="button" class="enlace">conectar un proveedor o un servidor propio…</button>
+      <!-- Solo si el modelo no es local: qué sale del equipo y hacia dónde, y el gasto (APIs de pago). -->
+      <div id="empleado-nube" class="nube-campos" hidden>
+        <p id="empleado-privacidad" class="privacidad"></p>
+        <label class="casilla"><input id="empleado-entiendo" type="checkbox"> Entiendo qué datos salen de este equipo</label>
+        <div id="empleado-gasto" class="campos-triples">
+          <label class="campo">Precio entrada <small>USD / millón de tokens</small><input id="empleado-precio-entrada" type="number" min="0" step="any"></label>
+          <label class="campo">Precio salida <small>USD / millón de tokens</small><input id="empleado-precio-salida" type="number" min="0" step="any"></label>
+          <label class="campo">Tope mensual <small>USD</small><input id="empleado-tope" type="number" min="0.01" step="any"></label>
+        </div>
+        <p id="empleado-gastado" class="detalle"></p>
+      </div>
       <fieldset class="campo casillas">
         <legend>Herramientas</legend>
         <div id="empleado-herramientas"></div>
@@ -165,6 +177,53 @@
       <div class="acciones">
         <button value="cancelar" formnovalidate class="boton secundario">Cancelar</button>
         <button value="guardar" class="boton">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Proveedores fuera de este equipo: APIs con clave, servidores propios (URL o túnel SSH) y ChatGPT vía Codex. -->
+  <dialog id="proveedores" class="perfil empleado" aria-labelledby="proveedores-titulo">
+    <form id="proveedores-form" method="dialog">
+      <h2 id="proveedores-titulo">Proveedores y servidores</h2>
+      <p class="detalle">Modelos fuera de este equipo, opcionales. Las claves se guardan cifradas con el llavero del sistema y la app no vuelve a mostrarlas.</p>
+      <p id="proveedores-almacen" class="aviso-dialogo" hidden>Este sistema no tiene un llavero seguro: no se pueden guardar claves (nunca se guardan sin cifrar).</p>
+      <ul id="proveedores-lista" class="proveedores-lista"></ul>
+      <h3 class="subtitulo-dialogo">Añadir</h3>
+      <div class="campos-dobles">
+        <label class="campo">Tipo
+          <select id="proveedor-tipo">
+            <option value="openai">OpenAI (clave de API)</option>
+            <option value="gemini">Google Gemini (clave de API)</option>
+            <option value="claude">Anthropic Claude (clave de API)</option>
+            <option value="compatible">Otro compatible con OpenAI (OpenRouter, Groq, Mistral…)</option>
+            <option value="remoto">Servidor propio por dirección (HTTPS)</option>
+            <option value="tunel">Servidor propio por túnel SSH</option>
+            <option value="codex">ChatGPT por suscripción (Codex) · no oficial</option>
+          </select>
+        </label>
+        <label class="campo">Nombre <input id="proveedor-nombre" type="text" maxlength="60" autocomplete="off"></label>
+      </div>
+      <label class="campo" id="proveedor-ssh-campo">Host SSH <input id="proveedor-ssh" type="text" maxlength="120" autocomplete="off" placeholder="alias de tu ~/.ssh/config (con su ProxyJump) o usuario@host"></label>
+      <label class="campo" id="proveedor-url-campo">Dirección <input id="proveedor-url" type="text" maxlength="300" autocomplete="off"></label>
+      <label class="campo" id="proveedor-clave-campo">Clave de API <input id="proveedor-clave" type="password" maxlength="500" autocomplete="off"></label>
+      <p id="proveedor-nota" class="detalle"></p>
+      <span id="proveedores-aviso" class="aviso-dialogo" role="status"></span>
+      <div class="acciones">
+        <button value="cerrar" formnovalidate class="boton secundario">Cerrar</button>
+        <button id="proveedor-anadir" type="button" class="boton">Añadir</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Lo que pregunta ssh al abrir un túnel: la huella del servidor (primer contacto) o una contraseña. -->
+  <dialog id="ssh" class="perfil" aria-labelledby="ssh-titulo">
+    <form id="ssh-form" method="dialog">
+      <h2 id="ssh-titulo"></h2>
+      <pre id="ssh-texto" class="ssh-texto"></pre>
+      <label class="campo" id="ssh-clave-campo">Contraseña <input id="ssh-clave" type="password" autocomplete="off"></label>
+      <div class="acciones">
+        <button value="no" formnovalidate class="boton secundario">Cancelar</button>
+        <button value="si" id="ssh-si" class="boton">Conectar</button>
       </div>
     </form>
   </dialog>

@@ -8,19 +8,29 @@ type EstadoQwen =
   | { fase: "cargando" | "listo" | "escribiendo" }
   | { fase: "ejecutando" | "esperando-aprobacion" | "error"; detalle: string };
 interface Conversacion {
-  id: string; nombre: string; rol: string; color: string; proveedor: "qwen" | "ollama"; modelo: string; herramientas: boolean; libre?: boolean;
+  id: string; nombre: string; rol: string; color: string; proveedor: string; modelo: string; herramientas: boolean; libre?: boolean;
+  origen: "local" | "nube" | "remoto"; donde: string;
   estado: EstadoQwen; ultimo?: MensajeChat;
 }
-interface Modelo { proveedor: "qwen" | "ollama"; modelo: string; detalle: string; herramientas: boolean }
+interface Modelo { proveedor: string; modelo: string; valor: string; detalle: string; herramientas: boolean; origen: "local" | "nube" | "remoto"; donde: string; aviso?: string }
 interface Identidad { nombre: string; rol: string; color: string; modelo: string; herramientas: string[]; instrucciones: string }
+interface Gasto { tope?: number; precio?: { entrada: number | string; salida: number | string } }
+interface ProveedorVista { id: string; nombre: string; tipo: string; url?: string; ssh?: string; conClave: boolean; donde: string; remoto: boolean }
 interface Plantilla extends Identidad { id: string; procedimientos: string[] }
 declare const discalaves: {
   conversaciones(): Promise<Conversacion[]>;
   modelos(): Promise<{ modelos: Modelo[]; ollama: boolean }>;
   plantillas(): Promise<Plantilla[]>;
-  empleado(id: string): Promise<(Identidad & { procedimientos: { nombre: string; descripcion: string }[] }) | undefined>;
-  crearEmpleado(datos: Identidad, plantilla?: string): Promise<{ id?: string; error?: string }>;
-  guardarEmpleado(id: string, datos: Identidad): Promise<{ error?: string }>;
+  empleado(id: string): Promise<(Identidad & { procedimientos: { nombre: string; descripcion: string }[]; tope: number; gastado: number; precio?: { entrada: number; salida: number } }) | undefined>;
+  crearEmpleado(datos: Identidad & Gasto, plantilla?: string): Promise<{ id?: string; error?: string }>;
+  guardarEmpleado(id: string, datos: Identidad & Gasto): Promise<{ error?: string }>;
+  proveedores(): Promise<{ proveedores: ProveedorVista[]; almacen: boolean; codex: boolean }>;
+  guardarProveedor(datos: object): Promise<{ id?: string; error?: string }>;
+  borrarProveedor(id: string): Promise<{ error?: string }>;
+  probarProveedor(id: string): Promise<{ modelos?: number; error?: string }>;
+  codexSesion(): Promise<{ error?: string }>;
+  alPreguntaSsh(f: (p: { id: string; host: string; tipo: "huella" | "clave"; texto: string }) => void): void;
+  responderSsh(id: string, valor: string | null): Promise<void>;
   borradorEmpleado(descripcion: string): Promise<{ borrador?: Identidad; error?: string }>;
   abrirCarpeta(id: string): Promise<void>;
   historial(id: string): Promise<MensajeChat[]>;
@@ -138,7 +148,7 @@ function dibujarLista() {
     fila.setAttribute("aria-current", String(c.id === activa));
     const cuerpo = crear("span", "fila-cuerpo");
     const arriba = crear("span", "fila-arriba");
-    arriba.append(crear("span", "nombre", c.nombre), crear("span", "hora", ultimo ? horaCorta(ultimo.t) : ""));
+    arriba.append(crear("span", "nombre", c.nombre), ...marcaOrigen(c), crear("span", "hora", ultimo ? horaCorta(ultimo.t) : ""));
     const ocupado = !["listo", "cargando", "error"].includes(c.estado.fase);
     const vista = ocupado ? TEXTO_ESTADO[c.estado.fase] + "…" : c.rol || "sin rol";
     cuerpo.append(arriba, crear("span", "vista", vista));
@@ -148,6 +158,20 @@ function dibujarLista() {
   });
   document.getElementById("lista")!.replaceChildren(lente, ...filas); // la misma lente: conserva su posición
   moverLente(filas);
+}
+
+// Marca permanente: nube (proveedor externo) o servidor remoto del usuario; los locales no llevan marca.
+function marcaOrigen(c: Conversacion): Element[] {
+  if (c.origen === "local") return [];
+  const nube = c.origen === "nube";
+  const m = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  m.setAttribute("class", "origen");
+  m.setAttribute("viewBox", "0 0 24 24");
+  m.setAttribute("role", "img");
+  m.setAttribute("aria-label", nube ? `en la nube: ${c.donde}` : `en un servidor remoto: ${c.donde}`);
+  m.innerHTML = `<title>${nube ? "en la nube" : "servidor remoto"}: ${c.donde.replace(/[<&]/g, "")}</title>` +
+    (nube ? '<path d="M7 18h10a4 4 0 0 0 0-8 6 6 0 0 0-11.5 1.5A3.3 3.3 0 0 0 7 18z"/>' : '<rect x="4" y="4" width="16" height="7" rx="1.5"/><rect x="4" y="13" width="16" height="7" rx="1.5"/><path d="M8 7.5h.01M8 16.5h.01"/>');
+  return [m];
 }
 
 function resumen(m: MensajeChat): string {
@@ -216,7 +240,8 @@ function dibujarEstado() {
   const c = actual();
   const e = c.estado;
   const el = document.getElementById("cab-estado")!;
-  const texto = e.fase === "listo" && c.proveedor === "ollama" ? "en línea · local (Ollama)" : TEXTO_ESTADO[e.fase];
+  const lugar = c.origen === "nube" ? `nube (${c.donde})` : c.origen === "remoto" ? `servidor remoto (${c.donde})` : c.proveedor === "ollama" ? "local (Ollama)" : "local";
+  const texto = e.fase === "listo" ? `en línea · ${lugar}` : TEXTO_ESTADO[e.fase];
   el.textContent = "detalle" in e ? `${texto}: ${e.detalle}` : texto;
   if (!c.herramientas) el.append(" · ", crear("strong", "", "solo chat"));
   el.dataset.fase = e.fase;
@@ -418,6 +443,40 @@ const campo = <T extends HTMLElement>(id: string) => document.getElementById(`em
 const avisoEmpleado = campo<HTMLElement>("aviso");
 let edicion: { modo: "plantilla" | "describir" | "editar"; plantilla?: string; id?: string } = { modo: "describir" };
 
+// Modelos agrupados por origen; el de la nube o servidor remoto lleva su aviso de privacidad.
+let modelos: Modelo[] = [];
+async function llenarModelos() {
+  const select = campo<HTMLSelectElement>("modelo");
+  const antes = select.value;
+  modelos = (await discalaves.modelos()).modelos;
+  const grupos = new Map<string, HTMLOptGroupElement>();
+  for (const m of modelos) {
+    const titulo = m.origen === "local" ? "en este equipo" : `${m.origen === "nube" ? "nube" : "servidor remoto"}: ${m.donde}`;
+    let g = grupos.get(titulo);
+    if (!g) grupos.set(titulo, (g = Object.assign(document.createElement("optgroup"), { label: titulo })));
+    const nombre = m.proveedor === "qwen" ? "qwen (incluido)" : m.modelo.replace(/:latest$/, "");
+    g.append(Object.assign(document.createElement("option"), { value: m.valor, textContent: `${nombre}${m.herramientas ? "" : " — solo chat"}${m.proveedor === "codex" ? " — no oficial" : ""}` }));
+  }
+  select.replaceChildren(...grupos.values());
+  if (modelos.some((m) => m.valor === antes)) select.value = antes;
+  dibujarNube();
+}
+
+// Aviso de privacidad (con casilla obligatoria) y gasto: solo para modelos fuera de este equipo.
+let modeloGuardado = "";
+function dibujarNube() {
+  const valor = campo<HTMLSelectElement>("modelo").value;
+  const m = modelos.find((x) => x.valor === valor);
+  const fuera = !!m && m.origen !== "local";
+  campo<HTMLElement>("nube").hidden = !fuera;
+  campo<HTMLElement>("privacidad").textContent = m?.aviso ?? "";
+  const entiendo = campo<HTMLInputElement>("entiendo");
+  entiendo.required = fuera && valor !== modeloGuardado; // se confirma al asignar un origen nuevo
+  entiendo.checked = fuera && valor === modeloGuardado;
+  campo<HTMLElement>("gasto").hidden = !valor.startsWith("nube:");
+}
+campo<HTMLSelectElement>("modelo").addEventListener("change", dibujarNube);
+
 function rellenar(i: Identidad) {
   campo<HTMLInputElement>("nombre").value = i.nombre;
   campo<HTMLInputElement>("rol").value = i.rol;
@@ -438,6 +497,10 @@ function leerFormulario(): Identidad {
     instrucciones: campo<HTMLTextAreaElement>("instrucciones").value,
   };
 }
+function leerGasto(): Gasto {
+  const v = (id: string) => campo<HTMLInputElement>(id).value;
+  return { tope: Number(v("tope")) || undefined, precio: v("precio-entrada") !== "" && v("precio-salida") !== "" ? { entrada: v("precio-entrada"), salida: v("precio-salida") } : undefined };
+}
 
 async function abrirDialogoEmpleado(d: { modo: "plantilla"; plantilla: Plantilla } | { modo: "describir" } | { modo: "editar"; id: string }) {
   // Opciones fijas (colores, herramientas) y los modelos que haya ahora mismo.
@@ -453,19 +516,15 @@ async function abrirDialogoEmpleado(d: { modo: "plantilla"; plantilla: Plantilla
     crear("span", "subtitulo", "adicionales: actívalas solo si el puesto las necesita"),
     ...casillas(NOMBRES_ADICIONALES),
   );
-  const { modelos } = await discalaves.modelos();
-  campo<HTMLSelectElement>("modelo").replaceChildren(
-    ...modelos.map((m) =>
-      Object.assign(document.createElement("option"), {
-        value: m.proveedor === "qwen" ? "qwen" : `ollama:${m.modelo}`,
-        textContent: m.proveedor === "qwen" ? "qwen (incluido)" : `${m.modelo.replace(/:latest$/, "")}${m.herramientas ? "" : " — solo chat"}`,
-      }),
-    ),
-  );
+  await llenarModelos();
   avisoEmpleado.textContent = "";
   campo<HTMLElement>("redactando").textContent = "";
   campo<HTMLElement>("describir").hidden = d.modo !== "describir";
   campo<HTMLTextAreaElement>("descripcion").value = "";
+  modeloGuardado = "";
+  for (const id of ["precio-entrada", "precio-salida"]) campo<HTMLInputElement>(id).value = "";
+  campo<HTMLInputElement>("tope").value = "13";
+  campo<HTMLElement>("gastado").textContent = "";
   if (d.modo === "plantilla") {
     edicion = { modo: "plantilla", plantilla: d.plantilla.id };
     campo<HTMLElement>("titulo").textContent = `Nuevo empleado: ${d.plantilla.nombre}`;
@@ -479,8 +538,16 @@ async function abrirDialogoEmpleado(d: { modo: "plantilla"; plantilla: Plantilla
     if (!e) return;
     edicion = { modo: "editar", id: d.id };
     campo<HTMLElement>("titulo").textContent = `Perfil de ${e.nombre}`;
+    modeloGuardado = e.modelo;
     rellenar(e);
+    campo<HTMLInputElement>("tope").value = String(e.tope);
+    if (e.precio) {
+      campo<HTMLInputElement>("precio-entrada").value = String(e.precio.entrada);
+      campo<HTMLInputElement>("precio-salida").value = String(e.precio.salida);
+    }
+    if (e.modelo.startsWith("nube:")) campo<HTMLElement>("gastado").textContent = `Gastado este mes: ${e.gastado.toFixed(2)} USD de ${e.tope} USD.`;
   }
+  dibujarNube();
   dialogoEmpleado.showModal();
   (d.modo === "describir" ? campo<HTMLTextAreaElement>("descripcion") : campo<HTMLInputElement>("nombre")).focus();
 }
@@ -500,7 +567,7 @@ campo<HTMLButtonElement>("redactar").addEventListener("click", async (ev) => {
 formEmpleado.addEventListener("submit", async (ev) => {
   if ((ev.submitter as HTMLButtonElement | null)?.value !== "guardar") return; // Cancelar cierra sin más
   ev.preventDefault();
-  const datos = leerFormulario();
+  const datos = { ...leerFormulario(), ...leerGasto() };
   const r =
     edicion.modo === "editar"
       ? await discalaves.guardarEmpleado(edicion.id!, datos)
@@ -624,6 +691,126 @@ botonLibre.addEventListener("click", async () => {
   const c = actual();
   c.libre = await discalaves.modoLibre(c.id, !c.libre);
   dibujarModoLibre();
+});
+
+// ---- Proveedores: APIs con clave, servidores propios y ChatGPT vía Codex ----
+const dialogoProveedores = document.getElementById("proveedores") as HTMLDialogElement;
+const pv = <T extends HTMLElement>(id: string) => document.getElementById(`proveedor-${id}`) as T;
+const avisoProveedores = document.getElementById("proveedores-aviso")!;
+const NOTAS: Record<string, string> = {
+  openai: "Clave de platform.openai.com. Se cobra por uso en tu cuenta de OpenAI.",
+  gemini: "Clave de Google AI Studio; se usa su API compatible con OpenAI.",
+  claude: "Clave de console.anthropic.com. Se cobra por uso en tu cuenta de Anthropic.",
+  compatible: "Dirección base de la API (por ejemplo https://openrouter.ai/api/v1) y su clave.",
+  remoto: "Tu propio servidor compatible con OpenAI (por ejemplo vLLM o llama-server) por HTTPS, con su clave.",
+  tunel: "Usa tu configuración SSH (alias, ProxyJump, llaves). Dirección = el servidor visto desde ese host, por ejemplo http://localhost:8000/v1. Si ssh pide contraseña o es el primer contacto, se te preguntará en una ventana; la contraseña no se guarda.",
+  codex: "No oficial para apps de terceros: puede dejar de funcionar. Necesita Codex instalado (npm i -g @openai/codex). Inicias sesión con el flujo oficial de OpenAI; Discalaves nunca ve tus credenciales. Sus herramientas propias quedan apagadas: solo usa las de su computadora.",
+};
+
+function dibujarTipo() {
+  const tipo = pv<HTMLSelectElement>("tipo").value;
+  pv<HTMLElement>("url-campo").hidden = !["compatible", "remoto", "tunel"].includes(tipo);
+  pv<HTMLElement>("ssh-campo").hidden = tipo !== "tunel";
+  pv<HTMLElement>("clave-campo").hidden = tipo === "codex";
+  pv<HTMLInputElement>("url").placeholder = tipo === "tunel" ? "http://localhost:8000/v1" : "https://servidor/v1";
+  pv<HTMLElement>("clave-campo").firstChild!.textContent = tipo === "tunel" ? "Clave del servidor (si tiene) " : "Clave de API ";
+  pv<HTMLElement>("nota").textContent = NOTAS[tipo] ?? "";
+}
+pv<HTMLSelectElement>("tipo").addEventListener("change", dibujarTipo);
+
+async function dibujarProveedores() {
+  const { proveedores, almacen, codex } = await discalaves.proveedores();
+  document.getElementById("proveedores-almacen")!.hidden = almacen;
+  pv<HTMLButtonElement>("anadir").disabled = !almacen;
+  const filas = proveedores.map((p) => {
+    const li = crear("li");
+    const resultado = crear("span", "resultado");
+    const boton = (texto: string, accion: () => Promise<void>, secundario = true) => {
+      const b = crear("button", `boton${secundario ? " secundario" : ""}`, texto) as HTMLButtonElement;
+      b.type = "button";
+      b.addEventListener("click", async () => {
+        b.disabled = true;
+        await accion();
+        b.disabled = false;
+      });
+      return b;
+    };
+    const probar = boton("probar", async () => {
+      resultado.textContent = p.tipo === "tunel" ? "abriendo el túnel…" : "consultando sus modelos…";
+      const r = await discalaves.probarProveedor(p.id);
+      resultado.textContent = r.error ?? `listo: ${r.modelos} modelos disponibles`;
+      if (!r.error && dialogoEmpleado.open) await llenarModelos();
+    });
+    const extra = p.tipo === "codex" ? [boton("iniciar sesión", async () => {
+      if (!codex) return void (resultado.textContent = "no encuentro Codex: instálalo con npm i -g @openai/codex");
+      resultado.textContent = "sigue el inicio de sesión en tu navegador…";
+      const r = await discalaves.codexSesion();
+      resultado.textContent = r.error ?? "sesión iniciada; pulsa «probar»";
+    })] : [];
+    const borrar = boton("quitar", async () => {
+      const r = await discalaves.borrarProveedor(p.id);
+      if (r.error) resultado.textContent = r.error;
+      else await dibujarProveedores();
+    });
+    li.append(crear("span", "nombre", p.nombre), crear("span", "detalle", `${p.remoto ? "servidor remoto" : "nube"} · ${p.donde}${p.conClave ? " · clave guardada" : ""}`), ...extra, probar, borrar, resultado);
+    return li;
+  });
+  document.getElementById("proveedores-lista")!.replaceChildren(...(filas.length ? filas : [crear("li", "detalle", "Todavía no hay ninguno: todos los empleados usan modelos de este equipo.")]));
+}
+
+async function abrirProveedores() {
+  avisoProveedores.textContent = "";
+  dibujarTipo();
+  await dibujarProveedores();
+  dialogoProveedores.showModal();
+}
+campo<HTMLButtonElement>("proveedores").addEventListener("click", () => void abrirProveedores());
+
+pv<HTMLButtonElement>("anadir").addEventListener("click", async () => {
+  const r = await discalaves.guardarProveedor({
+    tipo: pv<HTMLSelectElement>("tipo").value,
+    nombre: pv<HTMLInputElement>("nombre").value,
+    url: pv<HTMLInputElement>("url").value,
+    ssh: pv<HTMLInputElement>("ssh").value,
+    clave: pv<HTMLInputElement>("clave").value,
+  });
+  pv<HTMLInputElement>("clave").value = ""; // la clave no se queda en la interfaz
+  avisoProveedores.textContent = r.error ?? "guardado; pulsa «probar» para ver sus modelos";
+  if (r.error) return;
+  for (const id of ["nombre", "url", "ssh"]) pv<HTMLInputElement>(id).value = "";
+  await dibujarProveedores();
+});
+dialogoProveedores.addEventListener("close", () => {
+  pv<HTMLInputElement>("clave").value = "";
+  if (dialogoEmpleado.open) void llenarModelos();
+});
+
+// ---- Preguntas de ssh: huella del servidor (primer contacto) o contraseña, en una ventana propia ----
+const dialogoSsh = document.getElementById("ssh") as HTMLDialogElement;
+const claveSsh = document.getElementById("ssh-clave") as HTMLInputElement;
+let preguntaSsh: string | null = null;
+discalaves.alPreguntaSsh((p) => {
+  if (preguntaSsh) void discalaves.responderSsh(preguntaSsh, null); // una a la vez
+  preguntaSsh = p.id;
+  const huella = p.tipo === "huella";
+  document.getElementById("ssh-titulo")!.textContent = huella ? `Primer contacto con ${p.host}: ¿es el servidor correcto?` : `Contraseña para ${p.host}`;
+  document.getElementById("ssh-texto")!.textContent = huella
+    ? `${p.texto}\n\nCompara esta huella con la que te dio quien administra el servidor. Si no coincide, cancela.`
+    : p.texto;
+  document.getElementById("ssh-clave-campo")!.hidden = huella;
+  claveSsh.required = !huella;
+  claveSsh.value = "";
+  document.getElementById("ssh-si")!.textContent = huella ? "Sí, es el servidor correcto" : "Conectar";
+  dialogoSsh.showModal();
+  (huella ? document.getElementById("ssh-si")! : claveSsh).focus();
+});
+dialogoSsh.addEventListener("close", () => {
+  if (!preguntaSsh) return;
+  const si = dialogoSsh.returnValue === "si";
+  const huella = document.getElementById("ssh-clave-campo")!.hidden;
+  void discalaves.responderSsh(preguntaSsh, si ? (huella ? "yes" : claveSsh.value) : null);
+  claveSsh.value = ""; // la contraseña no se queda en la interfaz
+  preguntaSsh = null;
 });
 
 void seleccionar(activa).then(precargarEscritorios);

@@ -645,3 +645,25 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 .casilla { display: flex; align-items: center; gap: var(--e2); color: var(--tinta); font-size: var(--texto); }
 .casilla input { accent-color: var(--burbuja-mia); }
 .aviso-dialogo { min-height: 1em; font-size: var(--texto-chico); color: var(--notificacion-texto); }
+
+/* Proveedores fuera de este equipo (diálogos sólidos como el de empleado). */
+.enlace { align-self: flex-start; padding: 0; border: 0; background: none; color: var(--acento-azul); font-size: var(--texto-chico); cursor: pointer; text-decoration: underline; }
+.nube-campos { display: flex; flex-direction: column; gap: var(--e3); padding: var(--e3); border-radius: var(--radio-fila); background: var(--gris-suave); }
+.nube-campos[hidden] { display: none; }
+.privacidad { color: var(--tinta); font-size: var(--texto-chico); }
+.campos-triples { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--e3); }
+.campos-triples[hidden] { display: none; }
+.campo small { font-size: var(--texto-chico); }
+.campo[hidden] { display: none; }
+.subtitulo-dialogo { font-size: var(--texto); }
+.proveedores-lista { display: flex; flex-direction: column; gap: var(--e2); padding: 0; list-style: none; }
+.proveedores-lista li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--e2); padding: var(--e2) var(--e3); border: 1px solid var(--borde); border-radius: var(--radio-fila); }
+.proveedores-lista .nombre { font-weight: 600; }
+.proveedores-lista .detalle { flex: 1; min-width: 40%; }
+.proveedores-lista .boton { padding: var(--e1) var(--e3); font-size: var(--texto-chico); }
+.proveedores-lista .resultado { flex-basis: 100%; font-size: var(--texto-chico); color: var(--secundario); }
+.ssh-texto { max-height: 200px; overflow: auto; padding: var(--e3); border-radius: var(--radio-fila); background: var(--gris-suave); font: 12px/1.5 var(--fuente-mono); white-space: pre-wrap; word-break: break-word; }
+
+/* Marca permanente en la lista: empleado en la nube o en un servidor remoto del usuario. */
+.origen { flex: none; width: 14px; height: 14px; color: var(--secundario); }
+.origen path, .origen rect { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
