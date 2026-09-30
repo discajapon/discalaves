@@ -1035,7 +1035,7 @@ app.whenReady().then(() => {
   });
   gasto = new Gasto(datos);
   codex = new Codex(path.join(datos, "codex"));
-  // ponytail: contexto por empleado fijo en 16k (el servidor tiene 32k compartidos entre RANURAS)
+  // ponytail: 16k por empleado de OpenClaw; el servidor comparte 12k × RANURAS (-kvu), así que con varios a la vez puede faltar
   openclaw = new OpenClaw(path.join(datos, "openclaw"), { url: `http://127.0.0.1:${PUERTO}`, clave: CLAVE, modelo: QWEN_MODELO, contexto: 16384 }, puenteOpenClaw());
   migrarConversaciones();
   leerConversaciones();
