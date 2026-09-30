@@ -37,4 +37,5 @@ contextBridge.exposeInMainWorld("discalaves", {
   alRecibirTrozo: (f: (trozo: unknown) => void) => ipcRenderer.on("trozo", (_e, trozo) => f(trozo)),
   alPaso: (f: (id: string) => void) => ipcRenderer.on("paso", (_e, id) => f(id)),
   alAprobacion: (f: (p: unknown) => void) => ipcRenderer.on("aprobacion", (_e, p) => f(p)),
+  alEquipo: (f: (activos: string[]) => void) => ipcRenderer.on("equipo", (_e, activos) => f(activos)),
 });

@@ -398,7 +398,8 @@ const aprobaciones = new Map<string, { conversacion: string; resolver: (si: bool
 function pedirAprobacion(c: Conversacion, interfaz: Electron.WebContents, descripcion: string): Promise<boolean> {
   const id = randomBytes(8).toString("hex");
   cambiarEstado(c, { fase: "esperando-aprobacion", detalle: descripcion });
-  interfaz.send("aprobacion", { id, conversacion: c.id, descripcion });
+  const enHilo = [...abiertas.values()].some((col) => col.some((x) => x.id === c.id && !x.hasta));
+  interfaz.send("aprobacion", { id, conversacion: c.id, descripcion, enHilo });
   return new Promise((resolver) => aprobaciones.set(id, { conversacion: c.id, resolver }));
 }
 ipcMain.handle("aprobar", (_e, id: unknown, si: unknown) => {
@@ -410,6 +411,10 @@ ipcMain.handle("aprobar", (_e, id: unknown, si: unknown) => {
 // (un comando no se mata a medias) y después ya no sigue.
 const tareas = new Map<string, AbortController>();
 ipcMain.handle("detener", (_e, id: unknown) => {
+  if (id === HILO) return [...abiertas.keys()].forEach(detener);
+  detener(id);
+});
+function detener(id: unknown) {
   const parar = tareas.get(String(id));
   parar?.abort();
   for (const [clave, a] of aprobaciones) {
@@ -418,7 +423,7 @@ ipcMain.handle("detener", (_e, id: unknown) => {
     a.resolver(false); // una aprobación pendiente cuenta como "no"
     aprobaciones.delete(clave);
   }
-});
+}
 
 // Vista en vivo: el cliente web de KasmVNC de cada escritorio. La interfaz tiene un iframe por empleado siempre
 // conectado, así cambiar de empleado es instantáneo (decisión del usuario, 2026-09-30: prima la inmediatez
@@ -468,9 +473,20 @@ ipcMain.handle("modo-libre", (_e, id: unknown, activo: unknown) => {
   equipo.cambiarLibre(c.id, activo === true);
   return activo === true;
 });
-ipcMain.handle("conversaciones", () => (leerConversaciones(), conversaciones).map((c) => ({ ...c, estado: estadoDe(c), ultimo: historialDe(c.id).at(-1) })));
-ipcMain.handle("historial", (_e, id: unknown) => (buscar(id) ? historialDe(String(id)) : []));
+ipcMain.handle("conversaciones", () => {
+  const lista = (leerConversaciones(), conversaciones).map((c) => ({ ...c, estado: estadoDe(c), ultimo: historialDe(c.id).at(-1) }));
+  if (lista.length < 2) return lista;
+  const participantes = [...new Set(leerColaboraciones().flat().map((x) => x.id))];
+  const hilo = {
+    id: HILO, nombre: "Equipo", rol: "hilo compartido del equipo", color: "violeta", proveedor: "equipo", modelo: "", herramientas: false,
+    origen: "local", donde: "", estado: estadoHilo(), ultimo: hiloEquipo().at(-1), equipo: true,
+    colores: [...new Set((participantes.length ? participantes : lista.map((c) => c.id)).map((id) => lista.find((c) => c.id === id)?.color).filter(Boolean))].slice(0, 3),
+  };
+  return [hilo, ...lista];
+});
+ipcMain.handle("historial", (_e, id: unknown) => (id === HILO ? (leerConversaciones(), hiloEquipo()) : buscar(id) ? historialDe(String(id)) : []));
 ipcMain.handle("estado", (_e, id: unknown) => {
+  if (id === HILO) return estadoHilo();
   const c = buscar(id);
   return c ? estadoDe(c) : { fase: "error", detalle: "conversación desconocida" };
 });
@@ -692,6 +708,74 @@ ipcMain.handle("borrador-empleado", async (_e, descripcion: unknown) => {
   }
 });
 
+// ---- Hilo compartido "Equipo": donde se ve a los empleados colaborar ----
+// No copia mensajes: guarda los TRAMOS de cada colaboración (qué empleado, desde y hasta cuándo) y el hilo se
+// arma con los mensajes de sus historiales dentro de esos tramos. Una colaboración empieza cuando un empleado le
+// pasa trabajo a otro (o cuando el usuario escribe desde el hilo Equipo) y la forman la tarea que le encargó el
+// usuario (la raíz) y las que se pasan por el camino.
+const HILO = "_equipo"; // no choca con un empleado: sus ids empiezan por letra
+interface Tramo { id: string; desde: number; hasta?: number }
+type MensajeHilo = (Mensaje | { de: "separador"; texto: string; t: number }) & { quien?: string; a?: string };
+const archivoHilo = () => path.join(carpetaConversaciones(), `${HILO}.json`);
+let colaboraciones: Tramo[][] | undefined;
+const abiertas = new Map<string, Tramo[]>(); // raíz (empleado al que el usuario le encargó la tarea) → sus tramos
+const comienzos = new Map<string, number>(); // raíz → cuándo empezó su tarea
+
+function leerColaboraciones(): Tramo[][] {
+  try {
+    return (colaboraciones ??= JSON.parse(fs.readFileSync(archivoHilo(), "utf8")));
+  } catch {
+    return (colaboraciones = []);
+  }
+}
+function guardarColaboraciones() {
+  fs.mkdirSync(carpetaConversaciones(), { recursive: true });
+  fs.writeFileSync(archivoHilo(), JSON.stringify(leerColaboraciones(), null, 2));
+  ventana?.webContents.send("equipo", [...abiertas.values()].flat().filter((x) => !x.hasta).map((x) => x.id));
+  ventana?.webContents.send("estado", { id: HILO, estado: estadoHilo() });
+}
+const estadoHilo = (): Estado => (abiertas.size ? { fase: "escribiendo" } : { fase: "listo" });
+
+// Abre (o sigue) la colaboración de una raíz; la primera vez incluye a la raíz desde que empezó su tarea.
+function colaboracion(raiz: string): Tramo[] {
+  let col = abiertas.get(raiz);
+  if (!col) {
+    col = [{ id: raiz, desde: comienzos.get(raiz) ?? Date.now() }];
+    abiertas.set(raiz, col);
+    leerColaboraciones().push(col);
+  }
+  return col;
+}
+function cerrarColaboracion(raiz: string) {
+  const col = abiertas.get(raiz);
+  if (!col) return;
+  abiertas.delete(raiz);
+  for (const x of col) x.hasta ??= Date.now();
+  guardarColaboraciones();
+}
+
+// El hilo: los mensajes de cada tramo, en orden, con quién los dijo. El encargo que un empleado le pasa a otro
+// se ve como un mensaje suyo dirigido al otro (no se repite su llamada a pasar_trabajo con la respuesta).
+function hiloEquipo(): MensajeHilo[] {
+  const nombre = (id: string) => conversaciones.find((c) => c.id === id)?.nombre ?? id;
+  return leerColaboraciones().flatMap((col) => {
+    const mensajes = col.flatMap((x) =>
+      historialDe(x.id)
+        .filter((m) => m.t >= x.desde && m.t <= (x.hasta ?? Infinity))
+        .filter((m) => !(m.de === "herramienta" && m.nombre === "pasar_trabajo"))
+        .map((m): MensajeHilo => {
+          const encargo = m.de === "yo" && m.texto.match(/^\(tarea de (.+?)\) ([\s\S]*)$/);
+          if (encargo) return { de: "ia", texto: encargo[2], t: m.t, quien: conversaciones.find((c) => c.nombre === encargo[1])?.id ?? encargo[1], a: x.id };
+          return m.de === "yo" ? { ...m, a: x.id } : { ...m, quien: x.id };
+        }),
+    );
+    if (!mensajes.length) return [];
+    const quienes = [...new Set(col.map((x) => nombre(x.id)))];
+    const titulo = quienes.length > 1 ? `${quienes.slice(0, -1).join(", ")} y ${quienes.at(-1)}` : quienes[0];
+    return [{ de: "separador" as const, texto: titulo, t: col[0].desde }, ...mensajes.sort((a, b) => a.t - b.t)];
+  });
+}
+
 // Las herramientas del perfil (procedimientos y memoria) se resuelven aquí; el resto, en su computadora.
 // Una herramienta que no es de su puesto no se ejecuta aunque el modelo la pida.
 async function usarHerramienta(c: Conversacion, l: Llamada, interfaz: Electron.WebContents, parar: AbortController, cadena: string[]) {
@@ -716,13 +800,21 @@ async function usarHerramienta(c: Conversacion, l: Llamada, interfaz: Electron.W
     if (!otro) return { salida: `no hay ningún compañero llamado "${texto("empleado")}". Tienes: ${conversaciones.filter((o) => o.id !== c.id).map((o) => o.nombre).join(", ")}.`, codigo: 1 };
     if (cadena.includes(otro.id)) return { salida: `${otro.nombre} está esperando tu resultado: no puede encargarse de esto ahora.`, codigo: 1 };
     if (!texto("tarea").trim()) return { salida: "falta la tarea", codigo: -1 };
+    // Con varios trabajando a la vez: su hilo es de una tarea cada vez.
+    if (trabajando.has(otro.id)) return { salida: `${otro.nombre} está ocupado con otra tarea; espera a que termine o encárgaselo a otro compañero.`, codigo: 1 };
     cambiarEstado(c, { fase: "ejecutando", detalle: `esperando a ${otro.nombre}` });
+    const tramo: Tramo = { id: otro.id, desde: Date.now() };
+    colaboracion(cadena[0] ?? c.id).push(tramo);
+    guardarColaboraciones();
     try {
       const respuesta = await tarea(otro, `(tarea de ${c.nombre}) ${texto("tarea").trim()}`, interfaz, parar, [...cadena, c.id]);
       return { salida: `${otro.nombre} respondió:\n${respuesta.slice(0, 4000)}`, codigo: 0 };
     } catch (e) {
       if (parar.signal.aborted) throw e;
       return { salida: `${otro.nombre} no pudo hacerlo: ${(e as Error).message}`, codigo: 1 };
+    } finally {
+      tramo.hasta = Date.now();
+      guardarColaboraciones();
     }
   }
   return ejecutarHerramienta(
@@ -732,9 +824,25 @@ async function usarHerramienta(c: Conversacion, l: Llamada, interfaz: Electron.W
   );
 }
 
+// Desde el hilo Equipo el mensaje empieza por @nombre: va a ese empleado y se ve en el hilo desde el principio.
+function destinatario(entrada: string): { c: Conversacion; texto: string } | null {
+  const t = entrada.replace(/^@/, "").toLowerCase();
+  const c = conversaciones
+    .filter((o) => t.startsWith(o.nombre.toLowerCase()) && /^($|[\s,:])/.test(t.slice(o.nombre.length)))
+    .sort((a, b) => b.nombre.length - a.nombre.length)[0];
+  return c ? { c, texto: entrada.replace(/^@/, "").slice(c.nombre.length).replace(/^[\s,:]+/, "") } : null;
+}
+
 ipcMain.handle("enviar", async (ev, id: unknown, entrada: unknown) => {
-  const c = buscar(id);
-  const texto = typeof entrada === "string" ? entrada.trim().slice(0, 8000) : "";
+  let texto = typeof entrada === "string" ? entrada.trim().slice(0, 8000) : "";
+  let c = buscar(id);
+  const desdeHilo = id === HILO;
+  if (desdeHilo) {
+    leerConversaciones();
+    const d = texto.startsWith("@") ? destinatario(texto) : null;
+    if (!d) return { error: "empieza con @ y el nombre del empleado, por ejemplo: @Investigador busca…" };
+    ({ c, texto } = d);
+  }
   if (!c || !texto) return { error: "mensaje vacío" };
   if (estadoDe(c).fase !== "listo") return { error: `${c.nombre} no está listo` };
   // Los de qwen trabajan a la vez (ranuras de llama-server). Ollama carga otro modelo en la misma VRAM: no
@@ -742,6 +850,11 @@ ipcMain.handle("enviar", async (ev, id: unknown, entrada: unknown) => {
   const otra = c.origen === "local" && conversaciones.find((o) => o.origen === "local" && trabajando.has(o.id) && (o.proveedor === "ollama" || c.proveedor === "ollama"));
   if (otra) return { error: `${otra.nombre} está trabajando; espera a que termine` };
   const parar = new AbortController();
+  comienzos.set(c.id, Date.now());
+  if (desdeHilo) {
+    colaboracion(c.id);
+    guardarColaboraciones();
+  }
   try {
     await tarea(c, texto, ev.sender, parar);
     return {};
@@ -752,6 +865,9 @@ ipcMain.handle("enviar", async (ev, id: unknown, entrada: unknown) => {
     if (e instanceof Corte) return { error: `${c.nombre} se detuvo: ${m}` };
     const detalle = c.proveedor === "ollama" && m === "fetch failed" ? "Ollama no responde; ¿está en marcha?" : m;
     return { error: `no pude obtener respuesta: ${detalle}` };
+  } finally {
+    comienzos.delete(c.id);
+    cerrarColaboracion(c.id);
   }
 });
 
