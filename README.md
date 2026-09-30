@@ -75,6 +75,19 @@ Grok Bot.
 - **Uso de memoria RAM:** con el modelo cargado y varios escritorios
   abiertos, 16 GB se quedan justos.
 
+## Modelos fuera de tu equipo (opcional)
+
+Por defecto todo es local. Si quieres, puedes asignar a un empleado una API con
+clave (OpenAI, Gemini, Claude u otra compatible con OpenAI), un servidor tuyo
+(por URL o túnel SSH) o ChatGPT vía Codex. La app te avisa qué datos salen y
+hacia dónde, marca a esos empleados en la lista y nunca cambia su origen sola.
+
+- Codex (ChatGPT) no es oficial y puede dejar de funcionar. Lo instalas tú
+  aparte y respondes por cumplir los términos de OpenAI.
+- Claude por suscripción no está soportado: las condiciones de Anthropic no lo
+  permiten a apps de terceros. Claude funciona con clave de API.
+- Solo se ha probado con servidores falsos locales, no con proveedores reales.
+
 ## Principios
 
 - **Cero fricción.** Un instalador nativo que trae todo lo necesario. Sin
