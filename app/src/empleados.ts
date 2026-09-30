@@ -7,11 +7,14 @@
 // modo libre y si su modelo sabe usar herramientas.
 import fs from "node:fs";
 import path from "node:path";
+import { ADICIONALES_OC, PRINCIPALES_OC } from "./openclaw";
 
 // Principales: las que traen las plantillas. Adicionales: apagadas al principio; el usuario las activa por empleado.
 export const PRINCIPALES = ["terminal", "escribir_archivo", "buscar_web", "abrir_pagina", "ver_pagina", "hacer_clic", "escribir_en"];
 export const ADICIONALES = ["leer_archivo", "editar_archivo", "leer_web", "preguntar", "pasar_trabajo"];
 export const HERRAMIENTAS = [...PRINCIPALES, ...ADICIONALES];
+// Nombres válidos en el perfil: los del bucle propio y los de OpenClaw (cada motor usa los suyos).
+const TODAS = [...HERRAMIENTAS, ...PRINCIPALES_OC, ...ADICIONALES_OC];
 export const COLORES = ["violeta", "turquesa", "naranja", "azul", "rojizo"];
 const MAX_MEMORIA = 1500; // caracteres de memoria que van al prompt (las notas más recientes)
 const MAX_PROCEDIMIENTO = 6000;
@@ -23,6 +26,7 @@ export interface Identidad {
   modelo: string; // "qwen", "ollama:<modelo>", "nube:<proveedor>:<modelo>" o "codex:<modelo>" (ver main.ts)
   herramientas: string[];
   instrucciones: string; // tono y reglas del puesto
+  motor?: "openclaw"; // quién hace el bucle del agente: OpenClaw (openclaw.ts) o, sin campo, el propio de main.ts
 }
 export interface Entrada { id: string; usuario: string; libre?: boolean; herramientasModelo: boolean; tope?: number } // tope: USD al mes (nube)
 export interface Empleado extends Identidad, Entrada {}
@@ -48,8 +52,9 @@ export function leerIdentidad(texto: string): Identidad {
     rol: c.rol || "",
     color: COLORES.includes(c.color) ? c.color : "violeta",
     modelo: c.modelo || "qwen",
-    herramientas: (c.herramientas ?? "").split(",").map((h) => h.trim()).filter((h) => HERRAMIENTAS.includes(h)),
+    herramientas: (c.herramientas ?? "").split(",").map((h) => h.trim()).filter((h) => TODAS.includes(h)),
     instrucciones: cuerpo,
+    ...(c.motor === "openclaw" && { motor: "openclaw" as const }),
   };
 }
 
@@ -57,7 +62,8 @@ export function textoIdentidad(i: Identidad): string {
   const linea = (s: string) => s.replace(/\s*\n\s*/g, " ").trim(); // una línea por campo
   return (
     `---\nnombre: ${linea(i.nombre)}\nrol: ${linea(i.rol)}\ncolor: ${i.color}\nmodelo: ${linea(i.modelo)}\n` +
-    `herramientas: ${i.herramientas.filter((h) => HERRAMIENTAS.includes(h)).join(", ")}\n---\n\n${i.instrucciones.trim()}\n`
+    (i.motor === "openclaw" ? "motor: openclaw\n" : "") +
+    `herramientas: ${i.herramientas.filter((h) => TODAS.includes(h)).join(", ")}\n---\n\n${i.instrucciones.trim()}\n`
   );
 }
 

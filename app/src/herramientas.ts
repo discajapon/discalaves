@@ -135,7 +135,7 @@ export interface Contexto {
 // Acciones delicadas (borrar, enviar, pagar): necesitan la aprobación explícita del usuario.
 // ponytail: detección por palabras clave; puede dejar pasar acciones delicadas con otros nombres.
 const DELICADO = /\b(enviar|env[ií]a|send|pagar|pago|pay|comprar|compra|buy|checkout|publicar|post|borrar|eliminar|delete|remove|confirmar|confirm|suscrib|subscribe|transferir|donar|donate)/i;
-const BORRADO = /(^|[\s;&|(`\/])(rm|rmdir|shred|unlink)(\s|$)|\s-delete\b/; // también tras sudo, xargs, -exec o /bin/
+export const BORRADO = /(^|[\s;&|(`\/])(rm|rmdir|shred|unlink)(\s|$)|\s-delete\b/; // también tras sudo, xargs, -exec o /bin/
 const BUSQUEDA = /busca|search|buscar|consulta|query|\bq\b/i;
 
 const MAX_LECTURA = 6000; // caracteres de un archivo o página que ve el modelo (desde el principio)
