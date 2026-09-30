@@ -15,15 +15,16 @@ import { execFileSync, spawn } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { hayDocker } from "./instalar";
 import { DISTRO, rutas, UID_DISTRO, USUARIO_DISTRO } from "./rutas";
 import { apagarDistro, distroEnMarcha, estadoWsl, wslLista } from "./wsl";
 
 // Cómo se invoca al motor en cada sistema.
-export function ordenMotor(plataforma: string, motorElegido?: string): string[] {
+export function ordenMotor(plataforma: string, motorElegido?: string, dockerUsable = true): string[] {
   if (plataforma === "win32") return ["wsl.exe", "-d", DISTRO, "-u", USUARIO_DISTRO, "--", "podman"];
-  return [motorElegido || "docker"];
+  return [motorElegido || (dockerUsable ? "docker" : "podman")]; // sin Docker usable (el instalador trae Podman)
 }
-const ORDEN = ordenMotor(process.platform, process.env.DISCALAVES_MOTOR);
+const ORDEN = ordenMotor(process.platform, process.env.DISCALAVES_MOTOR, process.platform !== "linux" || process.env.DISCALAVES_MOTOR !== undefined || hayDocker());
 const MOTOR = ORDEN.at(-1)!; // docker o podman (para los mensajes)
 const PODMAN = MOTOR === "podman";
 const IMAGEN = "discalaves-computadora";

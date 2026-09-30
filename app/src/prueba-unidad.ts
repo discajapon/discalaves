@@ -6,7 +6,11 @@ import { textoDeHtml, verificar } from "./herramientas";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { createHash } from "node:crypto";
+import http from "node:http";
+import { execFileSync } from "node:child_process";
 import { ordenMotor } from "./computadora";
+import { bajar, extraer } from "./instalar";
 import { rutasPara } from "./rutas";
 import { distrosDe, textoWsl } from "./wsl";
 
@@ -42,6 +46,7 @@ assert.equal(conIA.datos, "C:\\L\\Discalaves\\datos");
 // Motor de contenedores por sistema: nada de Docker Desktop en Windows.
 assert.deepEqual(ordenMotor("linux"), ["docker"]);
 assert.deepEqual(ordenMotor("linux", "podman"), ["podman"]);
+assert.deepEqual(ordenMotor("linux", undefined, false), ["podman"], "sin Docker usable, Podman");
 assert.deepEqual(ordenMotor("win32"), ["wsl.exe", "-d", "discalaves", "-u", "discalaves", "--", "podman"]);
 assert.deepEqual(ordenMotor("win32", "docker"), ordenMotor("win32"), "en Windows DISCALAVES_MOTOR no cambia a Docker");
 
@@ -98,4 +103,31 @@ const pagina = textoDeHtml("<html><head><title>Hola &amp; adi&oacute;s</title><s
 assert.equal(pagina.titulo, "Hola & adi&oacute;s");
 assert.equal(pagina.texto, "Uno é\n- a\n- b");
 
-console.log("unidad: ok");
+// Instalación: descarga verificada y reanudable contra un servidor local, y extracción aplanando la carpeta raíz.
+const bytes = Buffer.alloc(300_000, "discalaves");
+const hash = createHash("sha256").update(bytes).digest("hex");
+const servidor = http.createServer((req, res) => {
+  const desde = Number(/bytes=(\d+)-/.exec(req.headers.range ?? "")?.[1] ?? 0);
+  res.writeHead(desde ? 206 : 200, { "content-length": bytes.length - desde });
+  res.end(bytes.subarray(desde));
+}).listen(0);
+const url = `http://127.0.0.1:${(servidor.address() as import("node:net").AddressInfo).port}/x`;
+const tmpI = fs.mkdtempSync(path.join(os.tmpdir(), "discalaves-instalar-"));
+void (async () => {
+  await bajar(url, path.join(tmpI, "a"), hash, () => {}, "t");
+  assert.equal(fs.statSync(path.join(tmpI, "a")).size, bytes.length, "descarga completa");
+  fs.writeFileSync(path.join(tmpI, "b.parte"), bytes.subarray(0, 100_000)); // quedó a medias
+  await bajar(url, path.join(tmpI, "b"), hash, () => {}, "t");
+  assert.equal(createHash("sha256").update(fs.readFileSync(path.join(tmpI, "b"))).digest("hex"), hash, "reanuda desde donde se quedó");
+  await assert.rejects(bajar(url, path.join(tmpI, "c"), "0".repeat(64), () => {}, "t"), /no coincide/);
+  assert.ok(!fs.existsSync(path.join(tmpI, "c")) && !fs.existsSync(path.join(tmpI, "c.parte")), "un hash malo no deja archivo");
+  fs.mkdirSync(path.join(tmpI, "raiz", "llama-b1"), { recursive: true });
+  fs.writeFileSync(path.join(tmpI, "raiz", "llama-b1", "llama-server"), "x");
+  execFileSync("tar", ["-czf", path.join(tmpI, "r.tar.gz"), "-C", path.join(tmpI, "raiz"), "llama-b1"]);
+  fs.mkdirSync(path.join(tmpI, "dest"));
+  extraer(path.join(tmpI, "r.tar.gz"), path.join(tmpI, "dest"));
+  assert.deepEqual(fs.readdirSync(path.join(tmpI, "dest")), ["llama-server"], "aplana la carpeta raíz y no deja restos");
+  servidor.close();
+  fs.rmSync(tmpI, { recursive: true, force: true });
+  console.log("unidad: ok");
+})();
