@@ -155,8 +155,20 @@ imagen, ~2 min).
   propia por IA (en la compartida una IA llegaba al CDP de otra), y del
   equipo solo se monta su carpeta. Las claves de KasmVNC llegan en un
   archivo de un solo uso en su carpeta, que `iniciar.sh` lee y borra. Puertos (KasmVNC y CDP) publicados solo en
-  `127.0.0.1` con puerto aleatorio. `npm run prueba` comprueba el
-  aislamiento con contenedores reales, también entre dos IAs.
+  `127.0.0.1` con puerto aleatorio. **Red local cerrada** (2026-09-30):
+  en cada arranque, un contenedor auxiliar `discalaves-computadora-red`
+  (misma base Debian fijada + nftables, ~120 MB, el único con NET_ADMIN)
+  entra en la red de la computadora (`--network container:`) y carga
+  `reglasRed()`: pasan las respuestas a conexiones ya abiertas (pantalla y
+  CDP desde el equipo) y el DNS que el motor le asigna; lo nuevo hacia
+  rangos privados, locales, CGNAT y multidifusión (IPv4 e IPv6) se rechaza,
+  incluida la puerta de enlace, que es el propio equipo. La computadora no
+  tiene NET_ADMIN: ni su root con `sudo` (ni instalando nftables) puede
+  quitarlo. Si no se puede poner, la computadora no se enciende. No cambia
+  la imagen del empleado (no se recrea ninguna computadora). `npm run prueba`
+  comprueba el aislamiento con contenedores reales, también entre dos IAs,
+  y que no llega a un servicio del equipo ni al router pero sí a internet
+  (control negativo hecho a mano: sin reglas, ambos respondían 200).
 - Mediciones (RTX 3060 Ti, 16 GB de RAM): imagen base ~1,6 GB en disco
   (~410 MB comprimida); la capa de cada IA es mínima. Primera construcción
   ~2 min. Arranque hasta ver el escritorio en la app: ~6,5 s (KasmVNC listo
@@ -435,10 +447,11 @@ propia.
   traer un motor rootless propio. El demonio de Docker corre como root y
   estar en el grupo `docker` equivale a ser root. Pendiente: probar con
   Podman rootless (`DISCALAVES_MOTOR=podman`) y empaquetarlo.
-- **Red local:** los contenedores llegan a la red local de la casa (probado:
-  responde el router de la casa). No se añadieron reglas de firewall.
-  Los servicios del equipo que escuchan solo en 127.0.0.1 (llama-server,
-  Ollama) no son accesibles. El CDP y KasmVNC publicados en 127.0.0.1 los
+- **Red local:** cerrada con nftables por computadora (ver Endurecimiento);
+  probado en Linux con Docker. Sin probar con Podman rootless ni en WSL
+  (debería valer: el cortafuegos va en el espacio de red del contenedor). Una
+  web pública cuyo DNS apunte a una dirección privada tampoco se abre
+  (se rechaza por destino). El CDP y KasmVNC publicados en 127.0.0.1 los
   puede usar cualquier proceso local del usuario (KasmVNC pide clave; el CDP
   no).
 - **Windows sin probar:** falta pasar `PRUEBAS_WINDOWS.md` en una PC con GPU
