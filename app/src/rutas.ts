@@ -5,7 +5,7 @@
 // Windows: runtime, modelos y datos en %LOCALAPPDATA%\Discalaves (local, no se sincroniza con el perfil
 // itinerante); las carpetas de trabajo viven DENTRO de la distro WSL "discalaves" (montar carpetas de
 // Windows en WSL es muy lento) y la app las ve por la ruta de red \\wsl$\discalaves\….
-// DISCALAVES_IA sigue eligiendo dónde están el runtime y los modelos en los dos sistemas.
+// DISCALAVES_IA sigue eligiendo dónde están el runtime y los modelos en los dos sistemas; DISCALAVES_DATOS, los datos.
 import os from "node:os";
 import path from "node:path";
 
@@ -35,7 +35,7 @@ export function rutasPara(plataforma: string = process.platform, entorno: NodeJS
     ia,
     servidor: p.join(ia, "llama.cpp", windows ? "llama-server.exe" : "llama-server"),
     modelo: p.join(ia, "modelos", "Qwen3.5-9B-Q4_K_M.gguf"),
-    datos: windows ? p.join(base, "datos") : null,
+    datos: entorno.DISCALAVES_DATOS || (windows ? p.join(base, "datos") : null), // DISCALAVES_DATOS: una instancia aparte (pruebas)
     distro: windows ? p.join(base, "wsl") : null,
     trabajo: (usuario) =>
       windows ? `${red}\\home\\${USUARIO_DISTRO}\\trabajo\\${usuario}` : p.join(ia, "trabajo", usuario),

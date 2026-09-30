@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, session, shell } from "electron";
+import { app, BrowserWindow, ipcMain, safeStorage, session, shell } from "electron";
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import fs from "node:fs";
@@ -9,43 +9,113 @@ import { apagarTodas, computadoraDe, responde, type Computadora } from "./comput
 import { navegadorDe } from "./navegador";
 import { rutas } from "./rutas";
 import { registrarWsl } from "./ipc-wsl";
+import { Boveda, SinAlmacenSeguro } from "./boveda";
+import { Codex } from "./codex";
+import { Gasto, TOPE_POR_DEFECTO } from "./gasto";
+import { Corte, URL_POR_DEFECTO, esRemoto, listarModelos, sinClave, turnoClaude, turnoOpenAI, type ModeloNube, type Proveedor, type Tipo, type Uso } from "./proveedores";
+import { Tunel, destino, sshValido, type Pregunta } from "./tunel";
 
 // Rutas según el sistema (Linux o Windows): ver rutas.ts. ponytail: puerto fijo para un solo servidor.
 const SERVIDOR = rutas.servidor;
 const MODELO = rutas.modelo;
 if (rutas.datos) app.setPath("userData", rutas.datos); // Windows: datos locales, antes de usar userData
 const PUERTO = 8089;
+// Instancia con datos aparte (DISCALAVES_DATOS, p. ej. las pruebas): no apaga las computadoras de otra instancia.
+const APARTE = !!process.env.DISCALAVES_DATOS;
 const CLAVE = randomBytes(24).toString("hex"); // sin clave, cualquier web abierta en el navegador podría usar el servidor
 const CONTEXTO_CARACTERES = 32000; // ponytail: ventana por tamaño (~9k tokens de 16k); resumir cuando las conversaciones crezcan
 // Sin límite de pasos (decisión del usuario, 2026-09-27): la IA trabaja hasta acabar. Frenos: el botón
 // Detener y la detección de repeticiones (misma llamada con los mismos argumentos).
 const AVISO_REPETICION = 3; // a la 3.ª vez no se ejecuta: se le dice que cambie de enfoque
 const MAX_REPETICIONES = 5; // a la 5.ª se detiene y lo explica
-const OLLAMA = "http://127.0.0.1:11434"; // ponytail: dirección por defecto de Ollama; configurable cuando exista el gestor de modelos
+const OLLAMA = process.env.DISCALAVES_OLLAMA || "http://127.0.0.1:11434"; // ponytail: dirección por defecto de Ollama; configurable cuando exista el gestor de modelos
 const CONTEXTO_OLLAMA = 10000; // Ollama recorta por defecto a ~4k tokens: se le manda menos historial
 
-// Cada conversación es con un EMPLEADO (perfil en archivos, ver empleados.ts) asignado a un modelo: qwen
-// (llama-server incluido) o uno de Ollama. Todos los de qwen comparten el mismo modelo cargado.
+// Cada conversación es con un EMPLEADO (perfil en archivos, ver empleados.ts) asignado a un modelo (campo
+// "modelo" del perfil, que elige el usuario; la app nunca lo cambia por su cuenta):
+//   qwen                    llama-server incluido (todos los de qwen comparten el modelo cargado)
+//   ollama:<modelo>         Ollama del usuario
+//   nube:<proveedor>:<modelo> API con clave o servidor remoto del usuario (proveedores.ts, bóveda cifrada)
+//   codex:<modelo>          ChatGPT por suscripción vía Codex (codex.ts), con su propio bucle
 // libre: "modo libre", decisión del usuario por empleado (apagado por defecto): no pide aprobación.
+type Origen = "local" | "nube" | "remoto";
 interface Conversacion {
   id: string; nombre: string; rol: string; color: string; usuario: string; libre?: boolean;
-  proveedor: "qwen" | "ollama"; modelo: string; // modelo tal como lo pide la API
+  proveedor: "qwen" | "ollama" | "nube" | "codex"; modelo: string; // modelo tal como lo pide la API
+  cuenta?: string; // nube: id del proveedor en la bóveda
+  origen: Origen; donde: string; // para la marca de la lista y el aviso de privacidad
   herramientas: boolean; // el modelo sabe usar herramientas (si no, es "solo chat" aunque el perfil liste alguna)
   permitidas: string[]; // herramientas del puesto
+  tope: number; // USD al mes (solo nube)
 }
-interface Modelo { proveedor: "qwen" | "ollama"; modelo: string; detalle: string; herramientas: boolean }
+interface Modelo { proveedor: Conversacion["proveedor"]; modelo: string; valor: string; detalle: string; herramientas: boolean; origen: Origen; donde: string; aviso?: string }
 const QWEN_MODELO = "Qwen3.5-9B";
 
 function aConversacion(e: Empleado): Conversacion {
-  const ollama = e.modelo.startsWith("ollama:");
-  return {
-    id: e.id, nombre: e.nombre, rol: e.rol, color: e.color, usuario: e.usuario, libre: e.libre,
-    proveedor: ollama ? "ollama" : "qwen",
-    modelo: ollama ? e.modelo.slice("ollama:".length) : QWEN_MODELO,
-    herramientas: ollama ? e.herramientasModelo : true,
-    permitidas: e.herramientas,
-  };
+  const base = { id: e.id, nombre: e.nombre, rol: e.rol, color: e.color, usuario: e.usuario, libre: e.libre, permitidas: e.herramientas, tope: e.tope ?? TOPE_POR_DEFECTO };
+  const [prefijo, resto] = [e.modelo.slice(0, e.modelo.indexOf(":")), e.modelo.slice(e.modelo.indexOf(":") + 1)];
+  if (prefijo === "ollama") return { ...base, proveedor: "ollama", modelo: resto, origen: "local", donde: "Ollama", herramientas: e.herramientasModelo };
+  if (prefijo === "codex") return { ...base, proveedor: "codex", modelo: resto, origen: "nube", donde: "OpenAI (ChatGPT vía Codex)", herramientas: true };
+  if (prefijo === "nube") {
+    const cuenta = resto.slice(0, resto.indexOf(":"));
+    const p = proveedores().find((x) => x.id === cuenta);
+    return {
+      ...base, proveedor: "nube", cuenta, modelo: resto.slice(cuenta.length + 1), herramientas: e.herramientasModelo,
+      origen: p && esRemoto(p.tipo) ? "remoto" : "nube", donde: p ? dondeDe(p) : `${cuenta} (proveedor borrado)`,
+    };
+  }
+  return { ...base, proveedor: "qwen", modelo: QWEN_MODELO, origen: "local", donde: "este equipo", herramientas: true };
 }
+
+// ---- Proveedores fuera de este equipo: bóveda cifrada (claves), gasto, túneles y Codex ----
+let boveda: Boveda;
+let gasto: Gasto;
+let codex: Codex;
+const tuneles = new Map<string, Tunel>(); // por proveedor; se abren al usarlos y no se reconectan solos
+const modelosNube = new Map<string, ModeloNube[]>(); // última lista de cada proveedor
+const NOMBRE_TIPO: Record<Tipo, string> = { openai: "OpenAI", gemini: "Google (Gemini)", claude: "Anthropic (Claude)", compatible: "", remoto: "", tunel: "", codex: "OpenAI (ChatGPT vía Codex)" };
+
+let enMemoria: Proveedor[] | undefined; // descifrada una vez por sesión
+function proveedores(): Proveedor[] {
+  try {
+    return (enMemoria ??= boveda.leer());
+  } catch {
+    return []; // sin almacén seguro: no hay proveedores (la interfaz lo explica al intentar guardar uno)
+  }
+}
+const hostDe = (p: Proveedor) => (p.tipo === "tunel" ? p.ssh! : (() => { try { return new URL(p.url!).host; } catch { return p.url ?? ""; } })());
+const dondeDe = (p: Proveedor) => (esRemoto(p.tipo) ? hostDe(p) : NOMBRE_TIPO[p.tipo] || `${p.nombre} (${hostDe(p)})`);
+
+// Qué sale del equipo y hacia dónde: se muestra al asignar a un empleado un origen que no es local.
+function avisoPrivacidad(origen: Origen, donde: string): string | undefined {
+  const que = "la conversación, las páginas que lee, las salidas de su terminal, los archivos que abre y su memoria";
+  if (origen === "remoto") return `Los datos salen de este equipo hacia ${donde}, el servidor que configuraste: ${que}.`;
+  if (origen === "nube") return `Los datos salen de este equipo hacia ${donde}: ${que}. Se aplican sus condiciones de uso y privacidad.`;
+}
+
+// Base de la API de un proveedor; en túnel, lo abre (y ssh puede preguntar la huella o la contraseña).
+async function baseDe(p: Proveedor): Promise<string> {
+  if (p.tipo !== "tunel") return (p.url || URL_POR_DEFECTO[p.tipo] || "").replace(/\/$/, "");
+  let t = tuneles.get(p.id);
+  if (!t || t.caido) {
+    t = await Tunel.abrir(p.ssh!, p.url!, path.join(app.getPath("userData"), "ssh"), preguntarSsh);
+    tuneles.set(p.id, t);
+  }
+  return t.base(p.url!);
+}
+
+// Preguntas de ssh (huella del servidor, contraseña): ventana propia de la interfaz. La contraseña solo pasa por aquí.
+const preguntasSsh = new Map<string, (r: string | null) => void>();
+function preguntarSsh(p: Pregunta, host: string): Promise<string | null> {
+  if (!ventana) return Promise.resolve(null);
+  const id = randomBytes(8).toString("hex");
+  ventana.webContents.send("ssh:pregunta", { id, host, ...p });
+  return new Promise((resolver) => preguntasSsh.set(id, resolver));
+}
+ipcMain.handle("ssh:respuesta", (_e, id: unknown, valor: unknown) => {
+  preguntasSsh.get(String(id))?.(typeof valor === "string" ? valor : null);
+  preguntasSsh.delete(String(id));
+});
 
 // Computadora propia de cada empleado: su contenedor (se enciende la primera vez que lo usa), con la carpeta
 // de trabajo (rutas.trabajo) como /home/<usuario>, y el Chromium de su escritorio.
@@ -184,6 +254,9 @@ async function modelosOllama(): Promise<Modelo[] | null> {
         return {
           proveedor: "ollama" as const,
           modelo: m.name,
+          valor: `ollama:${m.name}`,
+          origen: "local" as const,
+          donde: "Ollama",
           detalle: [m.details?.parameter_size, m.details?.quantization_level].filter(Boolean).join(" · "),
           herramientas: capacidades.includes("tools"),
           chat: capacidades.includes("completion"), // los de solo embeddings no conversan
@@ -224,32 +297,11 @@ function iniciarServidor() {
   esperar();
 }
 
-interface Delta {
-  content?: string;
-  tool_calls?: { index: number; id?: string; function?: { name?: string; arguments?: string } }[];
-}
-
-async function* deltas(respuesta: Response): AsyncGenerator<Delta> {
-  const lector = respuesta.body!.pipeThrough(new TextDecoderStream()).getReader();
-  let resto = "";
-  for (;;) {
-    const { value, done } = await lector.read();
-    if (done) return;
-    const lineas = (resto + value).split("\n");
-    resto = lineas.pop()!;
-    for (const l of lineas) {
-      if (!l.startsWith("data: ") || l === "data: [DONE]") continue;
-      const d = JSON.parse(l.slice(6)).choices?.[0]?.delta;
-      if (d) yield d;
-    }
-  }
-}
-
 // Últimos mensajes que caben, empezando siempre en un mensaje del usuario para no partir
 // una llamada a herramienta de su resultado.
 function contexto(c: Conversacion) {
   const historial = historialDe(c.id);
-  const limite = c.proveedor === "qwen" ? CONTEXTO_CARACTERES : CONTEXTO_OLLAMA;
+  const limite = c.proveedor === "ollama" ? CONTEXTO_OLLAMA : CONTEXTO_CARACTERES;
   let inicio = 0, caracteres = 0;
   for (let i = historial.length - 1; i >= 0; i--) {
     caracteres += JSON.stringify(historial[i]).length;
@@ -282,49 +334,49 @@ function contexto(c: Conversacion) {
 }
 
 // Un turno del modelo: el texto se reenvía a la interfaz mientras llega; las llamadas se acumulan.
-async function turno(c: Conversacion, interfaz: Electron.WebContents, senal: AbortSignal, avisos: string[] = []) {
-  const url = c.proveedor === "qwen" ? `http://127.0.0.1:${PUERTO}/v1/chat/completions` : `${OLLAMA}/v1/chat/completions`;
-  const sistema = promptSistema(c);
+// Todos los orígenes devuelven lo mismo (proveedores.ts): texto, llamadas a herramientas y uso de tokens.
+async function turno(c: Conversacion, interfaz: Electron.WebContents, senal: AbortSignal, avisos: string[] = []): Promise<{ texto: string; llamadas: Llamada[]; uso: Uso }> {
   const companeros = conversaciones.filter((o) => o.id !== c.id).map((o) => ({ nombre: o.nombre, rol: o.rol }));
-  const herramientas = c.herramientas ? definicionesPara(c.permitidas, equipo.procedimientos(c.id).length > 0, companeros) : [];
-  const r = await fetch(url, {
-    method: "POST",
-    signal: senal, // Detener corta también la respuesta que está llegando
-    headers: { authorization: `Bearer ${CLAVE}`, "content-type": "application/json" },
-    body: JSON.stringify({
-      model: c.modelo,
-      stream: true,
-      ...(herramientas.length && { tools: herramientas }),
-      messages: [{ role: "system", content: sistema }, ...contexto(c), ...avisos.map((a) => ({ role: "user", content: `(aviso de la app, no del usuario) ${a}` }))],
-    }),
-  });
-  if (!r.ok) {
-    const cuerpo = await r.text();
-    let mensaje = cuerpo;
-    try {
-      mensaje = JSON.parse(cuerpo).error?.message ?? cuerpo;
-    } catch {
-      // no era JSON: se muestra tal cual
-    }
-    const memoria = mensaje.match(/requires more system memory \(([\d.]+ GiB)\) than is available \(([\d.]+ GiB)\)/);
+  const pedido = {
+    modelo: c.modelo,
+    sistema: promptSistema(c),
+    mensajes: [...contexto(c), ...avisos.map((a) => ({ role: "user", content: `(aviso de la app, no del usuario) ${a}` }))],
+    herramientas: c.herramientas ? definicionesPara(c.permitidas, equipo.procedimientos(c.id).length > 0, companeros) : [],
+    senal, // Detener corta también la respuesta que está llegando
+    alTexto: (texto: string) => interfaz.send("trozo", { id: c.id, texto }),
+  };
+  try {
+    if (c.proveedor === "qwen") return await turnoOpenAI({ ...pedido, url: `http://127.0.0.1:${PUERTO}/v1`, clave: CLAVE });
+    if (c.proveedor === "ollama") return await turnoOpenAI({ ...pedido, url: `${OLLAMA}/v1` });
+    const p = proveedores().find((x) => x.id === c.cuenta);
+    if (!p) throw new Corte(`el proveedor de ${c.nombre} ya no está configurado; elige otro modelo en su perfil`);
+    const url = await baseDe(p);
+    return await (p.tipo === "claude" ? turnoClaude : turnoOpenAI)({ ...pedido, url, clave: p.clave });
+  } catch (e) {
+    const m = (e as Error).message;
+    const memoria = m.match(/requires more system memory \(([\d.]+ GiB)\) than is available \(([\d.]+ GiB)\)/);
     if (memoria) throw new Error(`no hay memoria para cargar ${c.nombre}: necesita ${memoria[1]} y hay ${memoria[2]} libres. Cierra otras apps (o qwen) y vuelve a intentarlo.`);
-    throw new Error(`el servidor respondió ${r.status}: ${mensaje.slice(0, 200)}`);
+    throw e;
   }
-  let texto = "";
-  const llamadas: Llamada[] = [];
-  for await (const d of deltas(r)) {
-    if (d.content) {
-      texto += d.content;
-      interfaz.send("trozo", { id: c.id, texto: d.content });
-    }
-    for (const tc of d.tool_calls ?? []) {
-      const l = (llamadas[tc.index] ??= { id: "", nombre: "", argumentos: "" });
-      if (tc.id) l.id = tc.id;
-      l.nombre += tc.function?.name ?? "";
-      l.argumentos += tc.function?.arguments ?? "";
-    }
-  }
-  return { texto: texto.trim(), llamadas: llamadas.filter((l) => l?.nombre).map((l, i) => ({ ...l, id: l.id || `llamada-${Date.now()}-${i}` })) };
+}
+
+// Gasto de un empleado en la nube: precio conocido antes de trabajar, y tope mensual (pausa y pregunta).
+// El modo libre no salta el tope: es dinero.
+async function antesDeGastar(c: Conversacion, interfaz: Electron.WebContents): Promise<string | null> {
+  if (c.proveedor !== "nube") return null;
+  if (!gasto.precio(`${c.cuenta}:${c.modelo}`)) throw new Corte(`no conozco el precio de ${c.modelo}; ponlo en el perfil de ${c.nombre} (USD por millón de tokens; 0 si es tu propio servidor)`);
+  const llevado = gasto.delMes(c.id);
+  if (llevado < c.tope) return null;
+  const nuevo = Math.ceil(c.tope * 2);
+  const si = await pedirAprobacion(c, interfaz, `${c.nombre} llegó a su tope de ${c.tope} USD este mes (lleva ${llevado.toFixed(2)} USD). ¿Subir el tope a ${nuevo} USD y seguir?`);
+  if (!si) return `me pausé: llegué a mi tope de ${c.tope} USD de este mes. Súbelo en mi perfil si quieres que siga.`;
+  equipo.cambiarTope(c.id, nuevo);
+  c.tope = nuevo;
+  return null;
+}
+function anotarGasto(c: Conversacion, uso: Uso) {
+  const precio = c.proveedor === "nube" && gasto.precio(`${c.cuenta}:${c.modelo}`);
+  if (precio) gasto.sumar(c.id, uso, precio);
 }
 
 // Aprobación de acciones delicadas: la interfaz muestra la tarjeta y responde con el id.
@@ -413,9 +465,102 @@ ipcMain.handle("estado", (_e, id: unknown) => {
 });
 ipcMain.handle("modelos", async () => {
   const ollama = await modelosOllama();
-  const qwen: Modelo = { proveedor: "qwen", modelo: QWEN_MODELO, detalle: "incluido · 9B · Q4_K_M", herramientas: true };
-  return { modelos: [qwen, ...(ollama ?? [])], ollama: ollama !== null };
+  const qwen: Modelo = { proveedor: "qwen", modelo: QWEN_MODELO, valor: "qwen", detalle: "incluido · 9B · Q4_K_M", herramientas: true, origen: "local", donde: "este equipo" };
+  const nube: Modelo[] = [];
+  for (const p of proveedores()) {
+    const origen: Origen = esRemoto(p.tipo) ? "remoto" : "nube";
+    const donde = dondeDe(p);
+    let lista = modelosNube.get(p.id);
+    // ponytail: los túneles no se abren solos al abrir el diálogo (ssh podría pedir contraseña): se listan al "probar"
+    if (!lista && p.tipo !== "tunel") lista = await (p.tipo === "codex" ? codex.modelos() : baseDe(p).then((u) => listarModelos(p.tipo, u, p.clave))).catch(() => undefined);
+    if (lista) modelosNube.set(p.id, lista);
+    for (const m of lista ?? []) {
+      nube.push({
+        proveedor: p.tipo === "codex" ? "codex" : "nube", modelo: m.modelo, valor: p.tipo === "codex" ? `codex:${m.modelo}` : `nube:${p.id}:${m.modelo}`,
+        detalle: p.tipo === "codex" ? "ChatGPT vía Codex · no oficial, puede dejar de funcionar" : p.nombre,
+        herramientas: m.herramientas, origen, donde, aviso: avisoPrivacidad(origen, donde),
+      });
+    }
+  }
+  return { modelos: [qwen, ...(ollama ?? []), ...nube], ollama: ollama !== null };
 });
+
+// ---- Proveedores (la interfaz nunca recibe las claves: solo si hay una guardada) ----
+const sinSecretos = (p: Proveedor) => ({ id: p.id, nombre: p.nombre, tipo: p.tipo, url: p.url, ssh: p.ssh, conClave: !!p.clave, donde: dondeDe(p), remoto: esRemoto(p.tipo) });
+ipcMain.handle("proveedores", async () => ({
+  proveedores: proveedores().map(sinSecretos),
+  almacen: safeStorage.isEncryptionAvailable() && (process.platform !== "linux" || safeStorage.getSelectedStorageBackend() !== "basic_text"),
+  codex: await codex.instalado(),
+}));
+ipcMain.handle("guardar-proveedor", async (_e, datos: unknown) => {
+  const d = datos as Record<string, unknown>;
+  const texto = (v: unknown, max = 300) => (typeof v === "string" ? v.trim().slice(0, max) : "");
+  const tipo = texto(d?.tipo) as Tipo;
+  if (!(tipo in NOMBRE_TIPO)) return { error: "tipo de proveedor desconocido" };
+  const actual = proveedores().find((x) => x.id === texto(d.id));
+  const p: Proveedor = { id: actual?.id ?? `p${randomBytes(4).toString("hex")}`, nombre: texto(d.nombre, 60) || NOMBRE_TIPO[tipo] || tipo, tipo };
+  if (tipo === "compatible" || tipo === "remoto" || tipo === "tunel") {
+    p.url = texto(d.url);
+    let u: URL;
+    try {
+      u = new URL(p.url);
+    } catch {
+      return { error: "la dirección no es válida (por ejemplo https://servidor/v1)" };
+    }
+    if (u.username || u.password) return { error: "no pongas usuario ni contraseña en la dirección; usa el campo de clave" };
+    const local = ["127.0.0.1", "localhost", "[::1]"].includes(u.hostname);
+    if (tipo !== "tunel" && u.protocol !== "https:" && !local) return { error: "la dirección debe ser https (los datos viajan por internet)" };
+  }
+  if (tipo === "tunel") {
+    p.ssh = texto(d.ssh, 120);
+    if (!sshValido(p.ssh) || !destino(p.url!)) return { error: "pon el host SSH (alias de tu ~/.ssh/config o usuario@host) y la dirección del servidor vista desde ese host" };
+  }
+  const clave = texto(d.clave, 500);
+  if (tipo !== "codex" && tipo !== "tunel") {
+    p.clave = clave || actual?.clave; // vacío al editar = conservar la guardada
+    if (!p.clave && tipo !== "compatible") return { error: "falta la clave de API" };
+  } else if (tipo === "tunel" && (clave || actual?.clave)) p.clave = clave || actual?.clave;
+  try {
+    boveda.guardar([...proveedores().filter((x) => x.id !== p.id), p]);
+  } catch (e) {
+    return { error: e instanceof SinAlmacenSeguro ? e.message : `no pude guardar: ${(e as Error).message}` };
+  }
+  enMemoria = undefined;
+  modelosNube.delete(p.id);
+  tuneles.get(p.id)?.cerrar();
+  tuneles.delete(p.id);
+  return { id: p.id };
+});
+ipcMain.handle("borrar-proveedor", (_e, id: unknown) => {
+  try {
+    boveda.guardar(proveedores().filter((x) => x.id !== id));
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+  enMemoria = undefined;
+  tuneles.get(String(id))?.cerrar();
+  tuneles.delete(String(id));
+  return {};
+});
+// Probar: lista sus modelos (en túnel, lo abre: ssh puede pedir la huella o la contraseña en una ventana).
+ipcMain.handle("probar-proveedor", async (_e, id: unknown) => {
+  const p = proveedores().find((x) => x.id === id);
+  if (!p) return { error: "no existe ese proveedor" };
+  try {
+    if (p.tipo === "codex") {
+      if (!(await codex.instalado())) return { error: "no encuentro Codex: instálalo con npm i -g @openai/codex" };
+      if (!(await codex.conSesion())) return { error: "no hay sesión de ChatGPT en Codex: pulsa «iniciar sesión»" };
+      const motivo = await codex.sonda(definicionesPara(HERRAMIENTAS, true, [{ nombre: "otro", rol: "" }]));
+      if (motivo) return { error: motivo };
+    }
+    const lista = p.tipo === "codex" ? await codex.modelos() : await listarModelos(p.tipo, await baseDe(p), p.clave);
+    modelosNube.set(p.id, lista);
+    return { modelos: lista.length };
+  } catch (e) {
+    return { error: sinClave((e as Error).message, p.clave) };
+  }
+});
+ipcMain.handle("codex-sesion", async () => ((await codex.iniciarSesion()) ? {} : { error: "no se completó el inicio de sesión" }));
 
 // ---- Empleados: plantillas, crear, editar, borrador redactado por el modelo y abrir su carpeta ----
 
@@ -425,7 +570,7 @@ function limpiarIdentidad(x: unknown): Identidad | null {
   const texto = (v: unknown, max: number) => (typeof v === "string" ? v.trim().slice(0, max) : "");
   const nombre = texto(d?.nombre, 40);
   const modelo = texto(d?.modelo, 120);
-  if (!nombre || !(modelo === "qwen" || /^ollama:\S+$/.test(modelo))) return null;
+  if (!nombre || !(modelo === "qwen" || /^(ollama|codex):\S+$/.test(modelo) || /^nube:[a-z0-9]+:\S+$/.test(modelo))) return null;
   return {
     nombre,
     rol: texto(d.rol, 80),
@@ -438,7 +583,12 @@ function limpiarIdentidad(x: unknown): Identidad | null {
 
 // ¿El modelo asignado sabe usar herramientas? qwen sí; los de Ollama según /api/show.
 async function modeloConHerramientas(modelo: string): Promise<boolean | null> {
-  if (modelo === "qwen") return true;
+  if (modelo === "qwen" || modelo.startsWith("codex:")) return true;
+  if (modelo.startsWith("nube:")) {
+    const [, cuenta, ...resto] = modelo.split(":");
+    const m = modelosNube.get(cuenta)?.find((x) => x.modelo === resto.join(":"));
+    return m ? m.herramientas : proveedores().some((p) => p.id === cuenta) ? true : null;
+  }
   const m = (await modelosOllama())?.find((x) => `ollama:${x.modelo}` === modelo);
   return m ? m.herramientas : null;
 }
@@ -448,22 +598,46 @@ ipcMain.handle("plantillas", () =>
 );
 ipcMain.handle("empleado", (_e, id: unknown) => {
   const e = equipo.buscar(String(id));
-  return e && { nombre: e.nombre, rol: e.rol, color: e.color, modelo: e.modelo, herramientas: e.herramientas, instrucciones: e.instrucciones, procedimientos: equipo.procedimientos(e.id) };
+  if (!e) return undefined;
+  const clavePrecio = e.modelo.startsWith("nube:") ? e.modelo.slice(5) : "";
+  return {
+    nombre: e.nombre, rol: e.rol, color: e.color, modelo: e.modelo, herramientas: e.herramientas, instrucciones: e.instrucciones, procedimientos: equipo.procedimientos(e.id),
+    tope: e.tope ?? TOPE_POR_DEFECTO, gastado: gasto.delMes(e.id), precio: clavePrecio ? gasto.precio(clavePrecio) : undefined,
+  };
 });
+// Gasto de un empleado en la nube: precio del modelo (tabla editable, USD por millón de tokens) y tope mensual.
+function limpiarGasto(modelo: string, datos: unknown): { tope?: number; error?: string } {
+  if (!modelo.startsWith("nube:")) return {};
+  const d = datos as { tope?: unknown; precio?: { entrada?: unknown; salida?: unknown } };
+  const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : typeof v === "string" && v.trim() !== "" && Number(v) >= 0 ? Number(v) : NaN);
+  const entrada = num(d.precio?.entrada), salida = num(d.precio?.salida), tope = num(d.tope ?? TOPE_POR_DEFECTO);
+  if (!Number.isFinite(entrada) || !Number.isFinite(salida)) {
+    if (!gasto.precio(modelo.slice(5))) return { error: "no conozco el precio de ese modelo: ponlo (USD por millón de tokens de entrada y de salida; 0 si es tu propio servidor)" };
+  } else gasto.ponerPrecio(modelo.slice(5), { entrada, salida });
+  if (!Number.isFinite(tope) || tope <= 0) return { error: "el tope mensual debe ser un número mayor que 0" };
+  return { tope };
+}
 ipcMain.handle("crear-empleado", async (_e, datos: unknown, plantilla: unknown) => {
   const identidad = limpiarIdentidad(datos);
   if (!identidad) return { error: "falta el nombre o el modelo" };
   const conHerramientas = await modeloConHerramientas(identidad.modelo);
-  if (conHerramientas === null) return { error: "ese modelo ya no está en Ollama" };
+  if (conHerramientas === null) return { error: "ese modelo ya no está disponible" };
+  const g = limpiarGasto(identidad.modelo, datos);
+  if (g.error) return { error: g.error };
   const origen = typeof plantilla === "string" && equipo.plantilla(plantilla) ? plantilla : undefined;
-  return { id: equipo.crear(identidad, conHerramientas, origen).id };
+  const e = equipo.crear(identidad, conHerramientas, origen);
+  if (g.tope) equipo.cambiarTope(e.id, g.tope);
+  return { id: e.id };
 });
 ipcMain.handle("guardar-empleado", async (_e, id: unknown, datos: unknown) => {
   const identidad = limpiarIdentidad(datos);
   if (!identidad || !equipo.buscar(String(id))) return { error: "falta el nombre o el modelo" };
   const conHerramientas = await modeloConHerramientas(identidad.modelo);
-  if (conHerramientas === null) return { error: "ese modelo ya no está en Ollama" };
+  if (conHerramientas === null) return { error: "ese modelo ya no está disponible" };
+  const g = limpiarGasto(identidad.modelo, datos);
+  if (g.error) return { error: g.error };
   equipo.actualizar(String(id), identidad, conHerramientas);
+  if (g.tope) equipo.cambiarTope(String(id), g.tope);
   return {};
 });
 ipcMain.handle("abrir-carpeta", async (_e, id: unknown) => {
@@ -544,8 +718,9 @@ ipcMain.handle("enviar", async (ev, id: unknown, entrada: unknown) => {
   const texto = typeof entrada === "string" ? entrada.trim().slice(0, 8000) : "";
   if (!c || !texto) return { error: "mensaje vacío" };
   if (estadoDe(c).fase !== "listo") return { error: `${c.nombre} no está listo` };
-  // ponytail: una conversación trabajando a la vez (la VRAM de 8 GB no da para más); cola real cuando haya varios empleados
-  const otra = conversaciones.find((o) => trabajando.has(o.id));
+  // ponytail: un empleado LOCAL trabajando a la vez (la VRAM de 8 GB no da para más); cola real cuando haya varios.
+  // Los de la nube y los de servidores remotos no usan la VRAM: trabajan a la vez, sin límite fijo.
+  const otra = c.origen === "local" && conversaciones.find((o) => o.origen === "local" && trabajando.has(o.id));
   if (otra) return { error: `${otra.nombre} está trabajando; espera a que termine` };
   const parar = new AbortController();
   try {
@@ -553,7 +728,10 @@ ipcMain.handle("enviar", async (ev, id: unknown, entrada: unknown) => {
     return {};
   } catch (e) {
     if (parar.signal.aborted) return {};
-    const detalle = c.proveedor === "ollama" && (e as Error).message === "fetch failed" ? "Ollama no responde; ¿está en marcha?" : (e as Error).message;
+    const m = (e as Error).message;
+    // Corte del proveedor (cuota, saldo, límite del plan, clave): se detiene y avisa con el motivo, sin reintentar.
+    if (e instanceof Corte) return { error: `${c.nombre} se detuvo: ${m}` };
+    const detalle = c.proveedor === "ollama" && m === "fetch failed" ? "Ollama no responde; ¿está en marcha?" : m;
     return { error: `no pude obtener respuesta: ${detalle}` };
   }
 });
@@ -561,6 +739,7 @@ ipcMain.handle("enviar", async (ev, id: unknown, entrada: unknown) => {
 // Una tarea: el mensaje entra en el hilo del empleado y trabaja hasta terminar; devuelve su última respuesta.
 // cadena: los compañeros que esperan su resultado (pasar_trabajo), para que no se encarguen trabajo en círculo.
 async function tarea(c: Conversacion, texto: string, interfaz: Electron.WebContents, parar: AbortController, cadena: string[] = []): Promise<string> {
+  if (c.proveedor === "codex") return tareaCodex(c, texto, interfaz, parar, cadena);
   const historial = historialDe(c.id);
   historial.push({ de: "yo", texto, t: Date.now() });
   guardarHistorial(c.id);
@@ -571,14 +750,21 @@ async function tarea(c: Conversacion, texto: string, interfaz: Electron.WebConte
   };
   tareas.set(c.id, parar);
   const inicioTarea = historial.length - 1;
+  let caida = ""; // túnel SSH caído: se detiene y avisa, sin reconectar en bucle
+  const cuenta = proveedores().find((x) => x.id === c.cuenta);
+  if (cuenta?.tipo === "tunel") await baseDe(cuenta); // abre el túnel antes de empezar (ssh puede preguntar)
+  const olvidarTunel = c.cuenta ? tuneles.get(c.cuenta)?.alCaer((m) => ((caida = m), parar.abort())) : undefined;
   try {
     const veces = new Map<string, number>(); // cuántas veces pidió cada llamada exacta en esta tarea
     const verificadas = new Set<string>();
     let avisos: string[] = [];
     for (;;) {
       if (parar.signal.aborted) throw new Error("detenida");
+      const pausa = await antesDeGastar(c, interfaz);
+      if (pausa) return decir(pausa);
       cambiarEstado(c, { fase: "escribiendo" });
-      const { texto, llamadas } = await turno(c, interfaz, parar.signal, avisos);
+      const { texto, llamadas, uso } = await turno(c, interfaz, parar.signal, avisos);
+      anotarGasto(c, uso);
       avisos = [];
       if (texto || llamadas.length) historial.push({ de: "ia", texto, t: Date.now(), ...(llamadas.length && { llamadas }) });
       guardarHistorial(c.id);
@@ -612,13 +798,96 @@ async function tarea(c: Conversacion, texto: string, interfaz: Electron.WebConte
       if (pregunta) return decir(pregunta);
     }
   } catch (e) {
+    if (caida) {
+      decir(`se cayó la conexión con ${c.donde} (${caida}); me detuve. Escríbeme de nuevo cuando quieras que reconecte.`);
+      throw new Corte(`se cayó el túnel a ${c.donde}`);
+    }
     if (parar.signal.aborted) decir("me detuviste. Aquí lo dejo; dime si sigo o cambio algo.");
     throw e;
   } finally {
+    olvidarTunel?.();
     tareas.delete(c.id);
     trabajando.delete(c.id);
     avisarEstado(c);
   }
+}
+
+// ChatGPT vía Codex: el bucle es el de Codex, pero cada herramienta llega aquí (por MCP, ver codex.ts) y pasa
+// por lo mismo que con el bucle propio: herramientas del puesto, aprobaciones, modo libre, Detener,
+// detección de repeticiones y verificación de honestidad al final.
+async function tareaCodex(c: Conversacion, texto: string, interfaz: Electron.WebContents, parar: AbortController, cadena: string[]): Promise<string> {
+  const historial = historialDe(c.id);
+  const guardar = (m: Mensaje) => (historial.push(m), guardarHistorial(c.id));
+  const decir = (t: string) => (guardar({ de: "ia", texto: t, t: Date.now() }), t);
+  guardar({ de: "yo", texto, t: Date.now() });
+  tareas.set(c.id, parar);
+  const inicioTarea = historial.length - 1;
+  const corte = new AbortController(); // Detener o demasiadas repeticiones
+  const alDetener = () => corte.abort();
+  parar.signal.addEventListener("abort", alDetener);
+  const veces = new Map<string, number>();
+  let repeticion = "";
+  const companeros = conversaciones.filter((o) => o.id !== c.id).map((o) => ({ nombre: o.nombre, rol: o.rol }));
+  const llamar = async (nombre: string, argumentos: string) => {
+    const l: Llamada = { id: `codex-${Date.now()}-${veces.size}`, nombre, argumentos };
+    const firma = `${nombre} ${argumentos}`;
+    const n = (veces.get(firma) ?? 0) + 1;
+    veces.set(firma, n);
+    if (n >= MAX_REPETICIONES) {
+      repeticion = `me detuve: intenté ${n} veces lo mismo (${nombre}) sin avanzar. ¿Me das otra pista?`;
+      corte.abort();
+      return { salida: "detenido", codigo: 1 };
+    }
+    let r: { salida: string; codigo: number };
+    if (n >= AVISO_REPETICION) r = { salida: `ya hiciste exactamente esto ${n - 1} veces; no lo repito. Prueba otro camino o termina con lo que tienes.`, codigo: 1 };
+    else if (nombre === "preguntar" && c.permitidas.includes("preguntar")) r = { salida: "escribe esa pregunta como tu respuesta final y termina; la tarea sigue cuando el usuario responda", codigo: 0 };
+    else r = await usarHerramienta(c, l, interfaz, parar, cadena);
+    guardar({ de: "ia", texto: "", t: Date.now(), llamadas: [l] }); // mismo formato que el bucle propio
+    guardar({ de: "herramienta", ...l, ...r, t: Date.now() });
+    interfaz.send("paso", c.id);
+    cambiarEstado(c, { fase: "escribiendo" });
+    return r;
+  };
+  try {
+    const verificadas = new Set<string>();
+    let avisos: string[] = [];
+    for (;;) {
+      cambiarEstado(c, { fase: "escribiendo" });
+      const { texto: respuesta } = await codex.ejecutar({
+        modelo: c.modelo,
+        instrucciones: promptSistema(c),
+        prompt: transcripcion(c, avisos),
+        herramientas: definicionesPara(c.permitidas, equipo.procedimientos(c.id).length > 0, companeros),
+        llamar,
+        alTexto: (t) => interfaz.send("trozo", { id: c.id, texto: t }),
+        senal: corte.signal,
+      });
+      const fallo = verificar(respuesta, historial.slice(inicioTarea), verificadas);
+      if (!fallo) return decir(respuesta);
+      verificadas.add(fallo.tipo);
+      avisos = [fallo.aviso];
+      interfaz.send("paso", c.id);
+    }
+  } catch (e) {
+    if (repeticion && !parar.signal.aborted) return decir(repeticion);
+    if (parar.signal.aborted) decir("me detuviste. Aquí lo dejo; dime si sigo o cambio algo.");
+    throw e;
+  } finally {
+    parar.signal.removeEventListener("abort", alDetener);
+    tareas.delete(c.id);
+    trabajando.delete(c.id);
+    avisarEstado(c);
+  }
+}
+
+// ponytail: Codex empieza cada tarea sin memoria; se le pasa la conversación reciente como texto.
+function transcripcion(c: Conversacion, avisos: string[]): string {
+  const lineas = contexto(c).map((m) => {
+    if (m.role === "user") return `Usuario: ${m.content}`;
+    if (m.role === "tool") return `[resultado de herramienta] ${m.content.slice(0, 600)}`;
+    return m.content ? `Tú: ${m.content}` : "";
+  });
+  return `Conversación hasta ahora (la última línea del usuario es el encargo actual):\n\n${lineas.filter(Boolean).join("\n\n")}${avisos.map((a) => `\n\n(aviso de la app, no del usuario) ${a}`).join("")}`;
 }
 
 function argumento(l: Llamada, clave: string): string {
@@ -665,8 +934,17 @@ registrarWsl(ipcMain); // Windows: pantalla de primer arranque (WSL); en Linux n
 
 app.whenReady().then(() => {
   if (!primera) return;
-  apagarTodas(); // restos de una sesión que se cerró mal
+  if (!APARTE) apagarTodas(); // restos de una sesión que se cerró mal
   equipo = new Empleados(app.getPath("userData"), path.join(__dirname, "..", "plantillas"));
+  const datos = app.getPath("userData");
+  boveda = new Boveda(path.join(datos, "proveedores.cifrado"), {
+    // Linux: "basic_text" significa que no hay llavero y safeStorage cifraría con una clave fija: no vale.
+    disponible: () => safeStorage.isEncryptionAvailable() && (process.platform !== "linux" || safeStorage.getSelectedStorageBackend() !== "basic_text"),
+    cifrar: (t) => safeStorage.encryptString(t),
+    descifrar: (b) => safeStorage.decryptString(b),
+  });
+  gasto = new Gasto(datos);
+  codex = new Codex(path.join(datos, "codex"));
   migrarConversaciones();
   leerConversaciones();
   iniciarServidor();
@@ -692,5 +970,6 @@ for (const senal of ["SIGTERM", "SIGINT", "SIGHUP"] as const) process.on(senal, 
 app.on("will-quit", () => {
   saliendo = true;
   servidor?.kill();
-  apagarTodas(); // no deja contenedores corriendo
+  for (const t of tuneles.values()) t.cerrar();
+  if (!APARTE) apagarTodas(); // no deja contenedores corriendo
 });

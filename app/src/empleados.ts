@@ -20,11 +20,11 @@ export interface Identidad {
   nombre: string;
   rol: string;
   color: string;
-  modelo: string; // "qwen" o "ollama:<modelo>"
+  modelo: string; // "qwen", "ollama:<modelo>", "nube:<proveedor>:<modelo>" o "codex:<modelo>" (ver main.ts)
   herramientas: string[];
   instrucciones: string; // tono y reglas del puesto
 }
-export interface Entrada { id: string; usuario: string; libre?: boolean; herramientasModelo: boolean }
+export interface Entrada { id: string; usuario: string; libre?: boolean; herramientasModelo: boolean; tope?: number } // tope: USD al mes (nube)
 export interface Empleado extends Identidad, Entrada {}
 export interface Procedimiento { nombre: string; descripcion: string }
 
@@ -90,7 +90,7 @@ export class Empleados {
 
   guardarIndice(entradas: Entrada[]) {
     fs.mkdirSync(this.carpeta, { recursive: true });
-    fs.writeFileSync(this.archivoIndice, JSON.stringify(entradas.map(({ id, usuario, libre, herramientasModelo }) => ({ id, usuario, libre, herramientasModelo })), null, 2));
+    fs.writeFileSync(this.archivoIndice, JSON.stringify(entradas.map(({ id, usuario, libre, herramientasModelo, tope }) => ({ id, usuario, libre, herramientasModelo, tope })), null, 2));
   }
 
   // Se relee de disco cada vez: si el usuario edita identidad.md a mano, el siguiente mensaje ya lo usa.
@@ -140,6 +140,10 @@ export class Empleados {
 
   cambiarLibre(id: string, libre: boolean) {
     this.guardarIndice(this.leerIndice().map((e) => (e.id === id ? { ...e, libre } : e)));
+  }
+
+  cambiarTope(id: string, tope: number) {
+    this.guardarIndice(this.leerIndice().map((e) => (e.id === id ? { ...e, tope } : e)));
   }
 
   // ---- Procedimientos y memoria ----
