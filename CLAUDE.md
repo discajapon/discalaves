@@ -296,6 +296,15 @@ imagen, ~2 min).
     contenedor), `write`/`edit`, `web_fetch`, `browser` (example.com en el
     Chromium del empleado) y el bloqueo de un `rm`. Qwen repite llamadas
     fallidas sin fin si nada lo frena (visto: 80 veces), de ahí el freno.
+    En la app real (2026-09-30), con un empleado creado desde el diálogo con
+    motor OpenClaw: `exec` en su contenedor (15 s), criterio 1 con `web_fetch`
+    + `write` (30 s), `browser` en su Chromium (21 s) y la tarjeta de
+    aprobación de un `rm` (al pulsar "no" no se borró). Sus archivos quedan en
+    `trabajo/<usuario>/openclaw/openclaw-ssh-agent-<id>-<hash>/workspace/`
+    (ruta de OpenClaw, más honda que la del bucle propio). No probado:
+    Windows, varios empleados de OpenClaw a la vez, tareas largas, `pasar
+    trabajo` con `sessions_*`, la verificación de honestidad (no se aplica a
+    OpenClaw).
 - **Orígenes de modelo fuera del equipo** (decisión del usuario, 2026-09-29; código en
   `proveedores.ts`, `boveda.ts`, `gasto.ts`, `tunel.ts`, `codex.ts`): el usuario elige el
   origen de cada empleado y la app **nunca lo cambia por su cuenta** (ni por velocidad, ni

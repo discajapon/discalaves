@@ -45,6 +45,10 @@ Grok Bot.
 - **Herramientas adicionales, a tu elección.** En el perfil de cada empleado
   puedes activar leer y editar archivos, leer una web sin navegador, que te
   pregunte, o que le pase trabajo a un compañero y reciba su respuesta.
+- **Motor OpenClaw, a tu elección.** Cada empleado puede trabajar con el
+  bucle propio de Discalaves o con [OpenClaw](https://openclaw.ai) y sus
+  herramientas (terminal, archivos, web, navegador), siempre dentro de su
+  computadora aislada. Probado en Linux con Qwen 9B en tareas cortas.
 - **Tú apruebas lo delicado.** Antes de borrar, enviar o pagar algo, te pide
   permiso. Hay un **modo libre** opcional por empleado que quita esas
   aprobaciones; está apagado por defecto.
