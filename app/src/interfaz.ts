@@ -13,7 +13,7 @@ interface Conversacion {
   estado: EstadoQwen; ultimo?: MensajeChat;
 }
 interface Modelo { proveedor: string; modelo: string; valor: string; detalle: string; herramientas: boolean; origen: "local" | "nube" | "remoto"; donde: string; aviso?: string }
-interface Identidad { nombre: string; rol: string; color: string; modelo: string; herramientas: string[]; instrucciones: string }
+interface Identidad { nombre: string; rol: string; color: string; modelo: string; herramientas: string[]; instrucciones: string; motor?: string }
 interface Gasto { tope?: number; precio?: { entrada: number | string; salida: number | string } }
 interface ProveedorVista { id: string; nombre: string; tipo: string; url?: string; ssh?: string; conClave: boolean; donde: string; remoto: boolean }
 interface Plantilla extends Identidad { id: string; procedimientos: string[] }
@@ -391,6 +391,17 @@ const NOMBRES_ADICIONALES: Record<string, string> = {
   preguntar: "preguntarte",
   pasar_trabajo: "pasar trabajo a otro",
 };
+// Motor OpenClaw: sus herramientas (openclaw.ts). Las principales vienen marcadas al elegirlo.
+const NOMBRES_OC: Record<string, string> = {
+  exec: "terminal (exec)", read: "leer archivos", write: "escribir archivos", edit: "editar archivos", web_fetch: "leer web", browser: "navegador",
+};
+const NOMBRES_OC_ADICIONALES: Record<string, string> = {
+  apply_patch: "aplicar parches", process: "procesos en segundo plano", web_search: "buscar en la web", update_plan: "plan de trabajo",
+  memory_search: "buscar en su memoria", memory_get: "leer su memoria", agents_list: "ver compañeros", sessions_list: "ver conversaciones",
+  sessions_history: "leer otra conversación", sessions_send: "escribir a otra conversación", sessions_spawn: "abrir subtarea", subagents: "subagentes",
+  create_goal: "crear objetivo", get_goal: "ver objetivo", update_goal: "actualizar objetivo", cron: "tareas programadas",
+};
+const POR_DEFECTO = ["buscar_web", "abrir_pagina", "escribir_archivo"];
 
 // Cada plantilla es una tarjeta tipo widget: ícono y nombre arriba, el rol, y sus datos en negrita.
 function tarjetaPlantilla(p: Plantilla): HTMLElement {
@@ -477,13 +488,45 @@ function dibujarNube() {
 }
 campo<HTMLSelectElement>("modelo").addEventListener("change", dibujarNube);
 
+// Las casillas dependen del motor: cada uno tiene sus herramientas.
+function dibujarHerramientas(motor: string, marcadas: string[]) {
+  const casillas = (nombres: Record<string, string>) =>
+    Object.entries(nombres).map(([valor, texto]) => {
+      const l = crear("label", "casilla");
+      l.append(Object.assign(document.createElement("input"), { type: "checkbox", value: valor, checked: marcadas.includes(valor) }), ` ${texto}`);
+      return l;
+    });
+  const oc = motor === "openclaw";
+  campo<HTMLElement>("herramientas").replaceChildren(
+    ...casillas(oc ? NOMBRES_OC : NOMBRES_HERRAMIENTAS),
+    crear("span", "subtitulo", "adicionales: actívalas solo si el puesto las necesita"),
+    ...casillas(oc ? NOMBRES_OC_ADICIONALES : NOMBRES_ADICIONALES),
+  );
+}
+// OpenClaw solo corre con el qwen incluido.
+function permitirMotor() {
+  const motor = campo<HTMLSelectElement>("motor");
+  motor.disabled = campo<HTMLSelectElement>("modelo").value !== "qwen";
+  if (motor.disabled && motor.value) {
+    motor.value = "";
+    dibujarHerramientas("", POR_DEFECTO);
+  }
+}
+campo<HTMLSelectElement>("modelo").addEventListener("change", permitirMotor);
+campo<HTMLSelectElement>("motor").addEventListener("change", (ev) => {
+  const motor = (ev.target as HTMLSelectElement).value;
+  dibujarHerramientas(motor, motor === "openclaw" ? Object.keys(NOMBRES_OC) : POR_DEFECTO);
+});
+
 function rellenar(i: Identidad) {
   campo<HTMLInputElement>("nombre").value = i.nombre;
   campo<HTMLInputElement>("rol").value = i.rol;
   campo<HTMLSelectElement>("color").value = ACENTOS.includes(i.color) ? i.color : ACENTOS[0];
   const modelo = campo<HTMLSelectElement>("modelo");
   if ([...modelo.options].some((o) => o.value === i.modelo)) modelo.value = i.modelo;
-  for (const c of campo<HTMLElement>("herramientas").querySelectorAll<HTMLInputElement>("input")) c.checked = i.herramientas.includes(c.value);
+  campo<HTMLSelectElement>("motor").value = i.motor === "openclaw" ? "openclaw" : "";
+  dibujarHerramientas(campo<HTMLSelectElement>("motor").value, i.herramientas);
+  permitirMotor();
   campo<HTMLTextAreaElement>("instrucciones").value = i.instrucciones;
 }
 
@@ -495,6 +538,7 @@ function leerFormulario(): Identidad {
     modelo: campo<HTMLSelectElement>("modelo").value,
     herramientas: [...campo<HTMLElement>("herramientas").querySelectorAll<HTMLInputElement>("input:checked")].map((c) => c.value),
     instrucciones: campo<HTMLTextAreaElement>("instrucciones").value,
+    motor: campo<HTMLSelectElement>("motor").value || undefined,
   };
 }
 function leerGasto(): Gasto {
@@ -503,19 +547,8 @@ function leerGasto(): Gasto {
 }
 
 async function abrirDialogoEmpleado(d: { modo: "plantilla"; plantilla: Plantilla } | { modo: "describir" } | { modo: "editar"; id: string }) {
-  // Opciones fijas (colores, herramientas) y los modelos que haya ahora mismo.
+  // Opciones fijas (colores) y los modelos que haya ahora mismo.
   campo<HTMLSelectElement>("color").replaceChildren(...ACENTOS.map((a) => Object.assign(document.createElement("option"), { value: a, textContent: a })));
-  const casillas = (nombres: Record<string, string>) =>
-    Object.entries(nombres).map(([valor, texto]) => {
-      const l = crear("label", "casilla");
-      l.append(Object.assign(document.createElement("input"), { type: "checkbox", value: valor }), ` ${texto}`);
-      return l;
-    });
-  campo<HTMLElement>("herramientas").replaceChildren(
-    ...casillas(NOMBRES_HERRAMIENTAS),
-    crear("span", "subtitulo", "adicionales: actívalas solo si el puesto las necesita"),
-    ...casillas(NOMBRES_ADICIONALES),
-  );
   await llenarModelos();
   avisoEmpleado.textContent = "";
   campo<HTMLElement>("redactando").textContent = "";
@@ -532,7 +565,7 @@ async function abrirDialogoEmpleado(d: { modo: "plantilla"; plantilla: Plantilla
   } else if (d.modo === "describir") {
     edicion = { modo: "describir" };
     campo<HTMLElement>("titulo").textContent = "Nuevo empleado a medida";
-    rellenar({ nombre: "", rol: "", color: ACENTOS[0], modelo: "qwen", herramientas: ["buscar_web", "abrir_pagina", "escribir_archivo"], instrucciones: "" });
+    rellenar({ nombre: "", rol: "", color: ACENTOS[0], modelo: "qwen", herramientas: POR_DEFECTO, instrucciones: "" });
   } else {
     const e = await discalaves.empleado(d.id);
     if (!e) return;
