@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain, session, shell } from "electron";
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import fs from "node:fs";
+import net from "node:net";
 import path from "node:path";
 import { definicionesPara, ejecutarHerramienta, verificar } from "./herramientas";
 import { COLORES, Empleados, HERRAMIENTAS, PRINCIPALES, leerIdentidad, promptEmpleado, type Empleado, type Identidad } from "./empleados";
@@ -10,11 +11,13 @@ import { navegadorDe } from "./navegador";
 import { rutas } from "./rutas";
 import { registrarWsl } from "./ipc-wsl";
 
-// Rutas según el sistema (Linux o Windows): ver rutas.ts. ponytail: puerto fijo para un solo servidor.
+// Rutas según el sistema (Linux o Windows): ver rutas.ts.
 const SERVIDOR = rutas.servidor;
 const MODELO = rutas.modelo;
 if (rutas.datos) app.setPath("userData", rutas.datos); // Windows: datos locales, antes de usar userData
-const PUERTO = 8089;
+// Puerto libre elegido al arrancar: uno fijo (8089) chocaba con cualquier otro llama-server abierto a mano
+// y el nuestro se cerraba con "couldn't bind HTTP server socket" (2026-09-30).
+let PUERTO = 0;
 const CLAVE = randomBytes(24).toString("hex"); // sin clave, cualquier web abierta en el navegador podría usar el servidor
 const CONTEXTO_CARACTERES = 32000; // ponytail: ventana por tamaño (~9k tokens de 16k); resumir cuando las conversaciones crezcan
 // Sin límite de pasos (decisión del usuario, 2026-09-27): la IA trabaja hasta acabar. Frenos: el botón
@@ -196,11 +199,36 @@ async function modelosOllama(): Promise<Modelo[] | null> {
   }
 }
 
-function iniciarServidor() {
+// Pide al sistema un puerto libre en 127.0.0.1 y lo suelta para que lo use llama-server.
+function puertoLibre(): Promise<number> {
+  return new Promise((resolver, fallar) => {
+    const s = net.createServer();
+    s.once("error", fallar);
+    s.listen(0, "127.0.0.1", () => {
+      const { port } = s.address() as net.AddressInfo;
+      s.close(() => resolver(port));
+    });
+  });
+}
+
+// Última línea de error del log (las de llama.cpp llevan " E "), para decir en el hilo por qué se detuvo.
+function errorDelLog(archivo: string): string {
+  try {
+    const lineas = fs.readFileSync(archivo, "utf8").split("\n").filter((l) => / E /.test(l));
+    const causa = lineas.find((l) => !/exiting due to/.test(l)) ?? lineas[0];
+    return causa ? causa.replace(/^.*? E \S+\s+/, "").trim() : "";
+  } catch {
+    return "";
+  }
+}
+
+async function iniciarServidor() {
   for (const f of [SERVIDOR, MODELO]) {
     if (!fs.existsSync(f)) return cambiarEstadoServidor({ fase: "error", detalle: `no encuentro ${f}` });
   }
-  const log = fs.openSync(path.join(app.getPath("userData"), "llama-server.log"), "w");
+  PUERTO = await puertoLibre();
+  const archivoLog = path.join(app.getPath("userData"), "llama-server.log");
+  const log = fs.openSync(archivoLog, "w");
   servidor = spawn(SERVIDOR, [
     "-m", MODELO, "--host", "127.0.0.1", "--port", String(PUERTO), "--api-key", CLAVE,
     "-c", "16384", "-np", "1",
@@ -213,7 +241,9 @@ function iniciarServidor() {
   ], { stdio: ["ignore", log, log], windowsHide: true }); // en Windows, sin ventana de consola
   servidor.on("exit", (codigo) => {
     servidor = undefined;
-    if (!saliendo) cambiarEstadoServidor({ fase: "error", detalle: `el modelo se detuvo (código ${codigo}); revisa llama-server.log` });
+    if (saliendo) return;
+    const causa = errorDelLog(archivoLog);
+    cambiarEstadoServidor({ fase: "error", detalle: `el modelo se detuvo (código ${codigo})${causa ? `: ${causa}` : ""}; revisa llama-server.log` });
   });
   const esperar = async () => {
     if (!servidor) return;
@@ -653,7 +683,7 @@ function crearVentana() {
   ventana.loadFile(path.join(__dirname, "..", "index.html"));
 }
 
-// Una sola instancia: una segunda no podría usar el puerto de llama-server.
+// Una sola instancia: una segunda cargaría otra copia del modelo y no cabría en la VRAM.
 const primera = app.requestSingleInstanceLock();
 if (!primera) app.quit();
 app.on("second-instance", () => {
@@ -669,7 +699,7 @@ app.whenReady().then(() => {
   equipo = new Empleados(app.getPath("userData"), path.join(__dirname, "..", "plantillas"));
   migrarConversaciones();
   leerConversaciones();
-  iniciarServidor();
+  iniciarServidor().catch((e) => cambiarEstadoServidor({ fase: "error", detalle: `no pude iniciar el modelo: ${e.message}` }));
   crearVentana();
 });
 app.on("window-all-closed", () => app.quit());
