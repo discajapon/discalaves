@@ -9,6 +9,7 @@ import { COLORES, Empleados, HERRAMIENTAS, PRINCIPALES, leerIdentidad, promptEmp
 import { apagarTodas, computadoraDe, responde, type Computadora } from "./computadora";
 import { navegadorDe } from "./navegador";
 import { especificaciones } from "./especificaciones";
+import { apagar as apagarOllama, asegurar as asegurarOllama, MODELO_RECOMENDADO, OLLAMA } from "./ollama";
 import { rutas } from "./rutas";
 import { registrarWsl } from "./ipc-wsl";
 import { Boveda, SinAlmacenSeguro } from "./boveda";
@@ -40,7 +41,6 @@ const MAX_REPETICIONES = 5; // a la 5.ª se detiene y lo explica; los locales nu
 const yaHiciste = (c: Conversacion, n: number) =>
   `ya hiciste exactamente esto ${n - 1} veces sin resultado; no lo repito. ` +
   (c.origen === "local" ? "Prueba otra herramienta u otro camino (otra búsqueda, otra página, otra fuente) y sigue hasta tener el resultado." : "Prueba otro camino o termina con lo que tienes.");
-const OLLAMA = process.env.DISCALAVES_OLLAMA || "http://127.0.0.1:11434"; // ponytail: dirección por defecto de Ollama; configurable cuando exista el gestor de modelos
 const CONTEXTO_OLLAMA = 10000; // Ollama recorta por defecto a ~4k tokens: se le manda menos historial
 
 // Cada conversación es con un EMPLEADO (perfil en archivos, ver empleados.ts) asignado a un modelo (campo
@@ -63,6 +63,9 @@ interface Conversacion {
 }
 interface Modelo { proveedor: Conversacion["proveedor"]; modelo: string; valor: string; detalle: string; herramientas: boolean; origen: Origen; donde: string; aviso?: string }
 const QWEN_MODELO = "Qwen3.5-9B";
+// qwen (llama-server propio) es opcional: sin su runtime y su modelo, el motor por defecto es Ollama.
+const hayQwen = () => fs.existsSync(SERVIDOR) && fs.existsSync(MODELO);
+const modeloPorDefecto = () => (hayQwen() ? "qwen" : `ollama:${MODELO_RECOMENDADO}`);
 
 function aConversacion(e: Empleado): Conversacion {
   const base = { id: e.id, nombre: e.nombre, rol: e.rol, color: e.color, usuario: e.usuario, libre: e.libre, permitidas: e.herramientas, tope: e.tope ?? TOPE_POR_DEFECTO };
@@ -228,7 +231,7 @@ function migrarConversaciones() {
   const asistente = equipo.plantilla("asistente")!;
   for (const v of viejas) {
     if (v.proveedor === "qwen") {
-      equipo.crear({ ...asistente, modelo: "qwen" }, true, "asistente", { id: v.id, usuario: "qwen", libre: v.libre });
+      equipo.crear({ ...asistente, modelo: modeloPorDefecto() }, true, "asistente", { id: v.id, usuario: "qwen", libre: v.libre });
     } else {
       // misma carpeta que tenía (antes salía del nombre del modelo)
       let usuario = v.nombre.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 32) || "ia";
@@ -286,9 +289,8 @@ async function modelosOllama(): Promise<Modelo[] | null> {
 }
 
 function iniciarServidor() {
-  for (const f of [SERVIDOR, MODELO]) {
-    if (!fs.existsSync(f)) return cambiarEstadoServidor({ fase: "error", detalle: `no encuentro ${f}` });
-  }
+  const falta = [SERVIDOR, MODELO].find((f) => !fs.existsSync(f));
+  if (falta) return conversaciones.some((c) => c.proveedor === "qwen") ? cambiarEstadoServidor({ fase: "error", detalle: `no encuentro ${falta}` }) : undefined;
   const log = fs.openSync(path.join(app.getPath("userData"), "llama-server.log"), "w");
   servidor = spawn(SERVIDOR, [
     "-m", MODELO, "--host", "127.0.0.1", "--port", String(PUERTO), "--api-key", CLAVE,
@@ -378,6 +380,7 @@ async function turno(c: Conversacion, interfaz: Electron.WebContents, senal: Abo
     const m = (e as Error).message;
     const memoria = m.match(/requires more system memory \(([\d.]+ GiB)\) than is available \(([\d.]+ GiB)\)/);
     if (memoria) throw new Error(`no hay memoria para cargar ${c.nombre}: necesita ${memoria[1]} y hay ${memoria[2]} libres. Cierra otras apps (o qwen) y vuelve a intentarlo.`);
+    if (c.proveedor === "ollama" && /not found/i.test(m)) throw new Error(`${c.modelo} no está descargado. Ábrelo en Configuración (el engranaje junto a tu perfil) → Ollama, y descárgalo.`);
     throw e;
   }
 }
@@ -500,7 +503,7 @@ ipcMain.handle("estado", (_e, id: unknown) => {
 });
 ipcMain.handle("modelos", async () => {
   const ollama = await modelosOllama();
-  const qwen: Modelo = { proveedor: "qwen", modelo: QWEN_MODELO, valor: "qwen", detalle: "incluido · 9B · Q4_K_M", herramientas: true, origen: "local", donde: "este equipo" };
+  const qwen: Modelo[] = !hayQwen() ? [] : [{ proveedor: "qwen", modelo: QWEN_MODELO, valor: "qwen", detalle: "incluido · 9B · Q4_K_M", herramientas: true, origen: "local", donde: "este equipo" }];
   const nube: Modelo[] = [];
   for (const p of proveedores()) {
     const origen: Origen = esRemoto(p.tipo) ? "remoto" : "nube";
@@ -517,12 +520,12 @@ ipcMain.handle("modelos", async () => {
       });
     }
   }
-  return { modelos: [qwen, ...(ollama ?? []), ...nube], ollama: ollama !== null };
+  return { modelos: [...qwen, ...(ollama ?? []), ...nube], ollama: ollama !== null };
 });
 
 // ---- Gestor de modelos (modelos.ts): buscar en Hugging Face, ver la VRAM e instalar en Ollama ----
 const instalaciones = new Map<string, AbortController>(); // nombre → para cancelarla
-const ollamaNoResponde = (e: unknown) => ((e as Error).message === "fetch failed" ? "Ollama no responde: instálalo desde ollama.com y ábrelo" : (e as Error).message);
+const ollamaNoResponde = (e: unknown) => ((e as Error).message === "fetch failed" ? "Ollama no responde: instálalo desde Configuración (el engranaje junto a tu perfil) o ábrelo" : (e as Error).message);
 const texto200 = (v: unknown) => (typeof v === "string" ? v.trim().slice(0, 200) : "");
 ipcMain.handle("gestor:vram", () => gestor.vram());
 ipcMain.handle("gestor:buscar", (_e, q: unknown) => gestor.buscar(texto200(q)).catch((e) => ({ error: (e as Error).message })));
@@ -1223,6 +1226,7 @@ app.whenReady().then(() => {
   openclaw = new OpenClaw(path.join(datos, "openclaw"), { url: `http://127.0.0.1:${PUERTO}`, clave: CLAVE, modelo: QWEN_MODELO, contexto: 16384 }, puenteOpenClaw());
   migrarConversaciones();
   leerConversaciones();
+  void asegurarOllama(path.join(datos, "ollama.log")); // el del usuario si ya corre; si no, el instalado
   iniciarServidor();
   crearVentana();
 });
@@ -1246,6 +1250,7 @@ for (const senal of ["SIGTERM", "SIGINT", "SIGHUP"] as const) process.on(senal, 
 app.on("will-quit", () => {
   saliendo = true;
   servidor?.kill();
+  apagarOllama(); // solo si lo arrancó la app
   for (const t of tuneles.values()) t.cerrar();
   openclaw?.apagar();
   if (!APARTE) apagarTodas(); // no deja contenedores corriendo
