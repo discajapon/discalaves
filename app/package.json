@@ -7,9 +7,9 @@
   "main": "dist/main.js",
   "scripts": {
     "start": "tsc && electron .",
-    "prueba": "tsc && node dist/prueba-unidad.js && node dist/prueba.js && node dist/prueba-nube.js",
+    "prueba": "tsc && node dist/prueba-unidad.js && node dist/prueba-ollama.js && node dist/prueba.js && node dist/prueba-nube.js",
     "prueba:nube": "tsc && node dist/prueba-nube.js",
-    "prueba:unidad": "tsc && node dist/prueba-unidad.js",
+    "prueba:unidad": "tsc && node dist/prueba-unidad.js && node dist/prueba-ollama.js",
     "instalador:win": "tsc && electron-builder --win --x64 --publish never",
     "instalador:linux": "tsc && electron-builder --linux --x64 --publish never"
   },
