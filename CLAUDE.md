@@ -288,7 +288,12 @@ imagen, ~2 min).
   pendientes y deja "me detuviste" en el hilo; un comando que ya corre
   termina antes de parar) y la detección de repeticiones (misma herramienta
   con los mismos argumentos: a la 3.ª no se ejecuta y se le pide otro camino,
-  a la 5.ª se detiene y lo explica). Si una sola tarea no cabe en la ventana,
+  a la 5.ª se detiene y lo explica). **Locales (qwen, Ollama y OpenClaw) nunca
+  se detienen solos** (decisión del usuario, 2026-10-01): a la 3.ª se les
+  bloquea esa llamada y se les pide otra herramienta, cuantas veces haga falta,
+  y su prompt les dice que no tienen límite de tiempo, pasos ni texto y que no
+  paren hasta tener el resultado; el único freno es Detener. El corte a la 5.ª
+  queda solo para la nube, los servidores remotos y Codex. Si una sola tarea no cabe en la ventana,
   `contexto()` recorta las salidas de herramientas más antiguas (las 3
   últimas quedan enteras). Choca con el principio 3 (puntos de control):
   lo decidió el usuario.
@@ -324,7 +329,7 @@ imagen, ~2 min).
     direcciones privadas de OpenClaw.
   - Plugin `app/openclaw/discalaves` (`before_tool_call`/`after_tool_call`)
     → servidor del puente en 127.0.0.1 con token: pasos en el hilo, Detener,
-    control del usuario, freno de repeticiones (3.ª bloquea, 5.ª corta) y
+    control del usuario, freno de repeticiones (3.ª bloquea; no corta) y
     aprobación para borrar (`exec` con rm…, parches que borran) y enviar
     formularios con el navegador. Sin respuesta de la app, bloquea. Límite:
     los clics de su navegador van por referencia sin texto, así que un clic en
