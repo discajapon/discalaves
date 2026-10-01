@@ -1,15 +1,18 @@
-// Instalación de lo que Discalaves necesita y no viene en el instalador: el runtime del modelo (llama.cpp), el
-// modelo (Qwen 3.5 9B) y, en Linux, el motor de contenedores (Podman). Todo se descarga una vez, con sha256
-// fijado y reanudable, dentro de rutas.ia. Sin Electron: se prueba con node (prueba-unidad.ts).
-// En Windows el motor lo prepara wsl.ts (distro propia con Podman); aquí solo van runtime y modelo.
+// Instalación de lo que Discalaves necesita y no viene en el instalador: Ollama (el motor de modelos por
+// defecto), un modelo recomendado y, en Linux, el motor de contenedores (Podman). Opcionales, solo si se piden:
+// llama.cpp y Qwen 3.5 9B (el servidor propio con ranuras). Todo se descarga una vez, reanudable y verificado,
+// dentro de rutas.ia. Sin Electron: se prueba con node (prueba-unidad.ts).
+// En Windows el motor de contenedores lo prepara wsl.ts (distro propia con Podman).
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { asegurar, binario, instalar as instalarOllama, MODELO_RECOMENDADO, modelos, OLLAMA, version } from "./ollama";
+import { instalar as instalarEnOllama } from "./modelos";
 import { rutas } from "./rutas";
 
-export interface Pieza { id: "motor" | "runtime" | "modelo"; nombre: string; mb: number }
+export interface Pieza { id: "motor" | "ollama" | "modelo" | "runtime" | "qwen"; nombre: string; mb: number }
 export type Progreso = (texto: string) => void;
 interface Archivo { url: string; sha256: string; mb: number }
 
@@ -38,14 +41,12 @@ export const hayNvidia = () => spawnSync("nvidia-smi", ["-L"], { windowsHide: tr
 const hayMotor = () => ["docker", "podman"].some((m) => spawnSync(m, ["info"], { windowsHide: true }).status === 0);
 export const hayDocker = () => spawnSync("docker", ["info"], { windowsHide: true }).status === 0;
 
-export function pendientes(): Pieza[] {
+// Lo que falta por defecto. "runtime" y "qwen" (llama.cpp y el modelo propio) solo se instalan si se piden.
+export async function pendientes(): Promise<Pieza[]> {
   const p: Pieza[] = [];
   if (process.platform === "linux" && !hayMotor()) p.push({ id: "motor", nombre: "Podman, el motor de las computadoras de los empleados (pide tu contraseña de administrador)", mb: 100 });
-  if (!fs.existsSync(rutas.servidor)) {
-    const mb = RUNTIME[clave()]?.reduce((s, a) => s + a.mb, 0) ?? 0;
-    p.push({ id: "runtime", nombre: `llama.cpp, el motor del modelo (${hayNvidia() ? "CUDA" : "Vulkan"})`, mb });
-  }
-  if (!fs.existsSync(rutas.modelo)) p.push({ id: "modelo", nombre: "Qwen 3.5 9B, el modelo que piensa", mb: MODELO.mb });
+  if (!(await version()) && !binario()) p.push({ id: "ollama", nombre: "Ollama, el motor de los modelos (tamaño aproximado)", mb: 1500 });
+  if (!(await modelos()).length) p.push({ id: "modelo", nombre: `${MODELO_RECOMENDADO}, un modelo de 8B con herramientas, parecido a Qwen`, mb: 5200 });
   return p;
 }
 const clave = () => `${process.platform}-${hayNvidia() ? "cuda" : "vulkan"}`;
@@ -135,11 +136,18 @@ function instalarMotor(progreso: Progreso) {
   });
 }
 
-// Instala lo que falte. Devuelve true si hay que reiniciar la app (cambió el motor de contenedores).
-export async function instalar(progreso: Progreso, senal?: AbortSignal): Promise<boolean> {
-  const falta = pendientes().map((p) => p.id);
+// Instala lo que falte (o solo los `ids` pedidos). Devuelve true si hay que reiniciar la app (cambió el motor
+// de contenedores).
+export async function instalar(progreso: Progreso, senal?: AbortSignal, ids?: Pieza["id"][]): Promise<boolean> {
+  const falta = ids ?? (await pendientes()).map((p) => p.id);
   if (falta.includes("motor")) await instalarMotor(progreso);
+  if (falta.includes("ollama")) await instalarOllama(progreso, senal);
+  if (falta.includes("modelo")) {
+    if (!(await asegurar())) throw new Error("Ollama no arrancó: revisa ollama.log en la carpeta de modelos");
+    const fin = senal ?? new AbortController().signal;
+    await instalarEnOllama(OLLAMA, MODELO_RECOMENDADO, (p) => progreso(`Modelo: ${p.total && p.completado ? Math.floor((p.completado / p.total) * 100) + " %" : p.estado}`), fin);
+  }
   if (falta.includes("runtime")) await instalarRuntime(progreso, senal);
-  if (falta.includes("modelo")) await bajar(MODELO.url, rutas.modelo, MODELO.sha256, progreso, "Modelo", senal);
+  if (falta.includes("qwen")) await bajar(MODELO.url, rutas.modelo, MODELO.sha256, progreso, "Qwen 3.5", senal);
   return falta.includes("motor");
 }
