@@ -139,6 +139,12 @@ void (async () => {
   assert.equal((await turnoOpenAI(pedido)).texto, "listo", "tras dos llamadas rotas, el tercer intento sale bien");
   rotas = 3;
   await assert.rejects(turnoOpenAI(pedido), /en 3 intentos/);
+  // El servidor entrega la llamada con el JSON cortado (contexto lleno): no se acepta ni se guarda; se repite.
+  const cortada = http.createServer((_q, res) => {
+    res.writeHead(200, { "content-type": "text/event-stream" }).end('data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"a","function":{"name":"abrir_pagina","arguments":"{\\"url\\":\\"https://x"}}]}}]}\n\ndata: [DONE]\n\n');
+  }).listen(0);
+  await assert.rejects(turnoOpenAI({ ...pedido, url: `http://127.0.0.1:${(cortada.address() as import("node:net").AddressInfo).port}/v1` }), /en 3 intentos/, "una llamada cortada no llega al historial");
+  cortada.close();
   rotas = 1;
   modelo.close();
   servidor.close();

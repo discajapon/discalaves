@@ -130,8 +130,20 @@ async function unTurnoOpenAI(p: Pedido): Promise<Turno> {
       l.argumentos += tc.function?.arguments ?? "";
     }
   }
+  // Una llamada con el JSON cortado (el contexto se llenó, o se acabaron los tokens) no se acepta: guardada en el
+  // historial, el servidor la rechazaría con un 500 en todos los turnos siguientes. Se repite el turno.
+  for (const l of llamadas) if (l?.argumentos.trim() && !jsonValido(l.argumentos)) throw new Error(`Failed to parse tool call arguments as JSON (cortado): ${l.argumentos.slice(-60)}`);
   return { texto: texto.trim(), llamadas: limpiar(llamadas), uso: uso ?? estimar(cuerpo.messages, texto) };
 }
+
+export const jsonValido = (t: string) => {
+  try {
+    JSON.parse(t);
+    return true;
+  } catch {
+    return false;
+  }
+};
 
 const limpiar = (llamadas: Llamada[]) => llamadas.filter((l) => l?.nombre).map((l, i) => ({ ...l, id: l.id || `llamada-${Date.now()}-${i}` }));
 
