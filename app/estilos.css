@@ -695,3 +695,5 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 .config-specs dt { color: var(--secundario); }
 .config-specs dd { margin: 0; }
 .config-wallet { max-width: 100%; padding: var(--e2) var(--e3); border-radius: var(--radio-fila); background: var(--gris-suave); font: 12px/1.5 var(--fuente-mono); overflow-wrap: anywhere; user-select: all; }
+.config-btc { display: inline-flex; align-items: center; gap: var(--e2); }
+.config-btc img { width: 20px; height: 20px; }
