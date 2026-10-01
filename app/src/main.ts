@@ -8,6 +8,7 @@ import { ADICIONALES_OC, OpenClaw, PRINCIPALES_OC } from "./openclaw";
 import { COLORES, Empleados, HERRAMIENTAS, PRINCIPALES, leerIdentidad, promptEmpleado, type Empleado, type Identidad } from "./empleados";
 import { apagarTodas, computadoraDe, responde, type Computadora } from "./computadora";
 import { navegadorDe } from "./navegador";
+import { especificaciones } from "./especificaciones";
 import { rutas } from "./rutas";
 import { registrarWsl } from "./ipc-wsl";
 import { Boveda, SinAlmacenSeguro } from "./boveda";
@@ -674,6 +675,11 @@ ipcMain.handle("guardar-empleado", async (_e, id: unknown, datos: unknown) => {
   equipo.actualizar(String(id), identidad, conHerramientas);
   if (g.tope) equipo.cambiarTope(String(id), g.tope);
   return {};
+});
+// Hoja de configuración: especificaciones del equipo y el único enlace externo de la app (los créditos).
+ipcMain.handle("especificaciones", () => especificaciones());
+ipcMain.handle("abrir-enlace", (_e, url: unknown) => {
+  if (url === "https://discajapon.com") void shell.openExternal(url);
 });
 ipcMain.handle("abrir-carpeta", async (_e, id: unknown) => {
   if (!equipo.buscar(String(id))) return;

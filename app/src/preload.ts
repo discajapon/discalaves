@@ -11,6 +11,8 @@ contextBridge.exposeInMainWorld("discalaves", {
   alProgresoWsl: (f: (texto: string) => void) => ipcRenderer.on("wsl:progreso", (_e, texto) => f(texto)),
   conversaciones: () => ipcRenderer.invoke("conversaciones"),
   modelos: () => ipcRenderer.invoke("modelos"),
+  especificaciones: () => ipcRenderer.invoke("especificaciones"),
+  abrirEnlace: (url: string) => ipcRenderer.invoke("abrir-enlace", url),
   plantillas: () => ipcRenderer.invoke("plantillas"),
   empleado: (id: string) => ipcRenderer.invoke("empleado", id),
   crearEmpleado: (datos: unknown, plantilla?: string) => ipcRenderer.invoke("crear-empleado", datos, plantilla),
