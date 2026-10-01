@@ -62,6 +62,10 @@ Grok Bot.
   asignar cualquiera de tus modelos a un empleado. Los que saben usar
   herramientas tienen su propia computadora; los que no, se marcan como "solo
   chat".
+- **Gestor de modelos.** Busca modelos en Hugging Face, te dice si cada versión
+  cabe en tu GPU y los instala en Ollama con una barra de progreso. También
+  acepta nombres de la biblioteca de Ollama (`llama3.2:3b`) y archivos `.gguf`
+  de tu disco. Lo instalado se asigna enseguida a cualquier empleado.
 - **Tu perfil.** Tu nombre y tu foto, guardados solo en tu equipo.
 
 ## Modelos fuera de tu equipo (opcional)

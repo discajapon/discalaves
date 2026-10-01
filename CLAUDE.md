@@ -392,6 +392,14 @@ imagen, ~2 min).
   especificaciones (`especificaciones.ts`: sistema, CPU, RAM y GPU NVIDIA por `nvidia-smi`) y los créditos
   (discajapon.com, único enlace externo permitido por `abrir-enlace`, y la dirección BTC para donaciones, que el
   botón copia). Probado en la app real con capturas; sin comprobar la copia al portapapeles.
+- **Gestor de modelos** (pedido del usuario, 2026-09-30; `modelos.ts`, diálogo en `interfaz.ts`): se abre desde
+  el perfil del empleado y desde la configuración. Busca GGUF en Hugging Face (`/api/models?filter=gguf`), lista
+  las versiones de un solo archivo con su VRAM estimada (tamaño + 1,5 GB) frente a la de la GPU (`nvidia-smi`),
+  instala en Ollama (`/api/pull` con `hf.co/<repo>:<cuant>` o un nombre de su biblioteca) con progreso y
+  cancelar, quita con doble clic (no si un empleado lo usa) y carga un `.gguf` del disco (blob por sha256 +
+  `/api/create`) como `<nombre>:archivo`. **No usar la etiqueta `:local`:** Ollama 0.24 crea el modelo pero
+  luego no lo encuentra ni para borrarlo. Probado en la app real (2026-10-01) con SmolLM2-135M: todo el
+  recorrido. qwen no pasa por aquí (lo trae el instalador).
 
 **Diseño:** antes de tocar estilos, filtros SVG o animaciones, lee
 `GUIA_DE_DISEÑO.md` (reglas del vidrio líquido, tokens, recetas de
