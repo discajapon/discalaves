@@ -39,5 +39,15 @@ contextBridge.exposeInMainWorld("discalaves", {
   alRecibirTrozo: (f: (trozo: unknown) => void) => ipcRenderer.on("trozo", (_e, trozo) => f(trozo)),
   alPaso: (f: (id: string) => void) => ipcRenderer.on("paso", (_e, id) => f(id)),
   alAprobacion: (f: (p: unknown) => void) => ipcRenderer.on("aprobacion", (_e, p) => f(p)),
+  // Gestor de modelos: buscar en Hugging Face, VRAM, instalar/quitar en Ollama y cargar un .gguf del disco.
+  gestorVram: () => ipcRenderer.invoke("gestor:vram"),
+  gestorBuscar: (q: string) => ipcRenderer.invoke("gestor:buscar", q),
+  gestorVersiones: (repo: string) => ipcRenderer.invoke("gestor:versiones", repo),
+  gestorInstalados: () => ipcRenderer.invoke("gestor:instalados"),
+  gestorInstalar: (nombre: string) => ipcRenderer.invoke("gestor:instalar", nombre),
+  gestorArchivo: () => ipcRenderer.invoke("gestor:archivo"),
+  gestorCancelar: (nombre: string) => ipcRenderer.invoke("gestor:cancelar", nombre),
+  gestorQuitar: (nombre: string) => ipcRenderer.invoke("gestor:quitar", nombre),
+  alProgresoGestor: (f: (p: unknown) => void) => ipcRenderer.on("gestor:progreso", (_e, p) => f(p)),
   alEquipo: (f: (activos: string[]) => void) => ipcRenderer.on("equipo", (_e, activos) => f(activos)),
 });

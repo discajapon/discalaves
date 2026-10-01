@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, safeStorage, session, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, safeStorage, session, shell } from "electron";
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import fs from "node:fs";
@@ -16,6 +16,7 @@ import { Codex } from "./codex";
 import { Gasto, TOPE_POR_DEFECTO } from "./gasto";
 import { Corte, URL_POR_DEFECTO, esRemoto, listarModelos, sinClave, turnoClaude, turnoOpenAI, type ModeloNube, type Proveedor, type Tipo, type Uso } from "./proveedores";
 import { Tunel, destino, sshValido, type Pregunta } from "./tunel";
+import * as gestor from "./modelos";
 
 // Rutas según el sistema (Linux o Windows): ver rutas.ts. ponytail: puerto fijo para un solo servidor.
 const SERVIDOR = rutas.servidor;
@@ -511,6 +512,54 @@ ipcMain.handle("modelos", async () => {
     }
   }
   return { modelos: [qwen, ...(ollama ?? []), ...nube], ollama: ollama !== null };
+});
+
+// ---- Gestor de modelos (modelos.ts): buscar en Hugging Face, ver la VRAM e instalar en Ollama ----
+const instalaciones = new Map<string, AbortController>(); // nombre → para cancelarla
+const ollamaNoResponde = (e: unknown) => ((e as Error).message === "fetch failed" ? "Ollama no responde: instálalo desde ollama.com y ábrelo" : (e as Error).message);
+const texto200 = (v: unknown) => (typeof v === "string" ? v.trim().slice(0, 200) : "");
+ipcMain.handle("gestor:vram", () => gestor.vram());
+ipcMain.handle("gestor:buscar", (_e, q: unknown) => gestor.buscar(texto200(q)).catch((e) => ({ error: (e as Error).message })));
+ipcMain.handle("gestor:versiones", (_e, repo: unknown) => gestor.versiones(texto200(repo)).catch((e) => ({ error: (e as Error).message })));
+ipcMain.handle("gestor:instalados", async () => {
+  try {
+    const r = await fetch(`${OLLAMA}/api/tags`, { signal: AbortSignal.timeout(3000) });
+    return ((await r.json()) as { models: { name: string; size: number }[] }).models.map((m) => ({ nombre: m.name, tamano: m.size }));
+  } catch (e) {
+    return { error: ollamaNoResponde(e) };
+  }
+});
+// Instala (o carga un .gguf elegido por el usuario) con el progreso en el evento "gestor:progreso".
+async function conProgreso(clave: string, ev: Electron.IpcMainInvokeEvent, trabajo: (avisar: (p: gestor.Progreso) => void, senal: AbortSignal) => Promise<unknown>) {
+  const parar = new AbortController();
+  instalaciones.set(clave, parar);
+  try {
+    await trabajo((p) => ev.sender.send("gestor:progreso", { nombre: clave, ...p }), parar.signal);
+    return {};
+  } catch (e) {
+    return { error: parar.signal.aborted ? "cancelado" : ollamaNoResponde(e) };
+  } finally {
+    instalaciones.delete(clave);
+  }
+}
+ipcMain.handle("gestor:instalar", (ev, nombre: unknown) => {
+  const n = texto200(nombre);
+  if (!gestor.nombreValido(n)) return { error: "nombre de modelo no válido" };
+  return conProgreso(n, ev, (avisar, senal) => gestor.instalar(OLLAMA, n, avisar, senal));
+});
+ipcMain.handle("gestor:archivo", async (ev) => {
+  const { filePaths } = await dialog.showOpenDialog(ventana!, { title: "Elegir un modelo .gguf", properties: ["openFile"], filters: [{ name: "Modelos GGUF", extensions: ["gguf"] }] });
+  if (!filePaths[0]) return { error: "" }; // no eligió ninguno
+  let nombre = "";
+  const r = await conProgreso("archivo", ev, async (avisar, senal) => (nombre = await gestor.desdeArchivo(OLLAMA, filePaths[0], avisar, senal)));
+  return { ...r, nombre };
+});
+ipcMain.handle("gestor:cancelar", (_e, nombre: unknown) => instalaciones.get(texto200(nombre))?.abort());
+ipcMain.handle("gestor:quitar", async (_e, nombre: unknown) => {
+  const n = texto200(nombre);
+  const usan = (leerConversaciones(), conversaciones).filter((c) => c.proveedor === "ollama" && c.modelo === n).map((c) => c.nombre);
+  if (usan.length) return { error: `lo usa${usan.length > 1 ? "n" : ""} ${usan.join(", ")}: asígnale${usan.length > 1 ? "s" : ""} otro modelo antes` };
+  return gestor.quitar(OLLAMA, n).then(() => ({}), (e) => ({ error: ollamaNoResponde(e) }));
 });
 
 // ---- Proveedores (la interfaz nunca recibe las claves: solo si hay una guardada) ----
