@@ -12,6 +12,7 @@ import { execFileSync } from "node:child_process";
 import { ordenMotor } from "./computadora";
 import { bajar, extraer } from "./instalar";
 import { rutasPara } from "./rutas";
+import { cuantDe, nombreValido } from "./modelos";
 import { distrosDe, textoWsl } from "./wsl";
 
 // Linux: igual que siempre.
@@ -129,5 +130,16 @@ void (async () => {
   assert.deepEqual(fs.readdirSync(path.join(tmpI, "dest")), ["llama-server"], "aplana la carpeta raíz y no deja restos");
   servidor.close();
   fs.rmSync(tmpI, { recursive: true, force: true });
+
+  // Gestor de modelos: la cuantización de cada archivo es la etiqueta de hf.co en Ollama; nombres seguros.
+  assert.equal(cuantDe("Qwen3.5-9B-UD-Q4_K_XL.gguf"), "UD-Q4_K_XL");
+  assert.equal(cuantDe("Qwen3.5-9B-Q4_K_M.gguf"), "Q4_K_M");
+  assert.equal(cuantDe("Qwen3.5-9B-IQ4_XS.gguf"), "IQ4_XS");
+  assert.equal(cuantDe("modelo.BF16.gguf"), "BF16");
+  assert.equal(cuantDe("mmproj-F16.gguf"), null, "el proyector de visión no es un modelo");
+  assert.equal(cuantDe("big-Q8_0-00001-of-00003.gguf"), null, "los modelos partidos no se ofrecen");
+  assert.equal(cuantDe("README.md"), null);
+  assert.ok(nombreValido("hf.co/unsloth/Qwen3.5-9B-GGUF:Q4_K_M") && nombreValido("llama3.2:3b"));
+  assert.ok(!nombreValido("../x") && !nombreValido("-rf") && !nombreValido("a b"));
   console.log("unidad: ok");
 })();
