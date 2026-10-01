@@ -298,7 +298,9 @@ imagen, ~2 min).
   últimas quedan enteras) y, si aun así no cabe (tareas de cientos de pasos), descarta los pasos más
   antiguos con sus resultados y deja un aviso (2026-10-01: sin esto el prompt llegó a 24 575 tokens, llenó
   el contexto de llama-server y la llamada a herramienta salió cortada: "Failed to parse tool call
-  arguments"; `turnoOpenAI` repite ese turno hasta 3 veces por si el JSON roto es solo mala suerte). Choca con el principio 3 (puntos de control):
+  arguments"; `turnoOpenAI` repite ese turno hasta 3 veces y no acepta una llamada con el JSON cortado: guardada en el
+  historial, llama-server la rechazaba con un 500 en todos los turnos siguientes, y `contexto()` repara con `{}`
+  las que ya estaban guardadas). Choca con el principio 3 (puntos de control):
   lo decidió el usuario.
 - Aprobación de acciones delicadas (borrar, enviar, pagar): obligatoria en el
   código salvo en modo libre (`delicado()` en `herramientas.ts`): `rm`/`rmdir`/`-delete` en la
