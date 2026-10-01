@@ -15,7 +15,7 @@ import { registrarWsl } from "./ipc-wsl";
 import { Boveda, SinAlmacenSeguro } from "./boveda";
 import { Codex } from "./codex";
 import { Gasto, TOPE_POR_DEFECTO } from "./gasto";
-import { Corte, URL_POR_DEFECTO, esRemoto, listarModelos, sinClave, turnoClaude, turnoOpenAI, type ModeloNube, type Proveedor, type Tipo, type Uso } from "./proveedores";
+import { Corte, URL_POR_DEFECTO, esRemoto, jsonValido, listarModelos, sinClave, turnoClaude, turnoOpenAI, type ModeloNube, type Proveedor, type Tipo, type Uso } from "./proveedores";
 import { Tunel, destino, sshValido, type Pregunta } from "./tunel";
 import * as gestor from "./modelos";
 
@@ -339,7 +339,7 @@ function contexto(c: Conversacion) {
     return {
       role: "assistant",
       content: m.texto,
-      ...(m.llamadas && { tool_calls: m.llamadas.map((l) => ({ id: l.id, type: "function", function: { name: l.nombre, arguments: l.argumentos } })) }),
+      ...(m.llamadas && { tool_calls: m.llamadas.map((l) => ({ id: l.id, type: "function", function: { name: l.nombre, arguments: !l.argumentos.trim() || jsonValido(l.argumentos) ? l.argumentos : "{}" } })) }),
     };
   });
   // Una sola tarea larga puede no caber: se acortan las salidas de herramientas más antiguas
