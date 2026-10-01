@@ -101,7 +101,7 @@ hacia dónde, marca a esos empleados en la lista y nunca cambia su origen sola.
 - Linux o Windows 10/11 (Windows todavía sin probar; Mac después).
 - GPU NVIDIA con al menos 8 GB de VRAM.
 - 16 GB de RAM recomendados.
-- Con el instalador no necesitas nada más: Discalaves descarga llama.cpp, el
+- Con el instalador no necesitas nada más: Discalaves descarga Ollama, un
   modelo y, en Linux, Podman. Para seguir el desarrollo desde el código, además:
   Node.js 24 o superior.
 
@@ -116,16 +116,25 @@ En Windows, descarga el `.exe` de los artefactos de GitHub Actions
 `app/instalador/`); aún no hay descarga publicada. Ábrelo. La primera vez, Discalaves te muestra qué falta y lo prepara
 cuando pulsas **Preparar**:
 
-- **llama.cpp** (730 MB con CUDA si tienes NVIDIA; 30 MB con Vulkan en otra GPU).
-- **Qwen 3.5 9B** (5,4 GB). Todo se verifica con sha256 y, si se corta, continúa
-  donde se quedó.
+- **Ollama**, el motor que ejecuta los modelos (unos 1,5 GB). Se instala en tu
+  carpeta, sin permisos de administrador; si ya lo tienes, se usa el tuyo.
+- **Qwen3 8B** (5,2 GB), un modelo con herramientas que cabe en 8 GB de VRAM. Es
+  solo el recomendado: puedes usar cualquier otro desde Configuración. Lo que
+  se descarga de GitHub o de Hugging Face se verifica con sha256 y, si se
+  corta, continúa donde se quedó.
 - **Podman** en Linux si no hay Docker ni Podman usable (pide tu contraseña de
   administrador una vez) o, en Windows, una distro WSL propia con Podman.
 
-Probado: la descarga y extracción de llama.cpp de verdad en Linux, la descarga
-reanudable contra un servidor local y la pantalla de preparación en la app
-empaquetada. **Sin probar:** la descarga completa del modelo desde Hugging Face,
-la instalación de Podman con `pkexec` en una distro sin él, y Windows.
+Desde el engranaje junto a tu perfil, **Configuración → Ollama** instala Ollama
+y baja el modelo recomendado cuando quieras. llama.cpp con Qwen 3.5 9B (el
+servidor propio de Discalaves) sigue funcionando si ya lo tienes, pero ya no se
+instala por defecto.
+
+Probado: la instalación de Ollama contra un servidor local que imita su
+release, la descarga reanudable, la descarga real de llama.cpp en Linux y la
+pantalla de preparación en la app empaquetada. **Sin probar:** la descarga real
+de Ollama y del modelo, la instalación de Podman con `pkexec` en una distro
+sin él, y Windows.
 
 ## Probarlo hoy
 

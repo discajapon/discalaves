@@ -406,6 +406,22 @@ imagen, ~2 min).
   luego no lo encuentra ni para borrarlo. Probado en la app real (2026-10-01) con SmolLM2-135M: todo el
   recorrido. qwen no pasa por aquí (lo trae el instalador).
 
+- **Ollama por defecto** (decisión del usuario, 2026-10-01: el motor local no tiene que ser Qwen):
+  `ollama.ts` usa el Ollama del usuario si responde en `127.0.0.1:11434`; si no, el `ollama` del PATH o la copia
+  que instala la app en `rutas.ia/ollama` (el archivo oficial de la release, sin root), y lo arranca y apaga ella
+  con `OLLAMA_CONTEXT_LENGTH=16384`, `NUM_PARALLEL=2`, `FLASH_ATTENTION=1` y `KV_CACHE_TYPE=q8_0`. El hash sale del
+  `sha256sum.txt` de la misma release (sin versión fijada: pendiente para el instalador publicado). Modelo
+  recomendado `qwen3:8b` (5,2 GB), elegido por el usuario entre qwen3, llama3.1 y granite3.3 (todos ~5 GB).
+  `instalar.ts` pide por defecto Ollama y el modelo (si no hay ninguno instalado) y, en Linux, Podman;
+  llama.cpp y Qwen 3.5 pasan a opcionales (ids `runtime` y `qwen` de `instalar()`, sin botón todavía). Sin su
+  runtime, los empleados nuevos usan `ollama:qwen3:8b` (`modeloPorDefecto()` en `main.ts`) y `iniciarServidor()`
+  no da error si nadie usa qwen. Configuración → Ollama instala Ollama y baja el modelo. Un modelo sin
+  descargar da un mensaje que lleva ahí. Probado: `prueba-ollama.ts` (release falso local: descarga, hash,
+  descompresión, arranque con los ajustes y apagado) y la app real sin llama.cpp (Asistente con `qwen3:8b`,
+  menú, mensaje de error). **No probado:** la descarga real de Ollama y de `qwen3:8b`, Windows (zip), el
+  contexto de 16k con un Ollama del usuario ya en marcha (se queda con su configuración; `CONTEXTO_OLLAMA`
+  sigue en ~10 000 caracteres).
+
 **Diseño:** antes de tocar estilos, filtros SVG o animaciones, lee
 `GUIA_DE_DISEÑO.md` (reglas del vidrio líquido, tokens, recetas de
 materiales, patrones de movimiento y plantillas de componentes).
