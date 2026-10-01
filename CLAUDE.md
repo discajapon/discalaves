@@ -295,7 +295,10 @@ imagen, ~2 min).
   paren hasta tener el resultado; el único freno es Detener. El corte a la 5.ª
   queda solo para la nube, los servidores remotos y Codex. Si una sola tarea no cabe en la ventana,
   `contexto()` recorta las salidas de herramientas más antiguas (las 3
-  últimas quedan enteras). Choca con el principio 3 (puntos de control):
+  últimas quedan enteras) y, si aun así no cabe (tareas de cientos de pasos), descarta los pasos más
+  antiguos con sus resultados y deja un aviso (2026-10-01: sin esto el prompt llegó a 24 575 tokens, llenó
+  el contexto de llama-server y la llamada a herramienta salió cortada: "Failed to parse tool call
+  arguments"; `turnoOpenAI` repite ese turno hasta 3 veces por si el JSON roto es solo mala suerte). Choca con el principio 3 (puntos de control):
   lo decidió el usuario.
 - Aprobación de acciones delicadas (borrar, enviar, pagar): obligatoria en el
   código salvo en modo libre (`delicado()` en `herramientas.ts`): `rm`/`rmdir`/`-delete` en la
