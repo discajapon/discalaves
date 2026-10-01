@@ -344,7 +344,10 @@ function contexto(c: Conversacion) {
   });
   // Una sola tarea larga puede no caber: se acortan las salidas de herramientas más antiguas
   // (las últimas quedan enteras) hasta entrar en la ventana.
-  // ponytail: recorte, no resumen; si ni así cabe, el servidor responderá con error de contexto.
+  // Si aun acortadas no caben (tareas de cientos de pasos), se descartan los pasos más antiguos, de a uno con sus
+  // resultados, y se deja un aviso. Sin esto el prompt llenaba el contexto del servidor y la generación se cortaba
+  // a mitad de una llamada a herramienta (visto: "Failed to parse tool call arguments", n_tokens = 24575).
+  // ponytail: recorte, no resumen; se pierde lo que el modelo hizo al principio de la tarea.
   let total = JSON.stringify(mensajes).length;
   const herramientas = mensajes.filter((m) => m.role === "tool");
   for (const m of herramientas.slice(0, -3)) {
@@ -354,6 +357,12 @@ function contexto(c: Conversacion) {
     total -= m.content.length - corto.length;
     m.content = corto;
   }
+  let omitidos = 0;
+  while (total > limite && mensajes.length > 4) {
+    do total -= JSON.stringify(mensajes.splice(1, 1)[0]).length; while (mensajes[1]?.role === "tool");
+    omitidos++;
+  }
+  if (omitidos) mensajes[0].content += "\n[… se omitieron los pasos más antiguos de esta tarea para que quepa; sigue desde lo que ves …]";
   return mensajes;
 }
 
