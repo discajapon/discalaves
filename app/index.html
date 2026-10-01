@@ -126,6 +126,14 @@
   <dialog id="config" class="perfil empleado" aria-labelledby="config-titulo">
     <form method="dialog">
       <h2 id="config-titulo">Configuración</h2>
+      <section class="config-seccion" aria-labelledby="config-ollama-t">
+        <h3 id="config-ollama-t">Ollama</h3>
+        <p id="config-ollama-estado" class="detalle" role="status"></p>
+        <div class="acciones">
+          <button id="config-ollama-instalar" type="button" class="boton" hidden>Instalar Ollama</button>
+          <button id="config-ollama-modelo" type="button" class="boton" hidden></button>
+        </div>
+      </section>
       <section class="config-seccion" aria-labelledby="config-modelos-t">
         <h3 id="config-modelos-t">Modelos de este equipo</h3>
         <ul id="config-modelos" class="proveedores-lista"></ul>

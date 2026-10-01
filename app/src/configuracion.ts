@@ -3,7 +3,8 @@
 (() => {
   interface Modelo { modelo: string; detalle: string; herramientas: boolean; origen: string; donde: string }
   interface Specs { sistema: string; procesador: string; nucleos: number; ramGB: number; gpus: { nombre: string; vramGB: number; usadaGB: number }[] }
-  const puente = (globalThis as unknown as { discalaves: { modelos(): Promise<{ modelos: Modelo[] }>; especificaciones(): Promise<Specs>; abrirEnlace(url: string): Promise<void>; copiarWallet(): Promise<void> } }).discalaves;
+  interface EstadoOllama { version: string | null; instalado: boolean; modelos: number; recomendado: string; recomendadoInstalado: boolean }
+  const puente = (globalThis as unknown as { discalaves: { modelos(): Promise<{ modelos: Modelo[] }>; especificaciones(): Promise<Specs>; abrirEnlace(url: string): Promise<void>; copiarWallet(): Promise<void>; ollamaEstado(): Promise<EstadoOllama>; instalarEjecutar(ids?: string[]): Promise<{ error?: string }>; alProgresoWsl(f: (texto: string) => void): void } }).discalaves;
   const dialogo = document.getElementById("config") as HTMLDialogElement;
   const modelos = document.getElementById("config-modelos")!;
   const specs = document.getElementById("config-specs")!;
@@ -17,11 +18,44 @@
     return el;
   };
 
+  // Menú de Ollama: instalar el motor y bajar el modelo recomendado desde aquí.
+  const ollamaEstado = document.getElementById("config-ollama-estado")!;
+  const botonInstalar = document.getElementById("config-ollama-instalar") as HTMLButtonElement;
+  const botonModelo = document.getElementById("config-ollama-modelo") as HTMLButtonElement;
+  let ocupado = false;
+  puente.alProgresoWsl((texto) => ocupado && (ollamaEstado.textContent = texto));
+
+  async function pintarOllama() {
+    const e = await puente.ollamaEstado();
+    ollamaEstado.textContent = e.version ? `Ollama ${e.version} funcionando · ${e.modelos} modelo(s) instalado(s)` : e.instalado ? "Ollama está instalado pero apagado: se enciende al abrir Discalaves." : "Ollama no está instalado. Es el motor que ejecuta los modelos en tu equipo.";
+    botonInstalar.hidden = e.instalado;
+    botonModelo.hidden = !e.instalado || e.recomendadoInstalado;
+    botonModelo.textContent = `Descargar ${e.recomendado} (recomendado)`;
+  }
+  async function instalar(ids: string[]) {
+    ocupado = botonInstalar.disabled = botonModelo.disabled = true;
+    ollamaEstado.textContent = "Preparando…";
+    const { error } = await puente.instalarEjecutar(ids);
+    ocupado = botonInstalar.disabled = botonModelo.disabled = false;
+    await pintarOllama();
+    if (error) ollamaEstado.textContent = `No se pudo: ${error}`;
+    else void abrirListas();
+  }
+  botonInstalar.addEventListener("click", () => void instalar(["ollama", "modelo"]));
+  botonModelo.addEventListener("click", () => void instalar(["modelo"]));
+
   async function abrir() {
     copiada.textContent = "";
     modelos.replaceChildren();
     specs.replaceChildren();
     dialogo.showModal();
+    void pintarOllama();
+    await abrirListas();
+  }
+
+  async function abrirListas() {
+    modelos.replaceChildren();
+    specs.replaceChildren();
     const [m, s] = await Promise.all([puente.modelos().catch(() => ({ modelos: [] as Modelo[] })), puente.especificaciones()]);
     const locales = m.modelos.filter((x) => x.origen === "local");
     for (const x of locales) {
