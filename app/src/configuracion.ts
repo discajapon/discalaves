@@ -44,6 +44,11 @@
   }
 
   document.getElementById("configuracion")!.addEventListener("click", () => void abrir());
+  // El gestor de modelos (interfaz.ts) es otro diálogo: se cierra esta hoja antes de abrirlo.
+  document.getElementById("config-gestor")!.addEventListener("click", () => {
+    dialogo.close();
+    void (globalThis as unknown as { abrirGestor(): Promise<void> }).abrirGestor();
+  });
   document.getElementById("config-web")!.addEventListener("click", (e) => {
     e.preventDefault();
     void puente.abrirEnlace("https://discajapon.com");

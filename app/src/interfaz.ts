@@ -46,6 +46,15 @@ declare const discalaves: {
   aprobar(id: string, si: boolean): Promise<void>;
   alAprobacion(f: (p: { id: string; conversacion: string; descripcion: string; enHilo: boolean }) => void): void;
   alEquipo(f: (activos: string[]) => void): void;
+  gestorVram(): Promise<{ nombre: string; total: number; libre: number } | null>;
+  gestorBuscar(q: string): Promise<{ repo: string; descargas: number; meGusta: number }[] | { error: string }>;
+  gestorVersiones(repo: string): Promise<{ cuant: string; tamano: number; nombre: string; vram: number }[] | { error: string }>;
+  gestorInstalados(): Promise<{ nombre: string; tamano: number }[] | { error: string }>;
+  gestorInstalar(nombre: string): Promise<{ error?: string }>;
+  gestorArchivo(): Promise<{ error?: string; nombre?: string }>;
+  gestorCancelar(nombre: string): Promise<void>;
+  gestorQuitar(nombre: string): Promise<{ error?: string }>;
+  alProgresoGestor(f: (p: { nombre: string; estado: string; total?: number; completado?: number }) => void): void;
   verPantalla(id: string, ver: boolean): Promise<{ url?: string; error?: string }>;
   controlPantalla(id: string, activo: boolean): Promise<{ url?: string }>;
   modoLibre(id: string, activo: boolean): Promise<boolean>;
@@ -865,6 +874,139 @@ dialogoProveedores.addEventListener("close", () => {
   pv<HTMLInputElement>("clave").value = "";
   if (dialogoEmpleado.open) void llenarModelos();
 });
+
+// ---- Gestor de modelos: buscar en Hugging Face, ver si caben en la GPU e instalar en Ollama ----
+const dialogoGestor = document.getElementById("gestor") as HTMLDialogElement;
+const ge = <T extends HTMLElement>(id: string) => document.getElementById(`gestor-${id}`) as T;
+const gb = (b: number) => `${(b / 1024 ** 3).toLocaleString("es", { maximumFractionDigits: 1 })} GB`;
+let vramGestor: { nombre: string; total: number; libre: number } | null = null;
+const progresos = new Map<string, HTMLElement>(); // instalación en curso → su línea de progreso
+
+function botonGestor(texto: string, accion: (b: HTMLButtonElement) => Promise<void>, secundario = true) {
+  const b = crear("button", `boton${secundario ? " secundario" : ""}`, texto) as HTMLButtonElement;
+  b.type = "button";
+  b.addEventListener("click", async () => {
+    b.disabled = true;
+    await accion(b);
+    b.disabled = false;
+  });
+  return b;
+}
+
+// Instala y muestra el progreso en la fila; al terminar, el modelo ya se puede asignar a un empleado.
+function botonInstalar(nombre: string, resultado: HTMLElement) {
+  return botonGestor("instalar", async (b) => {
+    progresos.set(nombre, resultado);
+    resultado.textContent = "empezando…";
+    const cancelar = botonGestor("cancelar", () => discalaves.gestorCancelar(nombre));
+    b.after(cancelar);
+    const r = await discalaves.gestorInstalar(nombre);
+    cancelar.remove();
+    progresos.delete(nombre);
+    resultado.textContent = r.error ?? "instalado ✓ ya puedes asignarlo a un empleado";
+    if (!r.error) await despuesDeInstalar();
+  }, false);
+}
+async function despuesDeInstalar() {
+  await dibujarInstalados();
+  if (dialogoEmpleado.open) await llenarModelos();
+}
+
+discalaves.alProgresoGestor(({ nombre, estado, total, completado }) => {
+  const el = progresos.get(nombre);
+  if (!el) return;
+  const pct = total && completado !== undefined ? ` ${Math.floor((completado / total) * 100)} % · ${gb(completado)} de ${gb(total)}` : "";
+  el.textContent = `${estado.replace(/^pulling [0-9a-f]+$/, "descargando").replace("pulling manifest", "preparando").replace("verifying sha256 digest", "verificando").replace("writing manifest", "terminando")}${pct}`;
+});
+
+function veredicto(vram: number): HTMLElement {
+  if (!vramGestor) return crear("span", "detalle", `necesita ~${gb(vram)} de VRAM`);
+  const cabe = vram <= vramGestor.total;
+  return crear("span", cabe ? "detalle" : "detalle no-cabe", cabe ? `cabe en tu GPU (~${gb(vram)} de ${gb(vramGestor.total)})` : `no cabe en tu GPU (~${gb(vram)} de ${gb(vramGestor.total)}): irá lento, en parte en el procesador`);
+}
+
+async function dibujarInstalados() {
+  const lista = await discalaves.gestorInstalados();
+  const incluido = crear("li");
+  incluido.append(crear("span", "nombre", "qwen (incluido)"), crear("span", "detalle", "Qwen 3.5 9B · Q4_K_M · el modelo de Discalaves"));
+  if ("error" in lista) {
+    ge("instalados").replaceChildren(incluido, crear("li", "detalle", lista.error));
+    return;
+  }
+  ge("instalados").replaceChildren(incluido, ...lista.map((m) => {
+    const li = crear("li");
+    const resultado = crear("span", "resultado");
+    // Quitar pide un segundo clic para confirmar.
+    const quitar = botonGestor("quitar", async (b) => {
+      if (b.textContent === "quitar") return void (b.textContent = "¿seguro? quitar");
+      const r = await discalaves.gestorQuitar(m.nombre);
+      if (r.error) resultado.textContent = r.error;
+      else await despuesDeInstalar();
+    });
+    li.append(crear("span", "nombre", m.nombre.replace(/:latest$/, "")), crear("span", "detalle", `${gb(m.tamano)} · Ollama`), quitar, resultado);
+    return li;
+  }));
+}
+
+async function buscarModelos() {
+  const q = ge<HTMLInputElement>("texto").value.trim();
+  if (!q) return;
+  ge("aviso").textContent = "buscando…";
+  const filas: HTMLElement[] = [];
+  // Un nombre de la biblioteca de Ollama (llama3.2:3b) se puede instalar tal cual.
+  if (/^[a-z0-9][\w.-]*(:[\w.-]+)?$/i.test(q)) {
+    const li = crear("li");
+    const resultado = crear("span", "resultado");
+    li.append(crear("span", "nombre", q), crear("span", "detalle", "de la biblioteca de Ollama (tamaño al descargar)"), botonInstalar(q, resultado), resultado);
+    filas.push(li);
+  }
+  const r = await discalaves.gestorBuscar(q);
+  ge("aviso").textContent = "error" in r ? r.error : r.length ? "" : filas.length ? "" : "no encontré modelos GGUF con ese nombre";
+  if (!("error" in r)) {
+    for (const m of r) {
+      const li = crear("li");
+      const versiones = crear("ul", "versiones");
+      const ver = botonGestor("ver versiones", async (b) => {
+        const vs = await discalaves.gestorVersiones(m.repo);
+        b.remove();
+        if ("error" in vs) return void versiones.replaceChildren(crear("li", "detalle", vs.error));
+        versiones.replaceChildren(...(vs.length ? vs.map((v) => {
+          const fila = crear("li");
+          const resultado = crear("span", "resultado");
+          fila.append(crear("span", "nombre", v.cuant), crear("span", "detalle", gb(v.tamano)), veredicto(v.vram), botonInstalar(v.nombre, resultado), resultado);
+          return fila;
+        }) : [crear("li", "detalle", "no tiene versiones de un solo archivo que Ollama pueda instalar")]));
+      });
+      li.append(crear("span", "nombre", m.repo), crear("span", "detalle", `${m.descargas.toLocaleString("es")} descargas`), ver, versiones);
+      filas.push(li);
+    }
+  }
+  ge("resultados").replaceChildren(...filas);
+}
+
+async function abrirGestor() {
+  ge("aviso").textContent = "";
+  dialogoGestor.showModal();
+  vramGestor = await discalaves.gestorVram();
+  ge("vram").textContent = vramGestor
+    ? `Tu GPU: ${vramGestor.nombre}, ${gb(vramGestor.total)} de VRAM (${gb(vramGestor.libre)} libres ahora; qwen ocupa la mayor parte mientras está cargado).`
+    : "No encontré una GPU NVIDIA: no puedo decir si un modelo cabe.";
+  await dibujarInstalados();
+}
+ge<HTMLButtonElement>("buscar").addEventListener("click", () => void buscarModelos());
+ge<HTMLInputElement>("texto").addEventListener("keydown", (ev) => {
+  if (ev.key !== "Enter") return;
+  ev.preventDefault(); // Enter no cierra el diálogo: busca
+  void buscarModelos();
+});
+ge<HTMLButtonElement>("archivo").addEventListener("click", async () => {
+  progresos.set("archivo", ge("aviso"));
+  const r = await discalaves.gestorArchivo();
+  progresos.delete("archivo");
+  ge("aviso").textContent = r.error ?? `cargado como ${r.nombre} ✓ ya puedes asignarlo a un empleado`;
+  if (r.error === undefined) await despuesDeInstalar();
+});
+campo<HTMLButtonElement>("gestor").addEventListener("click", () => void abrirGestor());
 
 // ---- Preguntas de ssh: huella del servidor (primer contacto) o contraseña, en una ventana propia ----
 const dialogoSsh = document.getElementById("ssh") as HTMLDialogElement;

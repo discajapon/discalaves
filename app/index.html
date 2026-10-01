@@ -129,6 +129,7 @@
       <section class="config-seccion" aria-labelledby="config-modelos-t">
         <h3 id="config-modelos-t">Modelos de este equipo</h3>
         <ul id="config-modelos" class="proveedores-lista"></ul>
+        <button id="config-gestor" type="button" class="enlace">buscar e instalar modelos…</button>
       </section>
       <section class="config-seccion" aria-labelledby="config-specs-t">
         <h3 id="config-specs-t">Especificaciones</h3>
@@ -184,7 +185,10 @@
         <label class="campo">Color <select id="empleado-color"></select></label>
         <label class="campo">Modelo <select id="empleado-modelo"></select></label>
       </div>
-      <button id="empleado-proveedores" type="button" class="enlace">conectar un proveedor o un servidor propio…</button>
+      <div class="enlaces">
+        <button id="empleado-gestor" type="button" class="enlace">buscar e instalar modelos…</button>
+        <button id="empleado-proveedores" type="button" class="enlace">conectar un proveedor o un servidor propio…</button>
+      </div>
       <!-- Solo si el modelo no es local: qué sale del equipo y hacia dónde, y el gasto (APIs de pago). -->
       <div id="empleado-nube" class="nube-campos" hidden>
         <p id="empleado-privacidad" class="privacidad"></p>
@@ -245,6 +249,28 @@
       <div class="acciones">
         <button value="cerrar" formnovalidate class="boton secundario">Cerrar</button>
         <button id="proveedor-anadir" type="button" class="boton">Añadir</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Gestor de modelos: buscar GGUF en Hugging Face, ver si caben en la GPU e instalarlos en Ollama. -->
+  <dialog id="gestor" class="perfil empleado" aria-labelledby="gestor-titulo">
+    <form method="dialog">
+      <h2 id="gestor-titulo">Modelos</h2>
+      <p id="gestor-vram" class="detalle"></p>
+      <h3 class="subtitulo-dialogo">En este equipo</h3>
+      <ul id="gestor-instalados" class="proveedores-lista"></ul>
+      <h3 class="subtitulo-dialogo">Buscar e instalar</h3>
+      <p class="detalle">Modelos GGUF de Hugging Face, o el nombre de uno de la biblioteca de Ollama (por ejemplo llama3.2:3b). Se instalan en Ollama y los puedes asignar a cualquier empleado.</p>
+      <div class="gestor-busqueda">
+        <input id="gestor-texto" type="search" maxlength="200" autocomplete="off" aria-label="Buscar modelos" placeholder="qwen3.5, gemma, llama3.2:3b…">
+        <button id="gestor-buscar" type="button" class="boton">Buscar</button>
+      </div>
+      <ul id="gestor-resultados" class="proveedores-lista"></ul>
+      <span id="gestor-aviso" class="aviso-dialogo" role="status"></span>
+      <div class="acciones">
+        <button id="gestor-archivo" type="button" class="boton secundario">Cargar un .gguf del disco…</button>
+        <button value="cerrar" formnovalidate class="boton secundario">Cerrar</button>
       </div>
     </form>
   </dialog>

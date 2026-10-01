@@ -363,7 +363,7 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 .zoom { display: flex; align-items: center; gap: var(--e3); color: var(--secundario); }
 .zoom input { flex: 1; accent-color: var(--burbuja-mia); }
 .campo { display: flex; flex-direction: column; gap: var(--e1); color: var(--secundario); font-size: var(--texto-chico); }
-.campo input {
+.campo input, .gestor-busqueda input {
   padding: var(--e2) var(--e3);
   border: 1px solid var(--borde);
   border-radius: var(--radio-fila);
@@ -674,6 +674,13 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 .proveedores-lista .detalle { flex: 1; min-width: 40%; }
 .proveedores-lista .boton { padding: var(--e1) var(--e3); font-size: var(--texto-chico); }
 .proveedores-lista .resultado { flex-basis: 100%; font-size: var(--texto-chico); color: var(--secundario); }
+/* Gestor de modelos */
+.enlaces { display: flex; flex-wrap: wrap; gap: var(--e1) var(--e3); }
+.gestor-busqueda { display: flex; gap: var(--e2); }
+.gestor-busqueda input { flex: 1; min-width: 0; }
+.proveedores-lista .versiones { flex-basis: 100%; display: flex; flex-direction: column; gap: var(--e1); padding: 0; list-style: none; }
+.proveedores-lista .versiones li { padding: var(--e1) var(--e2); }
+.proveedores-lista .no-cabe { color: var(--notificacion-texto); }
 .ssh-texto { max-height: 200px; overflow: auto; padding: var(--e3); border-radius: var(--radio-fila); background: var(--gris-suave); font: 12px/1.5 var(--fuente-mono); white-space: pre-wrap; word-break: break-word; }
 
 /* Marca permanente en la lista: empleado en la nube o en un servidor remoto del usuario. */
