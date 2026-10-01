@@ -35,8 +35,11 @@ const CLAVE = randomBytes(24).toString("hex"); // sin clave, cualquier web abier
 const CONTEXTO_CARACTERES = 32000; // ponytail: ventana por tamaño (~9k tokens de 16k); resumir cuando las conversaciones crezcan
 // Sin límite de pasos (decisión del usuario, 2026-09-27): la IA trabaja hasta acabar. Frenos: el botón
 // Detener y la detección de repeticiones (misma llamada con los mismos argumentos).
-const AVISO_REPETICION = 3; // a la 3.ª vez no se ejecuta: se le dice que cambie de enfoque
-const MAX_REPETICIONES = 5; // a la 5.ª se detiene y lo explica
+const AVISO_REPETICION = 3; // a la 3.ª vez no se ejecuta: se le dice que pruebe otra herramienta
+const MAX_REPETICIONES = 5; // a la 5.ª se detiene y lo explica; los locales nunca (decisión del usuario, 2026-10-01)
+const yaHiciste = (c: Conversacion, n: number) =>
+  `ya hiciste exactamente esto ${n - 1} veces sin resultado; no lo repito. ` +
+  (c.origen === "local" ? "Prueba otra herramienta u otro camino (otra búsqueda, otra página, otra fuente) y sigue hasta tener el resultado." : "Prueba otro camino o termina con lo que tienes.");
 const OLLAMA = process.env.DISCALAVES_OLLAMA || "http://127.0.0.1:11434"; // ponytail: dirección por defecto de Ollama; configurable cuando exista el gestor de modelos
 const CONTEXTO_OLLAMA = 10000; // Ollama recorta por defecto a ~4k tokens: se le manda menos historial
 
@@ -137,14 +140,17 @@ function computadora(c: Conversacion) {
 
 // Base común del prompt, idéntica para todos los empleados (con el mismo modo): va primero para que
 // llama-server reutilice en caché ese prefijo al cambiar de empleado. Lo propio del puesto va después.
-const baseConHerramientas = (libre: boolean) =>
+const baseConHerramientas = (libre: boolean, local: boolean) =>
   "Eres un empleado de Discalaves que trabaja para el usuario. " +
-  "Responde en el idioma del usuario, de forma breve y clara. " +
+  (local ? "Responde en el idioma del usuario, de forma clara. " : "Responde en el idioma del usuario, de forma breve y clara. ") +
   "Tienes tu propia computadora aislada (Debian con escritorio) con internet; usa solo las herramientas que tienes. " +
   "Si una tarea encaja con uno de tus procedimientos, léelo primero con leer_procedimiento y sigue sus pasos y su formato. " +
   "Cita las direcciones de donde sacas la información. " +
   "Trabaja hasta terminar la tarea completa, sin pedir permiso para continuar; entre paso y paso cuenta en una frase qué hiciste y qué encontraste. " +
-  "Si algo falla, prueba otro camino en vez de repetir lo mismo. " +
+  (local
+    ? "No tienes límite de tiempo, de pasos ni de texto: tómate lo que necesites y no te detengas hasta tener el resultado. " +
+      "Si una herramienta falla o no da lo que buscas, prueba otra herramienta u otro camino en vez de repetir lo mismo; no te rindas mientras quede algo por probar. "
+    : "Si algo falla, prueba otro camino en vez de repetir lo mismo. ") +
   "Si no sabes algo, un comando falla o no puedes hacerlo, dilo en vez de inventar; nunca finjas saber lo que no sabes. " +
   "No digas que guardaste, abriste o comprobaste algo si no lo hiciste con una herramienta en esta tarea; cita solo direcciones que abriste o que salieron en tus resultados. " +
   "Con recordar guarda notas cortas que te sirvan en otras conversaciones (preferencias del usuario, decisiones). " +
@@ -164,7 +170,7 @@ const BASE_SOLO_CHAT =
 
 function promptSistema(c: Conversacion): string {
   const e = equipo.buscar(c.id)!;
-  const base = c.herramientas ? baseConHerramientas(c.libre === true) : BASE_SOLO_CHAT;
+  const base = c.herramientas ? baseConHerramientas(c.libre === true, c.origen === "local") : BASE_SOLO_CHAT;
   return `${base}\n\n${promptEmpleado(e, equipo.procedimientos(c.id), equipo.memoria(c.id), c.herramientas)}`;
 }
 
@@ -974,10 +980,10 @@ async function tarea(c: Conversacion, texto: string, interfaz: Electron.WebConte
         const firma = `${l.nombre} ${l.argumentos}`;
         const n = (veces.get(firma) ?? 0) + 1;
         veces.set(firma, n);
-        if (n >= MAX_REPETICIONES) return decir(`me detuve: intenté ${n} veces lo mismo (${l.nombre}) sin avanzar. ¿Me das otra pista?`);
+        if (n >= MAX_REPETICIONES && c.origen !== "local") return decir(`me detuve: intenté ${n} veces lo mismo (${l.nombre}) sin avanzar. ¿Me das otra pista?`);
         let r: { salida: string; codigo: number };
         if (pregunta) r = { salida: "no se hizo: esperas la respuesta del usuario", codigo: 1 };
-        else if (n >= AVISO_REPETICION) r = { salida: `ya hiciste exactamente esto ${n - 1} veces; no lo repito. Prueba otro camino o termina con lo que tienes.`, codigo: 1 };
+        else if (n >= AVISO_REPETICION) r = { salida: yaHiciste(c, n), codigo: 1 };
         else if (l.nombre === "preguntar" && c.permitidas.includes("preguntar")) {
           pregunta = argumento(l, "pregunta");
           r = pregunta ? { salida: "pregunta hecha; su respuesta llega en el próximo mensaje", codigo: 0 } : { salida: "falta la pregunta", codigo: -1 };
@@ -1030,7 +1036,7 @@ async function tareaCodex(c: Conversacion, texto: string, interfaz: Electron.Web
       return { salida: "detenido", codigo: 1 };
     }
     let r: { salida: string; codigo: number };
-    if (n >= AVISO_REPETICION) r = { salida: `ya hiciste exactamente esto ${n - 1} veces; no lo repito. Prueba otro camino o termina con lo que tienes.`, codigo: 1 };
+    if (n >= AVISO_REPETICION) r = { salida: yaHiciste(c, n), codigo: 1 };
     else if (nombre === "preguntar" && c.permitidas.includes("preguntar")) r = { salida: "escribe esa pregunta como tu respuesta final y termina; la tarea sigue cuando el usuario responda", codigo: 0 };
     else r = await usarHerramienta(c, l, interfaz, parar, cadena);
     guardar({ de: "ia", texto: "", t: Date.now(), llamadas: [l] }); // mismo formato que el bucle propio

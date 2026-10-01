@@ -63,7 +63,6 @@ export class OpenClaw {
   // cada arranque y OpenClaw solo lee los perfiles del navegador al arrancar.
   private reenvios: Record<string, number> = {};
   private repetidas = new Map<string, number>(); // freno de repeticiones de la tarea en curso
-  private parar: (() => void) | undefined;
   private listo: Promise<void> | undefined;
 
   constructor(private readonly dir: string, private readonly llama: { url: string; clave: string; modelo: string; contexto: number }, private readonly puente: Puente) {}
@@ -208,12 +207,12 @@ export class OpenClaw {
         const parametros = d.parametros ?? {};
         if (req.url === "/antes") {
           if (NUNCA_OC.includes(d.herramienta)) return responder(200, { bloquear: true, motivo: `${d.herramienta} no está permitida en Discalaves` });
-          // Mismo freno que el bucle propio: a la 3.ª llamada idéntica no se ejecuta; a la 5.ª se corta la tarea.
+          // Mismo freno que el bucle propio con un local: a la 3.ª llamada idéntica no se ejecuta y se le pide otra
+          // herramienta; nunca se corta la tarea (decisión del usuario, 2026-10-01). Detener sigue cortándola.
           const firma = `${d.agente} ${d.herramienta} ${JSON.stringify(parametros)}`;
           const n = (this.repetidas.get(firma) ?? 0) + 1;
           this.repetidas.set(firma, n);
-          if (n >= 5) this.parar?.();
-          if (n >= 3) return responder(200, { bloquear: true, motivo: `ya hiciste exactamente esto ${n - 1} veces; no lo repito. Prueba otro camino o termina con lo que tienes.` });
+          if (n >= 3) return responder(200, { bloquear: true, motivo: `ya hiciste exactamente esto ${n - 1} veces sin resultado; no lo repito. Prueba otra herramienta u otro camino (otra búsqueda, otra página, otra fuente) y sigue hasta tener el resultado.` });
           // El navegador siempre es el del propio empleado: nunca el del usuario ni el de otro empleado.
           if (d.herramienta === "browser") parametros.profile = `discalaves-${d.agente}`;
           const r = await this.puente.antes(d.agente, d.herramienta, parametros);
@@ -236,11 +235,9 @@ export class OpenClaw {
   async enviar(agente: string, texto: string, alTrozo: (t: string) => void, senal: AbortSignal): Promise<string> {
     await this.iniciar();
     this.repetidas.clear();
-    const corte = new AbortController();
-    this.parar = () => corte.abort(new Error(`me detuve: intenté 5 veces lo mismo sin avanzar. ¿Me das otra pista?`));
     const r = await fetch(`http://127.0.0.1:${this.puerto}/v1/chat/completions`, {
       method: "POST",
-      signal: AbortSignal.any([senal, corte.signal]),
+      signal: senal,
       headers: { authorization: `Bearer ${this.token}`, "content-type": "application/json" },
       body: JSON.stringify({ model: `openclaw/${agente}`, user: `discalaves-${agente}`, stream: true, messages: [{ role: "user", content: texto }] }),
     });
