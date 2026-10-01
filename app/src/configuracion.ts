@@ -3,7 +3,7 @@
 (() => {
   interface Modelo { modelo: string; detalle: string; herramientas: boolean; origen: string; donde: string }
   interface Specs { sistema: string; procesador: string; nucleos: number; ramGB: number; gpus: { nombre: string; vramGB: number; usadaGB: number }[] }
-  const puente = (globalThis as unknown as { discalaves: { modelos(): Promise<{ modelos: Modelo[] }>; especificaciones(): Promise<Specs>; abrirEnlace(url: string): Promise<void> } }).discalaves;
+  const puente = (globalThis as unknown as { discalaves: { modelos(): Promise<{ modelos: Modelo[] }>; especificaciones(): Promise<Specs>; abrirEnlace(url: string): Promise<void>; copiarWallet(): Promise<void> } }).discalaves;
   const dialogo = document.getElementById("config") as HTMLDialogElement;
   const modelos = document.getElementById("config-modelos")!;
   const specs = document.getElementById("config-specs")!;
@@ -55,7 +55,7 @@
   });
   document.getElementById("config-btc")!.addEventListener("click", async () => {
     try {
-      await navigator.clipboard.writeText(document.getElementById("config-wallet")!.textContent!);
+      await puente.copiarWallet();
       copiada.textContent = "Dirección copiada. ¡Gracias!";
     } catch {
       copiada.textContent = "No se pudo copiar: selecciona la dirección y cópiala.";

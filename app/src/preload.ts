@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld("discalaves", {
   conversaciones: () => ipcRenderer.invoke("conversaciones"),
   modelos: () => ipcRenderer.invoke("modelos"),
   especificaciones: () => ipcRenderer.invoke("especificaciones"),
+  copiarWallet: () => ipcRenderer.invoke("copiar-wallet"),
   abrirEnlace: (url: string) => ipcRenderer.invoke("abrir-enlace", url),
   plantillas: () => ipcRenderer.invoke("plantillas"),
   empleado: (id: string) => ipcRenderer.invoke("empleado", id),

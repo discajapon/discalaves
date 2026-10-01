@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, safeStorage, session, shell } from "electron";
+import { app, BrowserWindow, clipboard, dialog, ipcMain, safeStorage, session, shell } from "electron";
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import fs from "node:fs";
@@ -733,6 +733,8 @@ ipcMain.handle("guardar-empleado", async (_e, id: unknown, datos: unknown) => {
 });
 // Hoja de configuración: especificaciones del equipo y el único enlace externo de la app (los créditos).
 ipcMain.handle("especificaciones", () => especificaciones());
+const WALLET_BTC = "bc1qmgf6ncula7u0a7qmkrv674ytl3hnvrkqkqm8t2"; // donaciones; es lo único que la interfaz puede copiar
+ipcMain.handle("copiar-wallet", () => clipboard.writeText(WALLET_BTC));
 ipcMain.handle("abrir-enlace", (_e, url: unknown) => {
   if (url === "https://discajapon.com") void shell.openExternal(url);
 });
