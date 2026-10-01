@@ -45,8 +45,8 @@ Grok Bot.
 - **Herramientas adicionales, a tu elección.** En el perfil de cada empleado
   puedes activar leer y editar archivos, leer una web sin navegador, que te
   pregunte, o que le pase trabajo a un compañero y reciba su respuesta.
-- **Trabajan en equipo, y lo ves.** Con "pasar trabajo" activado, un
-  empleado le encarga una parte a un compañero. En el hilo **Equipo** ves a
+- **Trabajan en equipo, y lo ves.** Un empleado le encarga una parte a un
+  compañero ("pasar trabajo", activado en todas las plantillas). En el hilo **Equipo** ves a
   los dos colaborar: quién le encarga qué a quién, sus pasos y sus respuestas,
   mientras ocurre. Desde ahí también puedes encargar algo con `@nombre`.
   Varios empleados pueden trabajar a la vez con el mismo modelo (2 en una GPU

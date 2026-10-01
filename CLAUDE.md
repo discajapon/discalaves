@@ -69,7 +69,8 @@ imagen, ~2 min).
   en cada mensaje: una edición a mano se nota en el siguiente. Al modelo solo
   se le envían las herramientas del puesto (más `leer_procedimiento` y
   `recordar`) y la app rechaza cualquier otra. Herramientas **adicionales**
-  (inspiradas en OpenClaw, 2026-09-29), apagadas en todas las plantillas y
+  (inspiradas en OpenClaw, 2026-09-29), apagadas en las plantillas salvo
+  `pasar_trabajo` (en todas desde 2026-09-30, decisión del usuario) y
   activables por empleado en su perfil: `leer_archivo`, `editar_archivo`
   (reemplazo exacto y único), `leer_web` (curl desde su computadora, solo
   http/https, HTML a texto), `preguntar` (para la tarea y deja la pregunta en
