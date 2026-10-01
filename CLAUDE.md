@@ -387,6 +387,12 @@ imagen, ~2 min).
     admite), ProxyJump contra hosts reales, Windows (el askpass es un script de sh).
     **RAM con varios contenedores trabajando a la vez: sin medir.**
 
+- **Configuración** (pedido del usuario, 2026-09-30): el engranaje junto al perfil, abajo a la izquierda,
+  abre una hoja (`configuracion.ts`) con los modelos locales del equipo (qwen y Ollama), las
+  especificaciones (`especificaciones.ts`: sistema, CPU, RAM y GPU NVIDIA por `nvidia-smi`) y los créditos
+  (discajapon.com, único enlace externo permitido por `abrir-enlace`, y la dirección BTC para donaciones, que el
+  botón copia). Probado en la app real con capturas; sin comprobar la copia al portapapeles.
+
 **Diseño:** antes de tocar estilos, filtros SVG o animaciones, lee
 `GUIA_DE_DISEÑO.md` (reglas del vidrio líquido, tokens, recetas de
 materiales, patrones de movimiento y plantillas de componentes).
