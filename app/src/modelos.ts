@@ -108,7 +108,7 @@ export async function desdeArchivo(ollama: string, ruta: string, alProgreso: (p:
     if (!r.ok) throw new Error(`Ollama respondió ${r.status} al copiar el archivo`);
   }
   const base = path.basename(ruta, path.extname(ruta)).toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^[^a-z0-9]+/, "").slice(0, 60) || "modelo";
-  const nombre = `${base}:local`;
+  const nombre = `${base}:archivo`; // no ":local": Ollama 0.24 lo crea pero luego no lo encuentra (ni para borrarlo)
   await porLineas(
     await fetch(`${ollama}/api/create`, { method: "POST", signal: senal, body: JSON.stringify({ model: nombre, files: { [path.basename(ruta)]: digest }, stream: true }) }),
     alProgreso,
