@@ -41,10 +41,15 @@
         <input type="search" placeholder="buscar" aria-label="Buscar empleados">
       </label>
       <nav id="lista" class="lista" aria-label="Empleados"></nav>
-      <button id="usuario" class="usuario" type="button" title="Editar perfil">
-        <span id="usuario-iniciales" class="iniciales" aria-hidden="true"></span>
-        <span id="usuario-nombre" class="nombre"></span>
-      </button>
+      <div class="usuario-fila">
+        <button id="usuario" class="usuario" type="button" title="Editar perfil">
+          <span id="usuario-iniciales" class="iniciales" aria-hidden="true"></span>
+          <span id="usuario-nombre" class="nombre"></span>
+        </button>
+        <button id="configuracion" class="icono" type="button" aria-label="Configuración" title="Configuración">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+        </button>
+      </div>
     </aside>
 
     <main class="panel">
@@ -114,6 +119,31 @@
       <div class="acciones">
         <button value="cancelar" formnovalidate class="boton secundario">Cancelar</button>
         <button value="guardar" class="boton">Guardar</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="config" class="perfil empleado" aria-labelledby="config-titulo">
+    <form method="dialog">
+      <h2 id="config-titulo">Configuración</h2>
+      <section class="config-seccion" aria-labelledby="config-modelos-t">
+        <h3 id="config-modelos-t">Modelos de este equipo</h3>
+        <ul id="config-modelos" class="proveedores-lista"></ul>
+      </section>
+      <section class="config-seccion" aria-labelledby="config-specs-t">
+        <h3 id="config-specs-t">Especificaciones</h3>
+        <dl id="config-specs" class="config-specs"></dl>
+      </section>
+      <section class="config-seccion" aria-labelledby="config-creditos-t">
+        <h3 id="config-creditos-t">Créditos</h3>
+        <p>Discalaves es un proyecto abierto creado por Disca.</p>
+        <p><a id="config-web" href="https://discajapon.com">discajapon.com</a></p>
+        <button id="config-btc" type="button" class="boton">¡Donaciones de BTC!</button>
+        <code id="config-wallet" class="config-wallet">bc1qmgf6ncula7u0a7qmkrv674ytl3hnvrkqkqm8t2</code>
+        <p id="config-copiada" class="detalle" role="status"></p>
+      </section>
+      <div class="acciones">
+        <button value="cerrar" class="boton secundario">Cerrar</button>
       </div>
     </form>
   </dialog>
@@ -234,6 +264,7 @@
 
   <script src="dist/interfaz.js"></script>
   <script src="dist/perfil.js"></script>
+  <script src="dist/configuracion.js"></script>
   <script src="dist/primer-arranque.js"></script>
 </body>
 </html>

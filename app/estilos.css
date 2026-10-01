@@ -207,15 +207,22 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
   box-shadow: 0 0 0 2px var(--lateral);
 }
 
+.usuario-fila {
+  display: flex;
+  align-items: center;
+  gap: var(--e1);
+  padding-top: var(--e1);
+  border-top: 1px solid var(--borde);
+  margin-top: var(--e2);
+}
 .usuario {
   display: flex;
   align-items: center;
   gap: var(--e3);
-  padding: var(--e3) var(--e2) var(--e1);
+  padding: var(--e2);
   border: 0;
-  border-top: 1px solid var(--borde);
-  margin-top: var(--e2);
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   background: none;
   text-align: left;
   cursor: pointer;
@@ -672,3 +679,12 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 /* Marca permanente en la lista: empleado en la nube o en un servidor remoto del usuario. */
 .origen { flex: none; width: 14px; height: 14px; color: var(--secundario); }
 .origen path, .origen rect { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+/* Configuración: modelos del equipo, especificaciones y créditos (sobre la hoja .perfil.empleado). */
+.config-seccion { display: flex; flex-direction: column; align-items: flex-start; gap: var(--e2); }
+.config-seccion h3 { font-size: var(--texto); }
+.config-seccion .proveedores-lista { width: 100%; }
+.config-specs { display: grid; grid-template-columns: max-content 1fr; gap: var(--e1) var(--e4); margin: 0; }
+.config-specs dt { color: var(--secundario); }
+.config-specs dd { margin: 0; }
+.config-wallet { max-width: 100%; padding: var(--e2) var(--e3); border-radius: var(--radio-fila); background: var(--gris-suave); font: 12px/1.5 var(--fuente-mono); overflow-wrap: anywhere; user-select: all; }
