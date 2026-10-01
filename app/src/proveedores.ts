@@ -82,7 +82,21 @@ export interface Pedido {
 }
 
 // ---- Adaptador compatible con OpenAI (/chat/completions en streaming) ----
+// llama-server responde 500 ("Failed to parse tool call arguments as JSON") si el modelo escribe una llamada a
+// herramienta con el JSON roto, por ejemplo cortado a mitad de una URL. Los modelos pequeños lo hacen de vez en
+// cuando; como cada intento muestrea distinto, se repite el turno antes de rendirse.
 export async function turnoOpenAI(p: Pedido): Promise<Turno> {
+  for (let intento = 1; ; intento++) {
+    try {
+      return await unTurnoOpenAI(p);
+    } catch (e) {
+      if (p.senal.aborted || !/Failed to parse tool call/i.test((e as Error).message)) throw e;
+      if (intento >= 3) throw new Error("el modelo no logró escribir bien una llamada a herramienta en 3 intentos; vuelve a pedírselo o dale un paso más pequeño");
+    }
+  }
+}
+
+async function unTurnoOpenAI(p: Pedido): Promise<Turno> {
   const cuerpo = {
     model: p.modelo,
     stream: true,

@@ -11,6 +11,7 @@ import http from "node:http";
 import { execFileSync } from "node:child_process";
 import { ordenMotor } from "./computadora";
 import { bajar, extraer } from "./instalar";
+import { turnoOpenAI } from "./proveedores";
 import { rutasPara } from "./rutas";
 import { cuantDe, nombreValido } from "./modelos";
 import { distrosDe, textoWsl } from "./wsl";
@@ -128,6 +129,18 @@ void (async () => {
   fs.mkdirSync(path.join(tmpI, "dest"));
   extraer(path.join(tmpI, "r.tar.gz"), path.join(tmpI, "dest"));
   assert.deepEqual(fs.readdirSync(path.join(tmpI, "dest")), ["llama-server"], "aplana la carpeta raíz y no deja restos");
+  // Llamada a herramienta rota: llama-server responde 500; se repite el turno y, si sigue rota, se explica.
+  let rotas = 2;
+  const modelo = http.createServer((_q, res) => {
+    if (rotas-- > 0) return res.writeHead(500, { "content-type": "application/json" }).end('{"error":{"message":"Failed to parse tool call arguments as JSON: missing closing quote"}}');
+    res.writeHead(200, { "content-type": "text/event-stream" }).end('data: {"choices":[{"delta":{"content":"listo"}}]}\n\ndata: [DONE]\n\n');
+  }).listen(0);
+  const pedido = { url: `http://127.0.0.1:${(modelo.address() as import("node:net").AddressInfo).port}/v1`, modelo: "m", sistema: "s", mensajes: [{ role: "user", content: "hola" }], herramientas: [], senal: new AbortController().signal, alTexto: () => {} };
+  assert.equal((await turnoOpenAI(pedido)).texto, "listo", "tras dos llamadas rotas, el tercer intento sale bien");
+  rotas = 3;
+  await assert.rejects(turnoOpenAI(pedido), /en 3 intentos/);
+  rotas = 1;
+  modelo.close();
   servidor.close();
   fs.rmSync(tmpI, { recursive: true, force: true });
 
