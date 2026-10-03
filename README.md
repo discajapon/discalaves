@@ -87,7 +87,11 @@ hacia dónde, marca a esos empleados en la lista y nunca cambia su origen sola.
   aparte y respondes por cumplir los términos de OpenAI.
 - Claude por suscripción no está soportado: las condiciones de Anthropic no lo
   permiten a apps de terceros. Claude funciona con clave de API.
-- Solo se ha probado con servidores falsos locales, no con proveedores reales.
+- **Servidor compatible con OpenAI** (por ejemplo el de tu universidad): pones la URL y la clave, la app detecta
+  la ruta (con o sin `/v1`), lista los modelos y averigua si admite herramientas; si no, los empleados las usan
+  escritas como texto. Con un botón pasas a todos los empleados a ese servidor (con aviso de privacidad), sin precios
+  ni tope, hasta 9 peticiones a la vez. Si el servidor falla, el empleado se detiene: nunca vuelve al modelo local solo.
+- Solo se ha probado con servidores falsos locales, no con proveedores ni servidores reales.
 
 ## Principios
 

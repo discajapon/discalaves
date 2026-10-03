@@ -395,7 +395,45 @@ imagen, ~2 min).
     sale con `v10`. **No probado:** ningún proveedor ni servidor real, Codex con cuenta real
     (la sonda sí, con el CLI 0.159.1 sin sesión), contraseña SSH (un sshd sin root no la
     admite), ProxyJump contra hosts reales, Windows (el askpass es un script de sh).
-    **RAM con varios contenedores trabajando a la vez: sin medir.**
+    RAM con varios contenedores trabajando a la vez: medida con el servidor remoto (ver abajo).
+
+- **Servidor remoto compatible con OpenAI** (decisión del usuario, 2026-10-02: usar el servidor de IA de CEDIA,
+  `https://ai.hpc.cedia.edu.ec`, con una clave suya y autorización para usarlo a fondo; código en `proveedores.ts`,
+  `modo-texto.ts` y `main.ts`). Es el tipo `remoto` de proveedor ya existente, ampliado; sin precios, tope ni túnel.
+  - **Conexión:** al guardar, `detectarBase()` prueba la URL tal cual y con `/v1` (o sin él) pidiendo `/models` y guarda
+    la que devuelve una lista (una página web o un 404 la descartan). Una clave rechazada (401/403) corta con mensaje
+    claro; solo se usa `Authorization: Bearer`. Los modelos salen de esa lista y la ventana de contexto de campos como
+    `max_model_len`/`context_length`; si el servidor no la dice, el usuario la escribe en Configuración → Proveedores y
+    servidores. `contexto()` recorta el historial a esa ventana (2 caracteres por token de ventana). Imágenes: nunca se
+    envían. Streaming siempre (`stream_options.include_usage`).
+  - **Herramientas:** `sondaHerramientas()` hace una llamada de prueba por modelo y guarda `nativas` o `texto` (en la
+    bóveda). Modo texto: la IA escribe `<<<llamar:MARCA nombre>>>{json}<<<fin:MARCA>>>`; la MARCA es aleatoria y distinta
+    en cada turno, solo cuenta lo que el modelo genera en su turno (nunca lo que trae un resultado de herramienta, que
+    además se neutraliza), la primera orden vale y `stop` corta tras ella; una orden a medias no llega al chat. Si el
+    JSON no se entiende o el servidor rechaza las nativas trabajando (400/422/501 que habla de herramientas), se repite
+    el turno (3 veces como siempre) o se pasa a texto. El razonamiento (`<think>`, `<thinking>`, `<reasoning>`) se
+    quita del chat y del historial; un `</think>` huérfano limpia el historial pero se vio un instante en pantalla.
+  - **Clave y privacidad:** solo en la bóveda cifrada (`safeStorage`; sin almacén seguro no guarda). "Usar en todos los
+    empleados" muestra el aviso ("Los datos salen de este equipo hacia <host>, el servidor que configuraste…") y exige
+    aceptarlo; asignar un empleado al servidor con la casilla del perfil también cuenta. Sin aceptar, el empleado se
+    detiene. Marca permanente en la lista (la de servidor remoto).
+  - **Empleados:** al activarlo, todos los existentes (menos los de motor OpenClaw, que solo funciona con qwen) pasan al
+    servidor y los nuevos nacen con él (`modeloPorDefecto()`); qwen sigue disponible por empleado. Nunca vuelve a un
+    modelo local por su cuenta: si el servidor corta o se cae, el empleado se detiene y avisa con el motivo, sin
+    reintentos. 429: espera su `Retry-After` (hasta 3 veces, Detener lo corta) y luego se detiene.
+  - **Paralelo y uso:** sin cola de VRAM; `Cola` de 9 peticiones simultáneas (`PETICIONES_REMOTAS`), las demás esperan
+    turno. Tokens por empleado y mes (`tokens.json`, los que devuelve el servidor) visibles en su perfil.
+  - **Pruebas:** `prueba-remoto.ts` (servidor falso: ruta con y sin `/v1`, 401, 429, caída, ventana, sonda, nativas,
+    texto, razonamiento partido en trozos, órdenes a medias y ajenas) y la sección remota de `prueba-nube.ts` (app real:
+    activación para todos, criterio 1 en contenedor con herramientas nativas y con el respaldo en texto a la vez,
+    tokens, razonamiento, 429, caída, clave ausente del disco). Con `DISCALAVES_PRUEBA_CLAVE` (y `DISCALAVES_PRUEBA_URL`
+    opcional) `prueba-remoto.ts` también habla con el servidor real; sin ella se omite. **Contra el servidor real:
+    sin probar** (en la sesión del 2026-10-02 no había clave en el entorno); no se sabe su ruta base, sus modelos, si
+    admite herramientas nativas ni su ventana.
+  - **RAM medida** (2026-10-02, servidor falso, 16 GB, con otras apps abiertas): 2 empleados remotos trabajando
+    (herramientas y Chromium): contenedores 1490 MB en total; 3 navegando a la vez: 2414 MB en los contenedores y el
+    sistema pasó de 10,9 a 12,0 GB usados. Unos 0,8 GB por empleado, como ya estaba medido. Con 9 a la vez serían
+    ~7 GB de contenedores (extrapolado, sin medir).
 
 - **Configuración** (pedido del usuario, 2026-09-30): el engranaje junto al perfil, abajo a la izquierda,
   abre una hoja (`configuracion.ts`) con los modelos locales del equipo (qwen y Ollama), las
