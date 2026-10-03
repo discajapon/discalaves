@@ -59,8 +59,7 @@ async function main() {
       const usadas = [...new Set(h.filter((m) => m.de === "herramienta").map((m) => m.nombre))];
       const informe = path.join(ia, "trabajo", id, `informe${i}.md`);
       const ok = fs.existsSync(informe) ? fs.statSync(informe).size : 0;
-      const perfil = await api<any>("empleado", id);
-      resumen.push(`${MODELOS[i]} (${modos[MODELOS[i]]}): ${rs[i].error ? "ERROR " + sinClave(rs[i].error!) : "terminó"}, informe ${ok} bytes, herramientas [${usadas.join(", ")}], tokens ${perfil.tokens.total[0]}+${perfil.tokens.total[1]}, ${h.filter((m) => m.de === "herramienta").length} pasos`);
+      resumen.push(`${MODELOS[i]} (${modos[MODELOS[i]]}): ${rs[i].error ? "ERROR " + sinClave(rs[i].error!) : "terminó"}, informe ${ok} bytes, herramientas [${usadas.join(", ")}], ${h.filter((m) => m.de === "herramienta").length} pasos`);
       assert.ok(ok > 200, `${MODELOS[i]} no dejó un informe: ${sinClave(JSON.stringify(h.at(-1)).slice(0, 400))}`);
     }
     console.log(`real (app): ok en ${seg} s, dos a la vez; ruta base ${detectada}\n  ${resumen.join("\n  ")}`);

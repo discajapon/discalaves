@@ -422,11 +422,11 @@ imagen, ~2 min).
     modelo local por su cuenta: si el servidor corta o se cae, el empleado se detiene y avisa con el motivo, sin
     reintentos. 429: espera su `Retry-After` (hasta 3 veces, Detener lo corta) y luego se detiene.
   - **Paralelo y uso:** sin cola de VRAM; `Cola` de 9 peticiones simultáneas (`PETICIONES_REMOTAS`), las demás esperan
-    turno. Tokens por empleado y mes (`tokens.json`, los que devuelve el servidor) visibles en su perfil.
+    turno.  No se cuentan tokens ni se muestran (decisión del usuario, 2026-10-02: el servidor no tiene precios ni tope).
   - **Pruebas:** `prueba-remoto.ts` (servidor falso: ruta con y sin `/v1`, 401, 429, caída, ventana, sonda, nativas,
     texto, razonamiento partido en trozos, órdenes a medias y ajenas) y la sección remota de `prueba-nube.ts` (app real:
     activación para todos, criterio 1 en contenedor con herramientas nativas y con el respaldo en texto a la vez,
-    tokens, razonamiento, 429, caída, clave ausente del disco). Con `DISCALAVES_PRUEBA_CLAVE` (y `DISCALAVES_PRUEBA_URL`
+    razonamiento, 429, caída, clave ausente del disco). Con `DISCALAVES_PRUEBA_CLAVE` (y `DISCALAVES_PRUEBA_URL`
     opcional) `prueba-remoto.ts` también habla con el servidor real; sin ella se omite. **Contra el servidor real:
     sin probar** (en la sesión del 2026-10-02 no había clave en el entorno); no se sabe su ruta base, sus modelos, si
     admite herramientas nativas ni su ventana.

@@ -419,9 +419,7 @@ async function pruebaApp(base: string) {
     const nuevos = pedidos.slice(antesRemotos);
     assert.ok(nuevos.filter((x) => x.modelo === "falso-texto" && x.cuerpo.stream).every((x) => !x.cuerpo.tools && /FORMA DE USAR HERRAMIENTAS/.test(x.cuerpo.messages[0].content)), "el de texto no debe recibir tools nativas");
     assert.ok(nuevos.filter((x) => x.modelo === "falso-criterio1" && x.cuerpo.stream).every((x) => x.cuerpo.tools?.length), "el nativo debe recibir tools");
-    // Tokens por empleado, y ni precio ni tope
-    const perfil = await api<any>("empleado", unoNativo);
-    assert.ok(perfil.tokens.total[0] > 0 && perfil.remoto, "debe contar los tokens del servidor");
+    assert.ok((await api<any>("empleado", unoNativo)).remoto, "el perfil debe saber que es un servidor remoto (sin precios ni tope)");
     // Razonamiento: no se ve ni se guarda
     const piensa = await remoto("Remoto Piensa", "falso-piensa");
     assert.equal((await api<{ error?: string }>("enviar", piensa, "hola")).error, undefined);
@@ -442,7 +440,7 @@ async function pruebaApp(base: string) {
     assert.equal(pedidos.slice(desdeCaida).filter((x) => x.modelo === "falso-caida" && x.cuerpo.stream).length, 1, "no debe reintentar");
     assert.ok(!(await api<any[]>("conversaciones")).some((c) => c.id === cae && c.origen === "local"), "no debe pasar a un modelo local");
     if (medicion) await medicionCon(medicion, api, remoto);
-    console.log("remoto (app): ok (activación para todos, criterio 1 con herramientas nativas y en texto, a la vez, tokens, razonamiento oculto, 429, caída)");
+    console.log("remoto (app): ok (activación para todos, criterio 1 con herramientas nativas y en texto, a la vez, razonamiento oculto, 429, caída)");
   } catch (e) {
     await new Promise((r) => setTimeout(r, 1500));
     let errores = "";

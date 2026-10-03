@@ -25,7 +25,7 @@ declare const discalaves: {
   conversaciones(): Promise<Conversacion[]>;
   modelos(): Promise<{ modelos: Modelo[]; ollama: boolean }>;
   plantillas(): Promise<Plantilla[]>;
-  empleado(id: string): Promise<(Identidad & { procedimientos: { nombre: string; descripcion: string }[]; tope: number; gastado: number; precio?: { entrada: number; salida: number }; tokens: { mes: [number, number]; total: [number, number] }; remoto: boolean }) | undefined>;
+  empleado(id: string): Promise<(Identidad & { procedimientos: { nombre: string; descripcion: string }[]; tope: number; gastado: number; precio?: { entrada: number; salida: number }; remoto: boolean }) | undefined>;
   crearEmpleado(datos: Identidad & Gasto, plantilla?: string): Promise<{ id?: string; error?: string }>;
   guardarEmpleado(id: string, datos: Identidad & Gasto): Promise<{ error?: string }>;
   proveedores(): Promise<{ proveedores: ProveedorVista[]; almacen: boolean; codex: boolean }>;
@@ -638,9 +638,7 @@ async function abrirDialogoEmpleado(d: { modo: "plantilla"; plantilla: Plantilla
       campo<HTMLInputElement>("precio-entrada").value = String(e.precio.entrada);
       campo<HTMLInputElement>("precio-salida").value = String(e.precio.salida);
     }
-    const mil = (n: number) => n.toLocaleString("es");
-    if (e.remoto) campo<HTMLElement>("gastado").textContent = `Tokens que devolvió el servidor: este mes ${mil(e.tokens.mes[0])} de entrada y ${mil(e.tokens.mes[1])} de salida; en total ${mil(e.tokens.total[0])} y ${mil(e.tokens.total[1])}.`;
-    else if (e.modelo.startsWith("nube:")) campo<HTMLElement>("gastado").textContent = `Gastado este mes: ${e.gastado.toFixed(2)} USD de ${e.tope} USD. Tokens este mes: ${mil(e.tokens.mes[0])} de entrada y ${mil(e.tokens.mes[1])} de salida.`;
+    if (e.modelo.startsWith("nube:") && !e.remoto) campo<HTMLElement>("gastado").textContent = `Gastado este mes: ${e.gastado.toFixed(2)} USD de ${e.tope} USD.`;
   }
   if (d.modo !== "editar") {
     const pre = modelos.find((m) => m.predeterminado);

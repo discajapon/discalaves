@@ -473,7 +473,6 @@ async function antesDeGastar(c: Conversacion, interfaz: Electron.WebContents): P
   return null;
 }
 function anotarGasto(c: Conversacion, uso: Uso) {
-  if (c.origen !== "local") gasto.sumarTokens(c.id, uso);
   const precio = c.proveedor === "nube" && c.origen !== "remoto" && gasto.precio(`${c.cuenta}:${c.modelo}`);
   if (precio) gasto.sumar(c.id, uso, precio);
 }
@@ -857,7 +856,7 @@ ipcMain.handle("empleado", (_e, id: unknown) => {
   return {
     nombre: e.nombre, rol: e.rol, color: e.color, modelo: e.modelo, herramientas: e.herramientas, instrucciones: e.instrucciones, motor: e.motor, procedimientos: equipo.procedimientos(e.id),
     tope: e.tope ?? TOPE_POR_DEFECTO, gastado: gasto.delMes(e.id), precio: clavePrecio ? gasto.precio(clavePrecio) : undefined,
-    tokens: gasto.tokens(e.id), remoto: !!remotoDe(e.modelo),
+    remoto: !!remotoDe(e.modelo),
   };
 });
 // Gasto de un empleado en la nube: precio del modelo (tabla editable, USD por millón de tokens) y tope mensual.
