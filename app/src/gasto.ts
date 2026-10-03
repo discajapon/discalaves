@@ -38,6 +38,22 @@ export class Gasto {
     fs.writeFileSync(this.archivoPrecios, JSON.stringify(tabla, null, 2));
   }
 
+  // Tokens que devolvió el servidor, por empleado y mes (también donde no hay precios, como el servidor remoto).
+  sumarTokens(empleado: string, uso: Uso) {
+    const archivo = path.join(this.datos, "tokens.json");
+    const t = leer<Record<string, Record<string, [number, number]>>>(archivo, {});
+    const e = ((t[empleado] ??= {})[mes()] ??= [0, 0]);
+    e[0] += uso.entrada;
+    e[1] += uso.salida;
+    fs.mkdirSync(this.datos, { recursive: true });
+    fs.writeFileSync(archivo, JSON.stringify(t, null, 2));
+  }
+  tokens(empleado: string): { mes: [number, number]; total: [number, number] } {
+    const m = leer<Record<string, Record<string, [number, number]>>>(path.join(this.datos, "tokens.json"), {})[empleado] ?? {};
+    const total = Object.values(m).reduce<[number, number]>((a, [e, s]) => [a[0] + e, a[1] + s], [0, 0]);
+    return { mes: m[mes()] ?? [0, 0], total };
+  }
+
   delMes(empleado: string): number {
     return leer<Record<string, Record<string, number>>>(this.archivoGasto, {})[empleado]?.[mes()] ?? 0;
   }

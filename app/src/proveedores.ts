@@ -331,3 +331,27 @@ export async function sondaHerramientas(base: string, clave: string | undefined,
   const j = (await r.json()) as { choices?: { message?: { tool_calls?: { function?: { name?: string } }[] } }[] };
   return j.choices?.[0]?.message?.tool_calls?.[0]?.function?.name === "eco" ? "nativas" : "texto";
 }
+
+// Turnos: como mucho `n` peticiones a la vez; las demás esperan su turno (o se van si las detienen).
+export class Cola {
+  private espera: (() => void)[] = [];
+  constructor(private libres: number) {}
+  async tomar(senal: AbortSignal): Promise<() => void> {
+    if (this.libres <= 0) {
+      await new Promise<void>((ok, mal) => {
+        const turno = () => (senal.removeEventListener("abort", salir), ok());
+        const salir = () => (this.espera.splice(this.espera.indexOf(turno), 1), mal(new Error("detenida")));
+        this.espera.push(turno);
+        senal.addEventListener("abort", salir, { once: true });
+      });
+    } else this.libres--;
+    let suelto = false;
+    return () => {
+      if (suelto) return;
+      suelto = true;
+      const siguiente = this.espera.shift();
+      if (siguiente) siguiente(); // el turno pasa directo al que espera
+      else this.libres++;
+    };
+  }
+}
