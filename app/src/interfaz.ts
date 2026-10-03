@@ -15,22 +15,25 @@ interface Conversacion {
   estado: EstadoQwen; ultimo?: MensajeChat;
   equipo?: boolean; colores?: string[]; // el hilo compartido del equipo
 }
-interface Modelo { proveedor: string; modelo: string; valor: string; detalle: string; herramientas: boolean; origen: "local" | "nube" | "remoto"; donde: string; aviso?: string }
+interface Modelo { proveedor: string; modelo: string; valor: string; detalle: string; herramientas: boolean; origen: "local" | "nube" | "remoto"; donde: string; aviso?: string; predeterminado?: boolean }
 interface Identidad { nombre: string; rol: string; color: string; modelo: string; herramientas: string[]; instrucciones: string; motor?: string }
 interface Gasto { tope?: number; precio?: { entrada: number | string; salida: number | string } }
-interface ProveedorVista { id: string; nombre: string; tipo: string; url?: string; ssh?: string; conClave: boolean; donde: string; remoto: boolean }
+interface ServidorVista { modelos: string[]; modelo?: string; contexto?: number; contextoDelServidor: boolean; herramientas?: "nativas" | "texto"; aceptado: boolean; predeterminado: boolean; aviso: string; peticiones: number }
+interface ProveedorVista { id: string; nombre: string; tipo: string; url?: string; ssh?: string; conClave: boolean; donde: string; remoto: boolean; servidor?: ServidorVista }
 interface Plantilla extends Identidad { id: string; procedimientos: string[] }
 declare const discalaves: {
   conversaciones(): Promise<Conversacion[]>;
   modelos(): Promise<{ modelos: Modelo[]; ollama: boolean }>;
   plantillas(): Promise<Plantilla[]>;
-  empleado(id: string): Promise<(Identidad & { procedimientos: { nombre: string; descripcion: string }[]; tope: number; gastado: number; precio?: { entrada: number; salida: number } }) | undefined>;
+  empleado(id: string): Promise<(Identidad & { procedimientos: { nombre: string; descripcion: string }[]; tope: number; gastado: number; precio?: { entrada: number; salida: number }; tokens: { mes: [number, number]; total: [number, number] }; remoto: boolean }) | undefined>;
   crearEmpleado(datos: Identidad & Gasto, plantilla?: string): Promise<{ id?: string; error?: string }>;
   guardarEmpleado(id: string, datos: Identidad & Gasto): Promise<{ error?: string }>;
   proveedores(): Promise<{ proveedores: ProveedorVista[]; almacen: boolean; codex: boolean }>;
   guardarProveedor(datos: object): Promise<{ id?: string; error?: string }>;
   borrarProveedor(id: string): Promise<{ error?: string }>;
-  probarProveedor(id: string): Promise<{ modelos?: number; error?: string }>;
+  probarProveedor(id: string): Promise<{ modelos?: number; servidor?: ServidorVista; error?: string }>;
+  servidorAjustes(id: string, datos: { modelo?: string; contexto?: string }): Promise<{ servidor?: ServidorVista; error?: string }>;
+  servidorActivar(id: string, acepto: boolean): Promise<{ cambiados?: number; openclaw?: number; error?: string }>;
   codexSesion(): Promise<{ error?: string }>;
   alPreguntaSsh(f: (p: { id: string; host: string; tipo: "huella" | "clave"; texto: string }) => void): void;
   responderSsh(id: string, valor: string | null): Promise<void>;
@@ -541,7 +544,7 @@ function dibujarNube() {
   const entiendo = campo<HTMLInputElement>("entiendo");
   entiendo.required = fuera && valor !== modeloGuardado; // se confirma al asignar un origen nuevo
   entiendo.checked = fuera && valor === modeloGuardado;
-  campo<HTMLElement>("gasto").hidden = !valor.startsWith("nube:");
+  campo<HTMLElement>("gasto").hidden = !valor.startsWith("nube:") || m?.origen === "remoto"; // el servidor remoto no tiene precios ni tope
 }
 campo<HTMLSelectElement>("modelo").addEventListener("change", dibujarNube);
 
@@ -635,7 +638,13 @@ async function abrirDialogoEmpleado(d: { modo: "plantilla"; plantilla: Plantilla
       campo<HTMLInputElement>("precio-entrada").value = String(e.precio.entrada);
       campo<HTMLInputElement>("precio-salida").value = String(e.precio.salida);
     }
-    if (e.modelo.startsWith("nube:")) campo<HTMLElement>("gastado").textContent = `Gastado este mes: ${e.gastado.toFixed(2)} USD de ${e.tope} USD.`;
+    const mil = (n: number) => n.toLocaleString("es");
+    if (e.remoto) campo<HTMLElement>("gastado").textContent = `Tokens que devolvió el servidor: este mes ${mil(e.tokens.mes[0])} de entrada y ${mil(e.tokens.mes[1])} de salida; en total ${mil(e.tokens.total[0])} y ${mil(e.tokens.total[1])}.`;
+    else if (e.modelo.startsWith("nube:")) campo<HTMLElement>("gastado").textContent = `Gastado este mes: ${e.gastado.toFixed(2)} USD de ${e.tope} USD. Tokens este mes: ${mil(e.tokens.mes[0])} de entrada y ${mil(e.tokens.mes[1])} de salida.`;
+  }
+  if (d.modo !== "editar") {
+    const pre = modelos.find((m) => m.predeterminado);
+    if (pre) campo<HTMLSelectElement>("modelo").value = pre.valor; // el servidor que el usuario activó
   }
   dibujarNube();
   dialogoEmpleado.showModal();
@@ -792,7 +801,7 @@ const NOTAS: Record<string, string> = {
   gemini: "Clave de Google AI Studio; se usa su API compatible con OpenAI.",
   claude: "Clave de console.anthropic.com. Se cobra por uso en tu cuenta de Anthropic.",
   compatible: "Dirección base de la API (por ejemplo https://openrouter.ai/api/v1) y su clave.",
-  remoto: "Tu propio servidor compatible con OpenAI (por ejemplo vLLM o llama-server) por HTTPS, con su clave.",
+  remoto: "Un servidor compatible con OpenAI (por ejemplo vLLM o llama-server) por HTTPS, con su clave. La ruta (con o sin /v1) se detecta sola; luego eliges el modelo y lo activas para tus empleados.",
   tunel: "Usa tu configuración SSH (alias, ProxyJump, llaves). Dirección = el servidor visto desde ese host, por ejemplo http://localhost:8000/v1. Si ssh pide contraseña o es el primer contacto, se te preguntará en una ventana; la contraseña no se guarda.",
   codex: "No oficial para apps de terceros: puede dejar de funcionar. Necesita Codex instalado (npm i -g @openai/codex). Inicias sesión con el flujo oficial de OpenAI; Discalaves nunca ve tus credenciales. Sus herramientas propias quedan apagadas: solo usa las de su computadora.",
 };
@@ -829,6 +838,7 @@ async function dibujarProveedores() {
       resultado.textContent = p.tipo === "tunel" ? "abriendo el túnel…" : "consultando sus modelos…";
       const r = await discalaves.probarProveedor(p.id);
       resultado.textContent = r.error ?? `listo: ${r.modelos} modelos disponibles`;
+      if (!r.error && p.servidor) return void (await dibujarProveedores()); // el servidor trae su lista de modelos y su ventana
       if (!r.error && dialogoEmpleado.open) await llenarModelos();
     });
     const extra = p.tipo === "codex" ? [boton("iniciar sesión", async () => {
@@ -843,9 +853,71 @@ async function dibujarProveedores() {
       else await dibujarProveedores();
     });
     li.append(crear("span", "nombre", p.nombre), crear("span", "detalle", `${p.remoto ? "servidor remoto" : "nube"} · ${p.donde}${p.conClave ? " · clave guardada" : ""}`), ...extra, probar, borrar, resultado);
-    return li;
+    return p.servidor ? [li, filaServidor(p, p.servidor)] : [li];
   });
-  document.getElementById("proveedores-lista")!.replaceChildren(...(filas.length ? filas : [crear("li", "detalle", "Todavía no hay ninguno: todos los empleados usan modelos de este equipo.")]));
+  document.getElementById("proveedores-lista")!.replaceChildren(...(filas.length ? filas.flat() : [crear("li", "detalle", "Todavía no hay ninguno: todos los empleados usan modelos de este equipo.")]));
+}
+
+// Servidor remoto compatible con OpenAI: modelo, ventana de contexto, herramientas y activarlo para todos los empleados.
+function filaServidor(p: ProveedorVista, v: ServidorVista) {
+  const li = crear("li", "servidor");
+  const resultado = crear("span", "resultado");
+  const resumen = (s: ServidorVista) =>
+    [
+      s.modelo ? `modelo ${s.modelo}` : "elige un modelo",
+      s.contexto ? `ventana ${s.contexto.toLocaleString("es")} tokens${s.contextoDelServidor ? " (la dice el servidor)" : ""}` : "falta la ventana de contexto",
+      s.herramientas ? (s.herramientas === "nativas" ? "herramientas nativas" : "sin herramientas nativas: respaldo en texto") : "",
+      "imágenes: no se envían",
+      `hasta ${s.peticiones} peticiones a la vez`,
+      s.predeterminado ? "activo: los empleados nuevos nacen con él" : "",
+    ].filter(Boolean).join(" · ");
+  const modelo = document.createElement("select");
+  modelo.setAttribute("aria-label", "Modelo del servidor");
+  modelo.append(Object.assign(document.createElement("option"), { value: "", textContent: v.modelos.length ? "elige el modelo…" : "pulsa «probar» para ver los modelos" }));
+  for (const m of v.modelos) modelo.append(Object.assign(document.createElement("option"), { value: m, textContent: m, selected: m === v.modelo }));
+  const contexto = Object.assign(document.createElement("input"), { type: "number", min: "1024", step: "1", placeholder: "ventana (tokens)", value: v.contexto ? String(v.contexto) : "", disabled: v.contextoDelServidor });
+  contexto.setAttribute("aria-label", "Ventana de contexto en tokens");
+  const etiqueta = (texto: string, el: HTMLElement) => {
+    const l = crear("label", "campo", texto);
+    l.append(el);
+    return l;
+  };
+  const boton = (texto: string, accion: (b: HTMLButtonElement) => Promise<void>) => {
+    const b = crear("button", "boton secundario", texto) as HTMLButtonElement;
+    b.type = "button";
+    b.addEventListener("click", async () => {
+      b.disabled = true;
+      await accion(b);
+      b.disabled = false;
+    });
+    return b;
+  };
+  const guardar = boton("guardar", async () => {
+    resultado.textContent = "probando sus herramientas…";
+    const r = await discalaves.servidorAjustes(p.id, { modelo: modelo.value, contexto: contexto.disabled ? "" : contexto.value });
+    resultado.textContent = r.error ?? resumen(r.servidor!);
+  });
+  let confirmando = false;
+  const usar = boton("usar en todos los empleados", async (b) => {
+    if (!confirmando) {
+      confirmando = true;
+      b.textContent = "acepto: usar este servidor";
+      resultado.textContent = v.aviso;
+      return;
+    }
+    const r = await discalaves.servidorActivar(p.id, true);
+    confirmando = false;
+    b.textContent = "usar en todos los empleados";
+    if (r.error) return void (resultado.textContent = r.error);
+    resultado.textContent = `${r.cambiados} empleados ahora usan este servidor${r.openclaw ? `; ${r.openclaw} con motor OpenClaw se quedan con qwen local` : ""}.`;
+    await dibujarProveedores();
+    conversaciones = await discalaves.conversaciones();
+    dibujarLista();
+  });
+  usar.disabled = !v.modelo;
+  li.append(etiqueta("Modelo", modelo), etiqueta("Ventana de contexto", contexto), guardar, usar, resultado);
+  resultado.textContent = resumen(v);
+  return li;
 }
 
 async function abrirProveedores() {
