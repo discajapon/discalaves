@@ -419,7 +419,7 @@ async function ventanaDelServidor(p: Proveedor, modelo: string): Promise<number>
   if (!lista?.some((m) => m.modelo === modelo && m.contexto)) lista = await listarModelos(p.tipo, await baseDe(p), p.clave).catch(() => lista);
   if (lista) modelosNube.set(p.id, lista);
   const v = lista?.find((m) => m.modelo === modelo)?.contexto ?? p.contexto;
-  if (!v) throw new Corte(`no sé la ventana de contexto de ${modelo} en ${hostDe(p)}: el servidor no la dice. Escríbela en Configuración → Proveedores y servidores.`);
+  if (!v) throw new Corte(`no sé la ventana de contexto de ${modelo} en ${hostDe(p)}: el servidor no la dice. Escríbela en el perfil de un empleado → «conectar un proveedor o un servidor propio…».`);
   return v;
 }
 // Nativas o texto, según la sonda de ese modelo (se hace una vez y se guarda).
@@ -441,7 +441,7 @@ function ponerModo(p: Proveedor, modelo: string, modo: ModoHerramientas): ModoHe
 // texto y respeta un 429. Si las nativas fallan trabajando (400/422 que habla de herramientas), pasa a texto y
 // repite ese turno; si falla otra cosa, se detiene.
 async function turnoRemoto(c: Conversacion, p: Proveedor, url: string, pedido: Omit<Pedido, "url">) {
-  if (!p.aceptado) throw new Corte(`no has aceptado que los datos de ${c.nombre} salgan hacia ${hostDe(p)}: acéptalo en Configuración → Proveedores y servidores`);
+  if (!p.aceptado) throw new Corte(`no has aceptado que los datos de ${c.nombre} salgan hacia ${hostDe(p)}: acéptalo en el perfil de un empleado → «conectar un proveedor o un servidor propio…»`);
   const soltar = await colaRemota.tomar(pedido.senal);
   try {
     let modo = pedido.herramientas.length ? await modoDe(p, url, c.modelo) : "nativas";
