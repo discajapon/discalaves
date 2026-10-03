@@ -5,7 +5,8 @@
 > investiga y le pasa el resultado a otro, que lo resume. Probado con Qwen 3.5
 > 9B en una RTX 3060 Ti de 8 GB. Hay instaladores para Linux y Windows que
 > descargan solos lo que falta en el primer arranque (ver
-> [Instalar](#instalar)); el de Windows sigue sin probarse en una PC real.
+> [Instalar](#instalar)). Es una versión preliminar: Windows y varias
+> descargas reales siguen sin probarse (ver [Qué falta](#qué-falta)).
 
 Discalaves es un equipo de "empleados" de IA que corre en tu propia
 computadora. Les asignas tareas como a compañeros de trabajo; cada empleado
@@ -15,24 +16,28 @@ Grok Bot.
 
 ## Qué funciona hoy
 
-- **Empleados con modelo local.** qwen (Qwen 3.5 9B) corre en tu GPU con
-  llama.cpp; nada sale de tu equipo. Conversas con cada empleado desde una app
-  de escritorio y ves sus respuestas mientras las escribe.
+- **Empleados con modelo local.** Por defecto usan [Ollama](https://ollama.com)
+  (la app lo instala o usa el tuyo) con `qwen3:8b`, en tu GPU; nada sale de tu
+  equipo. Si tienes llama.cpp con Qwen 3.5 9B (el servidor propio de
+  Discalaves, con varias ranuras), también funciona. Conversas con cada
+  empleado desde una app de escritorio y ves sus respuestas mientras las
+  escribe.
 - **Cada uno con su puesto.** Un empleado es un perfil en archivos de texto
   que puedes leer y editar: nombre, rol, tono y reglas, las herramientas que
   puede usar, sus procedimientos (cómo hace su trabajo y en qué formato lo
-  entrega) y su memoria. Hay plantillas (investigador, redactor, marketing,
-  contador, talento humano, desarrollador) o puedes describir el puesto con
-  tus palabras para que qwen redacte un borrador que tú revisas. Todos
-  comparten el mismo modelo cargado: especializarse no gasta más memoria de
-  la GPU.
+  entrega) y su memoria. Hay plantillas (asistente, investigador, redactor,
+  marketing, contador, talento humano, desarrollador) o puedes describir el
+  puesto con tus palabras para que el modelo redacte un borrador que tú
+  revisas. Por defecto comparten el mismo modelo cargado: especializarse no
+  gasta más memoria de la GPU.
 - **Honestidad comprobada.** Si un empleado dice que guardó un archivo que no
   guardó, o cita una web que no abrió, la app lo detecta y le pide que lo haga
   de verdad o que diga que no pudo.
 - **Su propia computadora.** Cada empleado trabaja en un contenedor Debian
   con escritorio XFCE, terminal y Chromium. No ve tus carpetas personales
   (solo la suya) ni tu sistema, y puede instalar programas dentro de su
-  computadora sin tocar la tuya.
+  computadora sin tocar la tuya. Su computadora tampoco llega a tu red local
+  (ni a tu router ni a otros servicios de tu equipo), solo a internet.
 - **Usa sus herramientas.** Terminal, crear archivos, buscar en la web, abrir
   páginas y rellenar formularios. Maneja el navegador por la estructura de la
   página, no haciendo clic en píxeles. Ya investiga un tema y deja un informe
@@ -66,6 +71,9 @@ Grok Bot.
   cabe en tu GPU y los instala en Ollama con una barra de progreso. También
   acepta nombres de la biblioteca de Ollama (`llama3.2:3b`) y archivos `.gguf`
   de tu disco. Lo instalado se asigna enseguida a cualquier empleado.
+- **Configuración.** El engranaje junto a tu perfil muestra los modelos
+  locales, las especificaciones de tu equipo (CPU, RAM, GPU) y permite
+  instalar Ollama y el modelo recomendado cuando quieras.
 - **Tu perfil.** Tu nombre y tu foto, guardados solo en tu equipo.
 
 ## Modelos fuera de tu equipo (opcional)
@@ -85,7 +93,8 @@ hacia dónde, marca a esos empleados en la lista y nunca cambia su origen sola.
 
 - **Cero fricción.** Un instalador nativo que trae todo lo necesario. Sin
   Docker ni pasos previos. Al terminar se abre la interfaz con los empleados
-  listos. *(Todavía no: el prototipo usa Docker.)*
+  listos. *(El instalador ya descarga Ollama, el modelo y Podman, pero solo
+  está probado en Linux y partes sueltas; si ya tienes Docker, se usa.)*
 - **Privacidad primero.** Los modelos corren en tu máquina por defecto. Usar
   una API externa es opcional, lo decides tú, y la app te avisa claramente
   de que en ese caso tus datos salen de tu equipo.
@@ -103,7 +112,7 @@ hacia dónde, marca a esos empleados en la lista y nunca cambia su origen sola.
 - 16 GB de RAM recomendados.
 - Con el instalador no necesitas nada más: Discalaves descarga Ollama, un
   modelo y, en Linux, Podman. Para seguir el desarrollo desde el código, además:
-  Node.js 24 o superior.
+  Node.js 24 o superior (y un motor de contenedores: Docker o Podman).
 
 El desarrollo y las pruebas se hacen con Qwen 3.5 9B (Q4) en una RTX 3060 Ti
 de 8 GB.
@@ -136,35 +145,11 @@ pantalla de preparación en la app empaquetada. **Sin probar:** la descarga real
 de Ollama y del modelo, la instalación de Podman con `pkexec` en una distro
 sin él, y Windows.
 
-## Probarlo hoy
+## Probarlo desde el código
 
-Esto es para quien quiera seguir el desarrollo; todavía no es una
-instalación para el público.
-
-### Linux
-
-#### 1. Preparación
-
-1. **Descarga y configura llama.cpp con CUDA:**
-   - Descarga desde [ggml-org/llama.cpp/releases](https://github.com/ggml-org/llama.cpp/releases) el archivo `llama-*-bin-linux-cuda-12.4-x64.tar.gz`.
-   - Descomprime en `~/Documents/IA-discalaves/llama.cpp/` para que exista `~/Documents/IA-discalaves/llama.cpp/llama-server`.
-   - (O establece la variable de entorno `DISCALAVES_IA` a otra ruta).
-
-2. **Descarga el modelo:**
-   - Coloca `Qwen3.5-9B-Q4_K_M.gguf` en `~/Documents/IA-discalaves/modelos/`.
-
-3. **Requisitos del sistema:**
-   - Docker corriendo e instalado sin `sudo` (añade tu usuario al grupo `docker`):
-     ```bash
-     sudo usermod -aG docker $USER
-     newgrp docker
-     ```
-   - Node.js 24 o superior:
-     ```bash
-     node --version
-     ```
-
-#### 2. Arrancar
+Para seguir el desarrollo. Necesitas Node.js 24 o superior y, en Linux, Docker
+(usable sin `sudo`) o Podman; si falta algo, la pantalla de primer arranque
+ofrece instalarlo.
 
 ```bash
 cd app
@@ -172,68 +157,47 @@ npm install
 npm start
 ```
 
-La primera vez:
-- Construye la imagen del contenedor de los empleados (~2 minutos).
-- Carga el modelo en la GPU (~10-30 segundos).
+La primera vez construye la imagen de las computadoras de los empleados (~2
+minutos) y la pantalla de primer arranque descarga Ollama y `qwen3:8b`. Si ya
+tienes llama.cpp en `~/Documents/IA-discalaves/llama.cpp/` (o la ruta de
+`DISCALAVES_IA`) y `modelos/Qwen3.5-9B-Q4_K_M.gguf`, los empleados de qwen
+también funcionan.
 
-#### 3. Pruebas rápidas
+Pruebas:
 
 ```bash
 cd app
-npm run prueba:unidad
+npm run prueba:unidad   # rutas, adaptadores, instalación y Ollama (sin Docker)
+npm run prueba          # todas, incluidas las computadoras con contenedores reales
 ```
 
-Todas las pruebas:
-```bash
-cd app
-npm run prueba
-```
+En Windows, la app y el modelo corren nativos y solo las computadoras de los
+empleados van en una distro WSL2 propia con Podman. Para probarlo en una PC
+real sigue [`PRUEBAS_WINDOWS.md`](PRUEBAS_WINDOWS.md); al abrir la app por
+primera vez, **Preparar** activa WSL2 (pide permiso de administrador), crea la
+distro e instala Podman. Los archivos de cada empleado quedan en
+`\\wsl$\discalaves\home\discalaves\trabajo\<empleado>`.
 
----
+## Qué falta
 
-### Windows
-
-#### 1. Preparación
-
-1. **Descarga el instalador:**
-   - Ve a [Actions](https://github.com/discajapon/discalaves/actions/workflows/windows.yml) del repositorio.
-   - Abre el último run **verde** del workflow **Windows**.
-   - Descarga el artefacto `discalaves-instalador-windows`.
-
-2. **Descarga llama.cpp con CUDA:**
-   - Desde [ggml-org/llama.cpp/releases](https://github.com/ggml-org/llama.cpp/releases), descarga `llama-…-bin-win-cuda-12.4-x64.zip` y `cudart` de la misma versión.
-   - Descomprime ambos en `%LOCALAPPDATA%\Discalaves\llama.cpp\` para que exista `%LOCALAPPDATA%\Discalaves\llama.cpp\llama-server.exe`.
-
-3. **Descarga el modelo:**
-   - Coloca `Qwen3.5-9B-Q4_K_M.gguf` en `%LOCALAPPDATA%\Discalaves\modelos\`.
-
-4. **Requisitos del equipo:**
-   - Windows 10 22H2 o Windows 11.
-   - GPU NVIDIA con 8 GB de VRAM o más.
-   - 16 GB de RAM recomendados.
-   - ~15 GB libres en el disco del sistema (modelo + WSL2 + contenedores).
-
-#### 2. Arrancar
-
-- Ejecuta el instalador descargado (`Discalaves-*-instalador-windows.exe`).
-- Elige la carpeta de instalación.
-- Al abrir la app por primera vez, si WSL2 no está activado, aparecerá una pantalla "Preparar las computadoras de los empleados".
-  - **"Ahora no":** sigas usando la app en modo chat (sin herramientas de los empleados).
-  - **"Preparar":** activa WSL2 (pide permiso de administrador), descarga Debian 13, instala Podman y crea la distro (puede pedir reinicio).
-
-#### 3. Primer uso con herramientas
-
-Tras preparar WSL:
-- La primera tarea con herramientas construye la imagen de Docker en Podman (~minutos).
-- Luego los empleados pueden investigar en la web y crear archivos.
-- Los archivos se guardan en `\\wsl$\discalaves\home\discalaves\trabajo\...` (accesible desde el Explorador).
-
-#### 4. Ver el escritorio del empleado
-
-- El botón del monitor muestra su escritorio (XFCE con Chromium) en vivo.
-- Puedes "Tomar el control" con tu teclado y ratón.
-
----
+- **Windows:** nunca se ha probado en una PC real (WSL2, reenvío de puertos de
+  la pantalla en vivo, llama.cpp con CUDA, memoria con varios empleados).
+- **Descargas reales:** Ollama, `qwen3:8b` y la instalación de Podman con
+  `pkexec` en una distro limpia solo se han probado contra servidores falsos o
+  en parte.
+- **Modelos fuera del equipo:** ningún proveedor ni servidor remoto real, ni
+  Codex con una cuenta real; solo servidores falsos locales.
+- **Motor de contenedores:** Podman rootless solo se ha probado en un contenedor
+  que simula WSL, no como motor principal en un equipo; falta empaquetar uno
+  propio para Linux.
+- **OpenClaw:** probado en Linux con tareas cortas; faltan tareas largas, varios
+  empleados a la vez y Windows.
+- **Varios empleados a la vez:** la memoria RAM con muchos contenedores
+  trabajando sin medir.
+- **Distribución:** el instalador de Linux se genera a mano; falta publicar
+  descargas.
+- **Más adelante:** Mac, microVMs como modo seguro, y conectores (Matrix,
+  Discord, Telegram) y acceso desde el celular.
 
 ## Licencia
 
