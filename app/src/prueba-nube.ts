@@ -7,7 +7,8 @@
 //   uno local y uno en la nube trabajan a la vez, el tope pausa y pregunta, la cuota detiene y avisa, y
 //   ninguna clave aparece en disco sin cifrar, en logs ni en el historial.
 import assert from "node:assert/strict";
-import { execFileSync, spawn } from "node:child_process";
+import { execFile, execFileSync, spawn } from "node:child_process";
+import { promisify } from "node:util";
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import fs from "node:fs";
 import http from "node:http";
@@ -39,13 +40,26 @@ const GUIONES: Record<string, Paso[]> = {
   ],
   "falso-lento": [{ texto: "hola desde el modelo local", esperar: 1500 }],
   "falso-caro": [{ llamada: ["recordar", { texto: "prueba de tope" }], uso: [2_000_000, 1_000_000] }, { texto: "no debería llegar aquí" }],
+  // servidor remoto: lo mismo sin herramientas nativas (órdenes en texto), con razonamiento, con una espera y largo
+  "falso-texto": [
+    { texto: "Miro dónde estoy.", llamada: ["terminal", { comando: `echo "$HOME"; hostname; touch /tmp/${MARCA}; ls /tmp/${MARCA}` }] },
+    { llamada: ["abrir_pagina", { url: "https://example.com" }] },
+    { llamada: ["escribir_archivo", { ruta: "informe.md", contenido: "# Informe\n\nexample.com es un dominio reservado para ejemplos (fuente: https://example.com).\n" }] },
+    { texto: "Listo: guardé informe.md con lo que encontré en https://example.com." },
+  ],
+  "falso-piensa": [{ texto: "<think>pienso en secreto-del-modelo</think>Hecho." }],
+  "falso-429": [{ texto: "listo tras esperar" }],
+  "falso-largo": [
+    ...[1, 2, 3, 4].map((i) => ({ llamada: ["abrir_pagina", { url: `https://example.com/?${i}` }] as [string, object], esperar: 2500 })),
+    { texto: "terminé lo largo" },
+  ],
   "claude-falso": [{ texto: "Anoto.", llamada: ["recordar", { texto: "prueba de Claude" }] }, { texto: "Hecho con Claude." }],
 };
 const pedidos: { modelo: string; ruta: string; cuerpo: any; auth?: string }[] = [];
 let enCurso = 0, maxEnCurso = 0;
 
 function paso(modelo: string, mensajes: any[]): Paso {
-  const hechos = mensajes.filter((m) => m.role === "tool" || (Array.isArray(m.content) && m.content.some((b: any) => b.type === "tool_result"))).length;
+  const hechos = mensajes.filter((m) => m.role === "tool" || (typeof m.content === "string" && m.content.startsWith("(resultado de la herramienta")) || (Array.isArray(m.content) && m.content.some((b: any) => b.type === "tool_result"))).length;
   const g = GUIONES[modelo] ?? [{ texto: "ok" }];
   return g[Math.min(hechos, g.length - 1)];
 }
@@ -57,10 +71,16 @@ const falso = http.createServer((req, res) => {
     const cuerpo = b ? JSON.parse(b) : {};
     const modelo = cuerpo.model ?? "";
     pedidos.push({ modelo, ruta: req.url!, cuerpo, auth: String(req.headers.authorization ?? req.headers["x-api-key"] ?? "") });
-    const json = (o: object, status = 200) => res.writeHead(status, { "content-type": "application/json" }).end(JSON.stringify(o));
+    const json = (o: object, status = 200, cab: Record<string, string> = {}) => res.writeHead(status, { "content-type": "application/json", ...cab }).end(JSON.stringify(o));
+    const auth = String(req.headers.authorization ?? "");
+    if (auth && auth !== `Bearer ${CLAVE}`) return json({ error: { message: "Invalid API key" } }, 401);
     if (req.url === "/api/tags") return json({ models: [{ name: "falso-lento", details: { parameter_size: "1B" } }] });
     if (req.url === "/api/show") return json({ capabilities: ["completion"] });
-    if (req.url?.endsWith("/models")) return json({ data: Object.keys(GUIONES).concat("falso-cuota", "falso-caida", "text-embedding-falso").map((id) => ({ id })) });
+    // "falso-texto" no dice su ventana (la pone el usuario) y no acepta herramientas nativas; los demás sí
+    if (req.url?.endsWith("/models")) return json({ data: Object.keys(GUIONES).concat("falso-cuota", "falso-caida", "text-embedding-falso").map((id) => ({ id, ...(id !== "falso-texto" && { max_model_len: 16384 }) })) });
+    if (modelo === "falso-texto" && cuerpo.tools) return json({ error: { message: "tools are not supported" } }, 400);
+    if (cuerpo.stream === false) return json({ choices: [{ message: { content: "", tool_calls: [{ function: { name: "eco", arguments: '{"texto":"ok"}' } }] } }] }); // sonda de herramientas
+    if (modelo === "falso-429" && !pedidos.some((x) => x.modelo === modelo && x.cuerpo.stream && x !== pedidos.at(-1))) return json({ error: { message: "ocupado" } }, 429, { "retry-after": "1" });
     if (modelo === "falso-cuota") return json({ error: { message: "You exceeded your current quota", type: "insufficient_quota" } }, 429);
     enCurso++;
     maxEnCurso = Math.max(maxEnCurso, enCurso);
@@ -90,8 +110,10 @@ const falso = http.createServer((req, res) => {
         ev({ type: "message_stop" });
       } else {
         const d = (delta: object) => res.write(`data: ${JSON.stringify({ choices: [{ delta }] })}\n\n`);
+        const marca = /<<<llamar:(\w+) /.exec(String(cuerpo.messages?.[0]?.content))?.[1]; // modo texto: la orden va escrita
         if (p.texto) d({ content: p.texto });
-        if (p.llamada) d({ tool_calls: [{ index: 0, id: `call_${pedidos.length}`, function: { name: p.llamada[0], arguments: JSON.stringify(p.llamada[1]) } }] });
+        if (p.llamada && marca) d({ content: `<<<llamar:${marca} ${p.llamada[0]}>>>\n${JSON.stringify(p.llamada[1])}\n` });
+        else if (p.llamada) d({ tool_calls: [{ index: 0, id: `call_${pedidos.length}`, function: { name: p.llamada[0], arguments: JSON.stringify(p.llamada[1]) } }] });
         res.write(`data: ${JSON.stringify({ choices: [], usage: { prompt_tokens: entrada, completion_tokens: salida } })}\n\n`);
         res.write("data: [DONE]\n\n");
       }
@@ -270,7 +292,7 @@ async function pruebaApp(base: string) {
     assert.ok(p.id, p.error);
     const pc = await api<{ id: string; error?: string }>("guardarProveedor", { tipo: "claude", nombre: "Claude falso", url: `${base}/v1`, clave: CLAVE });
     assert.ok(pc.id, pc.error);
-    assert.equal((await api<{ modelos?: number; error?: string }>("probarProveedor", p.id)).modelos, 6);
+    assert.equal((await api<{ modelos?: number; error?: string }>("probarProveedor", p.id)).modelos, 10);
     await api("probarProveedor", pc.id);
     const provs = await api<any>("proveedores");
     assert.ok(!JSON.stringify(provs).includes(CLAVE), "la interfaz no debe recibir las claves");
@@ -342,6 +364,85 @@ async function pruebaApp(base: string) {
     assert.equal(convs.find((c) => c.id === nube).origen, "nube");
     assert.equal(convs.find((c) => c.id === local).origen, "local");
     console.log("app: ok (criterio 1 en su contenedor, local y nube a la vez, tope, cuota, Claude)");
+
+    // ---- Servidor remoto compatible con OpenAI (decisión del usuario, 2026-10-02) ----
+    const mala = await api<{ error?: string }>("guardarProveedor", { tipo: "remoto", nombre: "Remoto malo", url: base, clave: "clave-equivocada" });
+    assert.match(mala.error ?? "", /401/, "una clave rechazada debe decirlo claro");
+    const r = await api<{ id: string; error?: string }>("guardarProveedor", { tipo: "remoto", nombre: "Servidor falso", url: `${base}/v1/`, clave: CLAVE });
+    assert.ok(r.id, r.error);
+    const sondeo = await api<{ modelos?: number; servidor?: any; error?: string }>("probarProveedor", r.id);
+    assert.equal(sondeo.error, undefined, sondeo.error);
+    assert.ok(sondeo.servidor.modelos.includes("falso-criterio1"));
+    // sin elegir modelo no se puede activar; sin aceptar el aviso tampoco
+    assert.match((await api<{ error?: string }>("servidorActivar", r.id, true)).error ?? "", /modelo/);
+    let aj = await api<{ servidor?: any; error?: string }>("servidorAjustes", r.id, { modelo: "falso-criterio1" });
+    assert.equal(aj.servidor.herramientas, "nativas");
+    assert.equal(aj.servidor.contexto, 16384, "la ventana sale de la lista del servidor");
+    assert.equal(aj.servidor.contextoDelServidor, true);
+    assert.match((await api<{ error?: string }>("servidorActivar", r.id, false)).error ?? "", /aceptar/);
+    assert.ok(!JSON.stringify(await api<any>("proveedores")).includes(CLAVE), "la interfaz no debe recibir las claves");
+    // "falso-texto": sin herramientas nativas y sin ventana en la lista: el usuario la pone
+    aj = await api("servidorAjustes", r.id, { modelo: "falso-texto" });
+    assert.equal(aj.servidor.herramientas, "texto");
+    assert.equal(aj.servidor.contexto, undefined);
+    assert.match((await api<{ error?: string }>("servidorAjustes", r.id, { contexto: "12" })).error ?? "", /1024/);
+    aj = await api("servidorAjustes", r.id, { contexto: "16384" });
+    assert.equal(aj.servidor.contexto, 16384);
+    aj = await api("servidorAjustes", r.id, { modelo: "falso-criterio1" });
+
+    // Activar: todos los empleados existentes pasan al servidor y los nuevos nacen con él
+    const act = await api<{ cambiados?: number; error?: string }>("servidorActivar", r.id, true);
+    assert.ok((act.cambiados ?? 0) >= 5, act.error);
+    const todos = (await api<any[]>("conversaciones")).filter((c) => !c.equipo);
+    assert.ok(todos.every((c) => c.origen === "remoto" && c.modelo === "falso-criterio1"), "todos debían quedar en el servidor remoto");
+    assert.equal((await api<{ modelos: any[] }>("modelos")).modelos.find((m) => m.predeterminado)?.valor, `nube:${r.id}:falso-criterio1`);
+    // sin precios ni tope: un empleado remoto se crea sin ellos
+    const remoto = async (nombre: string, modelo: string) => crear(nombre, `nube:${r.id}:${modelo}`, { precio: undefined, tope: undefined });
+    const unoNativo = await remoto("Remoto Nativo", "falso-criterio1");
+    const unoTexto = await remoto("Remoto Texto", "falso-texto");
+    // Dos trabajan a la vez, sin cola de VRAM, uno con herramientas nativas y otro con el respaldo en texto
+    maxEnCurso = 0;
+    const antesRemotos = pedidos.length;
+    const medicion = process.env.DISCALAVES_MEDIR_RAM ? medirRam() : undefined;
+    const [r1, r2] = await Promise.all([api<{ error?: string }>("enviar", unoNativo, "Investiga qué es example.com y deja un informe en informe.md"), api<{ error?: string }>("enviar", unoTexto, "Investiga qué es example.com y deja un informe en informe.md")]);
+    assert.equal(r1.error, undefined, r1.error);
+    assert.equal(r2.error, undefined, r2.error);
+    assert.ok(maxEnCurso >= 2, "los dos empleados remotos debían trabajar a la vez");
+    for (const u of [unoNativo, unoTexto]) {
+      assert.match(fs.readFileSync(path.join(ia, "trabajo", u, "informe.md"), "utf8"), /example\.com/, `criterio 1 de ${u}`);
+      const h = await api<any[]>("historial", u);
+      assert.match(h.find((m) => m.de === "herramienta" && m.nombre === "terminal").salida, new RegExp(`/home/${u}\\n`), "la terminal debe correr en su computadora");
+      assert.match(h.at(-1).texto, /informe\.md/);
+      assert.ok(!JSON.stringify(h).includes("<<<"), "las órdenes en texto no deben quedar en el historial");
+    }
+    assert.equal(fs.existsSync(`/tmp/${MARCA}`), false, "se ejecutó algo fuera de su contenedor");
+    const nuevos = pedidos.slice(antesRemotos);
+    assert.ok(nuevos.filter((x) => x.modelo === "falso-texto" && x.cuerpo.stream).every((x) => !x.cuerpo.tools && /FORMA DE USAR HERRAMIENTAS/.test(x.cuerpo.messages[0].content)), "el de texto no debe recibir tools nativas");
+    assert.ok(nuevos.filter((x) => x.modelo === "falso-criterio1" && x.cuerpo.stream).every((x) => x.cuerpo.tools?.length), "el nativo debe recibir tools");
+    // Tokens por empleado, y ni precio ni tope
+    const perfil = await api<any>("empleado", unoNativo);
+    assert.ok(perfil.tokens.total[0] > 0 && perfil.remoto, "debe contar los tokens del servidor");
+    // Razonamiento: no se ve ni se guarda
+    const piensa = await remoto("Remoto Piensa", "falso-piensa");
+    assert.equal((await api<{ error?: string }>("enviar", piensa, "hola")).error, undefined);
+    const hp = await api<any[]>("historial", piensa);
+    assert.equal(hp.at(-1).texto, "Hecho.");
+    assert.ok(!JSON.stringify(hp).includes("secreto-del-modelo"), "el razonamiento no debe quedar en el historial");
+    // 429: espera lo que pide el servidor y sigue
+    const espera = await remoto("Remoto Espera", "falso-429");
+    const t0 = Date.now();
+    assert.equal((await api<{ error?: string }>("enviar", espera, "hola")).error, undefined);
+    assert.ok(Date.now() - t0 >= 1000, "debía esperar el Retry-After");
+    assert.equal((await api<any[]>("historial", espera)).at(-1).texto, "listo tras esperar");
+    // Si el servidor se cae: el empleado se detiene y avisa, sin reintentos ni modelo local
+    const cae = await remoto("Remoto Cae", "falso-caida");
+    const desdeCaida = pedidos.length;
+    const rCae = await api<{ error?: string }>("enviar", cae, "hola");
+    assert.match(rCae.error ?? "", /se detuvo: se cortó la conexión/);
+    assert.equal(pedidos.slice(desdeCaida).filter((x) => x.modelo === "falso-caida" && x.cuerpo.stream).length, 1, "no debe reintentar");
+    assert.ok(!(await api<any[]>("conversaciones")).some((c) => c.id === cae && c.origen === "local"), "no debe pasar a un modelo local");
+    if (medicion) await medicionCon(medicion, api, remoto);
+    console.log("remoto (app): ok (activación para todos, criterio 1 con herramientas nativas y en texto, a la vez, tokens, razonamiento oculto, 429, caída)");
   } catch (e) {
     await new Promise((r) => setTimeout(r, 1500));
     let errores = "";
@@ -368,6 +469,43 @@ async function pruebaApp(base: string) {
   const cifrado = fs.readFileSync(path.join(datos, "proveedores.cifrado"));
   assert.notEqual(cifrado.subarray(0, 3).toString(), "v10", "la bóveda usó la clave fija de Chromium, no el llavero");
   console.log("claves: ok (ni en disco sin cifrar, ni en logs, ni en el historial)");
+}
+
+// RAM con varios contenedores trabajando a la vez (DISCALAVES_MEDIR_RAM=1): muestrea el sistema y cada computadora.
+function medirRam() {
+  const muestras: { usado: number; contenedores: number }[] = [];
+  let enCurso = false;
+  const sacar = async () => {
+    if (enCurso) return;
+    enCurso = true;
+    try {
+      const sh = promisify(execFile);
+      const libre = (await sh("free", ["-m"])).stdout.split("\n")[1].split(/\s+/);
+      const docker = (await sh("docker", ["stats", "--no-stream", "--format", "{{.Name}} {{.MemUsage}}"])).stdout.trim().split("\n").filter((l) => l.startsWith("discalaves-") && !l.startsWith("discalaves-computadora-red"));
+      const mb = (t: string) => (/GiB/.test(t) ? parseFloat(t) * 1024 : parseFloat(t));
+      muestras.push({ usado: Number(libre[2]), contenedores: docker.reduce((a, l) => a + mb(l.split(" ")[1]), 0) });
+    } catch {
+      // una muestra perdida no importa
+    } finally {
+      enCurso = false;
+    }
+  };
+  const t = setInterval(() => void sacar(), 1500);
+  return { muestras, parar: () => clearInterval(t) };
+}
+async function medicionCon(m: ReturnType<typeof medirRam>, api: <T>(f: string, ...a: unknown[]) => Promise<T>, remoto: (n: string, mod: string) => Promise<string>) {
+  m.parar();
+  const mayor = (k: "usado" | "contenedores") => Math.max(...m.muestras.map((x) => x[k]));
+  console.log(`RAM con 2 empleados remotos trabajando: sistema usado máx ${mayor("usado")} MB, contenedores máx ${Math.round(mayor("contenedores"))} MB (${m.muestras.length} muestras)`);
+  // tres a la vez, con tareas largas que mantienen Chromium abierto
+  const tres = await Promise.all(["Largo A", "Largo B", "Largo C"].map((n) => remoto(n, "falso-largo")));
+  const m3 = medirRam();
+  const antes = Number(execFileSync("free", ["-m"]).toString().split("\n")[1].split(/\s+/)[2]);
+  const rs = await Promise.all(tres.map((id) => api<{ error?: string }>("enviar", id, "abre varias páginas")));
+  assert.deepEqual(rs.map((x) => x.error), [undefined, undefined, undefined]);
+  m3.parar();
+  const may = (k: "usado" | "contenedores") => Math.max(...m3.muestras.map((x) => x[k]));
+  console.log(`RAM con 3 empleados remotos trabajando (navegando): sistema usado antes ${antes} MB, máx ${may("usado")} MB, contenedores máx ${Math.round(may("contenedores"))} MB (${m3.muestras.length} muestras)`);
 }
 
 async function main() {
