@@ -15,7 +15,7 @@ import { registrarWsl } from "./ipc-wsl";
 import { Boveda, SinAlmacenSeguro } from "./boveda";
 import { Codex } from "./codex";
 import { Gasto, TOPE_POR_DEFECTO } from "./gasto";
-import { Corte, URL_POR_DEFECTO, esRemoto, jsonValido, listarModelos, sinClave, turnoClaude, turnoOpenAI, type ModeloNube, type Proveedor, type Tipo, type Uso } from "./proveedores";
+import { Cola, Corte, URL_POR_DEFECTO, detectarBase, esRemoto, jsonValido, listarModelos, sinClave, sondaHerramientas, turnoClaude, turnoOpenAI, type ModeloNube, type ModoHerramientas, type Pedido, type Proveedor, type Tipo, type Uso } from "./proveedores";
 import { Tunel, destino, sshValido, type Pregunta } from "./tunel";
 import * as gestor from "./modelos";
 
@@ -41,6 +41,10 @@ const MAX_REPETICIONES = 5; // a la 5.ª se detiene y lo explica; los locales nu
 const yaHiciste = (c: Conversacion, n: number) =>
   `ya hiciste exactamente esto ${n - 1} veces sin resultado; no lo repito. ` +
   (c.origen === "local" ? "Prueba otra herramienta u otro camino (otra búsqueda, otra página, otra fuente) y sigue hasta tener el resultado." : "Prueba otro camino o termina con lo que tienes.");
+// Servidor remoto (decisión del usuario, 2026-10-02): hasta 9 peticiones a la vez; sin VRAM, sin precios ni tope.
+const PETICIONES_REMOTAS = 9;
+const colaRemota = new Cola(PETICIONES_REMOTAS);
+const CARACTERES_POR_TOKEN_UTIL = 2; // ~3,5 caracteres por token y un 57 % de la ventana para el historial (el resto: prompt, herramientas y respuesta)
 const CONTEXTO_OLLAMA = 10000; // Ollama recorta por defecto a ~4k tokens: se le manda menos historial
 
 // Cada conversación es con un EMPLEADO (perfil en archivos, ver empleados.ts) asignado a un modelo (campo
@@ -59,13 +63,19 @@ interface Conversacion {
   herramientas: boolean; // el modelo sabe usar herramientas (si no, es "solo chat" aunque el perfil liste alguna)
   permitidas: string[]; // herramientas del puesto
   tope: number; // USD al mes (solo nube)
+  ventana?: number; // tokens de contexto del modelo remoto (se averigua al empezar un turno)
   openclaw?: boolean; // su bucle lo hace OpenClaw (solo con qwen, ver tareaOpenClaw)
 }
-interface Modelo { proveedor: Conversacion["proveedor"]; modelo: string; valor: string; detalle: string; herramientas: boolean; origen: Origen; donde: string; aviso?: string }
+interface Modelo { proveedor: Conversacion["proveedor"]; modelo: string; valor: string; detalle: string; herramientas: boolean; origen: Origen; donde: string; aviso?: string; predeterminado?: boolean }
 const QWEN_MODELO = "Qwen3.5-9B";
 // qwen (llama-server propio) es opcional: sin su runtime y su modelo, el motor por defecto es Ollama.
 const hayQwen = () => fs.existsSync(SERVIDOR) && fs.existsSync(MODELO);
-const modeloPorDefecto = () => (hayQwen() ? "qwen" : `ollama:${MODELO_RECOMENDADO}`);
+// El servidor remoto activado por el usuario va primero; si no, qwen (si está) u Ollama.
+const servidorPredeterminado = () => proveedores().find((p) => esRemoto(p.tipo) && p.predeterminado && p.aceptado && p.modelo);
+const modeloPorDefecto = () => {
+  const s = servidorPredeterminado();
+  return s ? `nube:${s.id}:${s.modelo}` : hayQwen() ? "qwen" : `ollama:${MODELO_RECOMENDADO}`;
+};
 
 function aConversacion(e: Empleado): Conversacion {
   const base = { id: e.id, nombre: e.nombre, rol: e.rol, color: e.color, usuario: e.usuario, libre: e.libre, permitidas: e.herramientas, tope: e.tope ?? TOPE_POR_DEFECTO };
@@ -325,7 +335,7 @@ function iniciarServidor() {
 // una llamada a herramienta de su resultado.
 function contexto(c: Conversacion) {
   const historial = historialDe(c.id);
-  const limite = c.proveedor === "ollama" ? CONTEXTO_OLLAMA : CONTEXTO_CARACTERES;
+  const limite = c.ventana ? c.ventana * CARACTERES_POR_TOKEN_UTIL : c.proveedor === "ollama" ? CONTEXTO_OLLAMA : CONTEXTO_CARACTERES;
   let inicio = 0, caracteres = 0;
   for (let i = historial.length - 1; i >= 0; i--) {
     caracteres += JSON.stringify(historial[i]).length;
@@ -369,6 +379,8 @@ function contexto(c: Conversacion) {
 // Un turno del modelo: el texto se reenvía a la interfaz mientras llega; las llamadas se acumulan.
 // Todos los orígenes devuelven lo mismo (proveedores.ts): texto, llamadas a herramientas y uso de tokens.
 async function turno(c: Conversacion, interfaz: Electron.WebContents, senal: AbortSignal, avisos: string[] = []): Promise<{ texto: string; llamadas: Llamada[]; uso: Uso }> {
+  const remoto = c.origen === "remoto" ? proveedores().find((x) => x.id === c.cuenta) : undefined;
+  if (remoto) c.ventana = await ventanaDelServidor(remoto, c.modelo); // antes de armar el historial: lo recorta a esa ventana
   const companeros = conversaciones.filter((o) => o.id !== c.id).map((o) => ({ nombre: o.nombre, rol: o.rol }));
   const pedido = {
     modelo: c.modelo,
@@ -384,9 +396,14 @@ async function turno(c: Conversacion, interfaz: Electron.WebContents, senal: Abo
     const p = proveedores().find((x) => x.id === c.cuenta);
     if (!p) throw new Corte(`el proveedor de ${c.nombre} ya no está configurado; elige otro modelo en su perfil`);
     const url = await baseDe(p);
+    if (remoto) return await turnoRemoto(c, remoto, url, pedido);
     return await (p.tipo === "claude" ? turnoClaude : turnoOpenAI)({ ...pedido, url, clave: p.clave });
   } catch (e) {
     const m = (e as Error).message;
+    // Se cortó la conexión con el servidor remoto: se detiene y avisa; nunca pasa a un modelo local ni reintenta.
+    if (remoto && !(e instanceof Corte) && !senal.aborted && /fetch failed|terminated|other side closed|ECONN|ETIMEDOUT|ENOTFOUND|socket|network/i.test(`${m} ${(e as { cause?: { code?: string } }).cause?.code ?? ""}`)) {
+      throw new Corte(`se cortó la conexión con ${c.donde} (${(e as { cause?: { code?: string } }).cause?.code ?? m}); ${c.nombre} se detuvo y no usa otro modelo por su cuenta`);
+    }
     const memoria = m.match(/requires more system memory \(([\d.]+ GiB)\) than is available \(([\d.]+ GiB)\)/);
     if (memoria) throw new Error(`no hay memoria para cargar ${c.nombre}: necesita ${memoria[1]} y hay ${memoria[2]} libres. Cierra otras apps (o qwen) y vuelve a intentarlo.`);
     if (c.proveedor === "ollama" && /not found/i.test(m)) throw new Error(`${c.modelo} no está descargado. Ábrelo en Configuración (el engranaje junto a tu perfil) → Ollama, y descárgalo.`);
@@ -394,10 +411,57 @@ async function turno(c: Conversacion, interfaz: Electron.WebContents, senal: Abo
   }
 }
 
+// ---- Servidor remoto compatible con OpenAI: ventana, modo de herramientas y turnos ----
+const guardarProveedores = () => boveda.guardar(proveedores());
+// La ventana del modelo: la que dice el servidor en su lista de modelos o, si no la dice, la que puso el usuario.
+async function ventanaDelServidor(p: Proveedor, modelo: string): Promise<number> {
+  let lista = modelosNube.get(p.id);
+  if (!lista?.some((m) => m.modelo === modelo && m.contexto)) lista = await listarModelos(p.tipo, await baseDe(p), p.clave).catch(() => lista);
+  if (lista) modelosNube.set(p.id, lista);
+  const v = lista?.find((m) => m.modelo === modelo)?.contexto ?? p.contexto;
+  if (!v) throw new Corte(`no sé la ventana de contexto de ${modelo} en ${hostDe(p)}: el servidor no la dice. Escríbela en Configuración → Proveedores y servidores.`);
+  return v;
+}
+// Nativas o texto, según la sonda de ese modelo (se hace una vez y se guarda).
+async function modoDe(p: Proveedor, base: string, modelo: string): Promise<ModoHerramientas> {
+  const guardado = p.modos?.[modelo];
+  if (guardado) return guardado;
+  return ponerModo(p, modelo, await sondaHerramientas(base, p.clave, modelo));
+}
+function ponerModo(p: Proveedor, modelo: string, modo: ModoHerramientas): ModoHerramientas {
+  p.modos = { ...p.modos, [modelo]: modo };
+  try {
+    guardarProveedores();
+  } catch {
+    // sin almacén seguro no se puede guardar: vale para esta sesión
+  }
+  return modo;
+}
+// Turno contra el servidor remoto: espera su turno entre las 9 peticiones, usa herramientas nativas o el respaldo en
+// texto y respeta un 429. Si las nativas fallan trabajando (400/422 que habla de herramientas), pasa a texto y
+// repite ese turno; si falla otra cosa, se detiene.
+async function turnoRemoto(c: Conversacion, p: Proveedor, url: string, pedido: Omit<Pedido, "url">) {
+  if (!p.aceptado) throw new Corte(`no has aceptado que los datos de ${c.nombre} salgan hacia ${hostDe(p)}: acéptalo en Configuración → Proveedores y servidores`);
+  const soltar = await colaRemota.tomar(pedido.senal);
+  try {
+    let modo = pedido.herramientas.length ? await modoDe(p, url, c.modelo) : "nativas";
+    for (;;) {
+      try {
+        return await turnoOpenAI({ ...pedido, url, clave: p.clave, modoTexto: modo === "texto", respetar429: true });
+      } catch (e) {
+        if (modo === "texto" || !/respondió (400|422|501)/.test((e as Error).message) || !/tool|function|herramienta/i.test((e as Error).message)) throw e;
+        modo = ponerModo(p, c.modelo, "texto");
+      }
+    }
+  } finally {
+    soltar();
+  }
+}
+
 // Gasto de un empleado en la nube: precio conocido antes de trabajar, y tope mensual (pausa y pregunta).
 // El modo libre no salta el tope: es dinero.
 async function antesDeGastar(c: Conversacion, interfaz: Electron.WebContents): Promise<string | null> {
-  if (c.proveedor !== "nube") return null;
+  if (c.proveedor !== "nube" || c.origen === "remoto") return null; // el servidor remoto no tiene precios ni tope
   if (!gasto.precio(`${c.cuenta}:${c.modelo}`)) throw new Corte(`no conozco el precio de ${c.modelo}; ponlo en el perfil de ${c.nombre} (USD por millón de tokens; 0 si es tu propio servidor)`);
   const llevado = gasto.delMes(c.id);
   if (llevado < c.tope) return null;
@@ -409,7 +473,8 @@ async function antesDeGastar(c: Conversacion, interfaz: Electron.WebContents): P
   return null;
 }
 function anotarGasto(c: Conversacion, uso: Uso) {
-  const precio = c.proveedor === "nube" && gasto.precio(`${c.cuenta}:${c.modelo}`);
+  if (c.origen !== "local") gasto.sumarTokens(c.id, uso);
+  const precio = c.proveedor === "nube" && c.origen !== "remoto" && gasto.precio(`${c.cuenta}:${c.modelo}`);
   if (precio) gasto.sumar(c.id, uso, precio);
 }
 
@@ -526,6 +591,7 @@ ipcMain.handle("modelos", async () => {
         proveedor: p.tipo === "codex" ? "codex" : "nube", modelo: m.modelo, valor: p.tipo === "codex" ? `codex:${m.modelo}` : `nube:${p.id}:${m.modelo}`,
         detalle: p.tipo === "codex" ? "ChatGPT vía Codex · no oficial, puede dejar de funcionar" : p.nombre,
         herramientas: m.herramientas, origen, donde, aviso: avisoPrivacidad(origen, donde),
+        ...(`nube:${p.id}:${m.modelo}` === modeloPorDefecto() && { predeterminado: true }),
       });
     }
   }
@@ -581,7 +647,20 @@ ipcMain.handle("gestor:quitar", async (_e, nombre: unknown) => {
 });
 
 // ---- Proveedores (la interfaz nunca recibe las claves: solo si hay una guardada) ----
-const sinSecretos = (p: Proveedor) => ({ id: p.id, nombre: p.nombre, tipo: p.tipo, url: p.url, ssh: p.ssh, conClave: !!p.clave, donde: dondeDe(p), remoto: esRemoto(p.tipo) });
+const sinSecretos = (p: Proveedor) => ({
+  id: p.id, nombre: p.nombre, tipo: p.tipo, url: p.url, ssh: p.ssh, conClave: !!p.clave, donde: dondeDe(p), remoto: esRemoto(p.tipo),
+  ...(p.tipo === "remoto" && { servidor: vistaServidor(p) }),
+});
+// Lo que la interfaz ve de un servidor remoto: modelos, el elegido, su ventana (y de dónde salió) y el modo de herramientas.
+function vistaServidor(p: Proveedor) {
+  const lista = modelosNube.get(p.id) ?? [];
+  const delServidor = lista.find((m) => m.modelo === p.modelo)?.contexto;
+  return {
+    modelos: lista.map((m) => m.modelo), modelo: p.modelo, contexto: delServidor ?? p.contexto, contextoDelServidor: !!delServidor,
+    herramientas: p.modelo ? p.modos?.[p.modelo] : undefined, aceptado: !!p.aceptado, predeterminado: !!p.predeterminado,
+    aviso: avisoPrivacidad("remoto", hostDe(p)), peticiones: PETICIONES_REMOTAS,
+  };
+}
 ipcMain.handle("proveedores", async () => ({
   proveedores: proveedores().map(sinSecretos),
   almacen: safeStorage.isEncryptionAvailable() && (process.platform !== "linux" || safeStorage.getSelectedStorageBackend() !== "basic_text"),
@@ -616,13 +695,24 @@ ipcMain.handle("guardar-proveedor", async (_e, datos: unknown) => {
     p.clave = clave || actual?.clave; // vacío al editar = conservar la guardada
     if (!p.clave && tipo !== "compatible") return { error: "falta la clave de API" };
   } else if (tipo === "tunel" && (clave || actual?.clave)) p.clave = clave || actual?.clave;
+  if (tipo === "remoto") {
+    // La ruta base se detecta (la URL tal cual o con /v1) y se guarda la que responde; una clave rechazada se dice claro.
+    try {
+      const { base, modelos } = await detectarBase(p.url!, p.clave);
+      p.url = base;
+      modelosNube.set(p.id, modelos);
+    } catch (e) {
+      return { error: sinClave((e as Error).message, p.clave) };
+    }
+    if (actual) Object.assign(p, { modelo: actual.modelo, contexto: actual.contexto, modos: actual.modos, aceptado: actual.aceptado, predeterminado: actual.predeterminado });
+  }
   try {
     boveda.guardar([...proveedores().filter((x) => x.id !== p.id), p]);
   } catch (e) {
     return { error: e instanceof SinAlmacenSeguro ? e.message : `no pude guardar: ${(e as Error).message}` };
   }
   enMemoria = undefined;
-  modelosNube.delete(p.id);
+  if (tipo !== "remoto") modelosNube.delete(p.id);
   tuneles.get(p.id)?.cerrar();
   tuneles.delete(p.id);
   return { id: p.id };
@@ -647,6 +737,7 @@ ipcMain.handle("probar-proveedor", async (_e, id: unknown) => {
       if (!(await codex.instalado())) return { error: "no encuentro Codex: instálalo con npm i -g @openai/codex" };
       if (!(await codex.conSesion())) return { error: "no hay sesión de ChatGPT en Codex: pulsa «iniciar sesión»" };
     }
+    if (p.tipo === "remoto") return await probarServidor(p);
     let lista = p.tipo === "codex" ? await codex.modelos() : await listarModelos(p.tipo, await baseDe(p), p.clave);
     if (p.tipo === "codex") {
       // Solo se ofrecen los modelos con los que la sonda confirma: sin herramientas propias y con las de Discalaves.
@@ -661,6 +752,66 @@ ipcMain.handle("probar-proveedor", async (_e, id: unknown) => {
   } catch (e) {
     return { error: sinClave((e as Error).message, p.clave) };
   }
+});
+// Servidor remoto: vuelve a detectar la ruta, lista los modelos y, si ya hay uno elegido, prueba sus herramientas.
+async function probarServidor(p: Proveedor) {
+  const { base, modelos } = await detectarBase(p.url!, p.clave);
+  modelosNube.set(p.id, modelos);
+  if (base !== p.url) p.url = base;
+  if (p.modelo && !modelos.some((m) => m.modelo === p.modelo)) p.modelo = undefined; // ya no existe
+  if (p.modelo) p.modos = { ...p.modos, [p.modelo]: await sondaHerramientas(base, p.clave, p.modelo) };
+  guardarProveedores();
+  return { modelos: modelos.length, servidor: vistaServidor(p) };
+}
+// El usuario elige el modelo (y su ventana, si el servidor no la dice). Se prueban sus herramientas.
+ipcMain.handle("servidor-ajustes", async (_e, id: unknown, datos: unknown) => {
+  const p = proveedores().find((x) => x.id === id && x.tipo === "remoto");
+  const d = datos as { modelo?: unknown; contexto?: unknown };
+  if (!p) return { error: "no existe ese servidor" };
+  try {
+    if (typeof d.modelo === "string" && d.modelo) {
+      if (!modelosNube.get(p.id)?.some((m) => m.modelo === d.modelo)) return { error: "ese modelo no está en la lista del servidor: pulsa «probar»" };
+      p.modelo = d.modelo;
+      p.modos = { ...p.modos, [p.modelo]: await sondaHerramientas(p.url!, p.clave, p.modelo) };
+    }
+    if (d.contexto !== undefined && d.contexto !== "") {
+      const n = Number(d.contexto);
+      if (!Number.isInteger(n) || n < 1024 || n > 10_000_000) return { error: "la ventana de contexto son tokens, entre 1024 y 10 000 000" };
+      p.contexto = n;
+    }
+    guardarProveedores();
+    return { servidor: vistaServidor(p) };
+  } catch (e) {
+    return { error: sinClave((e as Error).message, p.clave) };
+  }
+});
+// Activar: el usuario aceptó el aviso de privacidad. Todos los empleados pasan a este servidor y los nuevos nacen con
+// él (decisión del usuario, 2026-10-02). Los de OpenClaw se quedan: ese motor solo funciona con qwen local.
+ipcMain.handle("servidor-activar", async (_e, id: unknown, acepto: unknown) => {
+  const p = proveedores().find((x) => x.id === id && x.tipo === "remoto");
+  if (!p) return { error: "no existe ese servidor" };
+  if (acepto !== true) return { error: "hay que aceptar el aviso de privacidad" };
+  if (!p.modelo) return { error: "elige primero el modelo" };
+  try {
+    await ventanaDelServidor(p, p.modelo);
+    await modoDe(p, p.url!, p.modelo);
+  } catch (e) {
+    return { error: sinClave((e as Error).message, p.clave) };
+  }
+  for (const o of proveedores()) if (esRemoto(o.tipo)) o.predeterminado = o.id === p.id;
+  p.aceptado = true;
+  guardarProveedores();
+  let cambiados = 0, openclaw = 0;
+  for (const e of equipo.listar()) {
+    if (e.motor === "openclaw") { openclaw++; continue; }
+    const modelo = `nube:${p.id}:${p.modelo}`;
+    if (e.modelo === modelo) continue;
+    const { id: _i, usuario: _u, libre: _l, herramientasModelo: _h, tope: _t, ...identidad } = e;
+    equipo.actualizar(e.id, { ...identidad, modelo }, true);
+    cambiados++;
+  }
+  leerConversaciones();
+  return { cambiados, openclaw };
 });
 ipcMain.handle("codex-sesion", async () => ((await codex.iniciarSesion()) ? {} : { error: "no se completó el inicio de sesión" }));
 
@@ -706,11 +857,13 @@ ipcMain.handle("empleado", (_e, id: unknown) => {
   return {
     nombre: e.nombre, rol: e.rol, color: e.color, modelo: e.modelo, herramientas: e.herramientas, instrucciones: e.instrucciones, motor: e.motor, procedimientos: equipo.procedimientos(e.id),
     tope: e.tope ?? TOPE_POR_DEFECTO, gastado: gasto.delMes(e.id), precio: clavePrecio ? gasto.precio(clavePrecio) : undefined,
+    tokens: gasto.tokens(e.id), remoto: !!remotoDe(e.modelo),
   };
 });
 // Gasto de un empleado en la nube: precio del modelo (tabla editable, USD por millón de tokens) y tope mensual.
+const remotoDe = (modelo: string) => proveedores().find((p) => modelo.startsWith(`nube:${p.id}:`) && p.tipo === "remoto");
 function limpiarGasto(modelo: string, datos: unknown): { tope?: number; error?: string } {
-  if (!modelo.startsWith("nube:")) return {};
+  if (!modelo.startsWith("nube:") || remotoDe(modelo)) return {}; // el servidor remoto no tiene precios ni tope
   const d = datos as { tope?: unknown; precio?: { entrada?: unknown; salida?: unknown } };
   const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) && v >= 0 ? v : typeof v === "string" && v.trim() !== "" && Number(v) >= 0 ? Number(v) : NaN);
   const entrada = num(d.precio?.entrada), salida = num(d.precio?.salida), tope = num(d.tope ?? TOPE_POR_DEFECTO);
@@ -720,6 +873,13 @@ function limpiarGasto(modelo: string, datos: unknown): { tope?: number; error?: 
   if (!Number.isFinite(tope) || tope <= 0) return { error: "el tope mensual debe ser un número mayor que 0" };
   return { tope };
 }
+// La interfaz exige confirmar el aviso de privacidad al asignar un origen nuevo: eso cuenta como aceptarlo.
+function aceptarRemoto(modelo: string) {
+  const p = remotoDe(modelo);
+  if (!p || p.aceptado) return;
+  p.aceptado = true;
+  guardarProveedores();
+}
 ipcMain.handle("crear-empleado", async (_e, datos: unknown, plantilla: unknown) => {
   const identidad = limpiarIdentidad(datos);
   if (!identidad) return { error: "falta el nombre o el modelo" };
@@ -727,6 +887,7 @@ ipcMain.handle("crear-empleado", async (_e, datos: unknown, plantilla: unknown) 
   if (conHerramientas === null) return { error: "ese modelo ya no está disponible" };
   const g = limpiarGasto(identidad.modelo, datos);
   if (g.error) return { error: g.error };
+  aceptarRemoto(identidad.modelo);
   const origen = typeof plantilla === "string" && equipo.plantilla(plantilla) ? plantilla : undefined;
   const e = equipo.crear(identidad, conHerramientas, origen);
   if (g.tope) equipo.cambiarTope(e.id, g.tope);
@@ -739,6 +900,7 @@ ipcMain.handle("guardar-empleado", async (_e, id: unknown, datos: unknown) => {
   if (conHerramientas === null) return { error: "ese modelo ya no está disponible" };
   const g = limpiarGasto(identidad.modelo, datos);
   if (g.error) return { error: g.error };
+  aceptarRemoto(identidad.modelo);
   equipo.actualizar(String(id), identidad, conHerramientas);
   if (g.tope) equipo.cambiarTope(String(id), g.tope);
   return {};

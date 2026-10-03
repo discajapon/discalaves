@@ -34,6 +34,8 @@ contextBridge.exposeInMainWorld("discalaves", {
   guardarProveedor: (datos: unknown) => ipcRenderer.invoke("guardar-proveedor", datos),
   borrarProveedor: (id: string) => ipcRenderer.invoke("borrar-proveedor", id),
   probarProveedor: (id: string) => ipcRenderer.invoke("probar-proveedor", id),
+  servidorAjustes: (id: string, datos: unknown) => ipcRenderer.invoke("servidor-ajustes", id, datos),
+  servidorActivar: (id: string, acepto: boolean) => ipcRenderer.invoke("servidor-activar", id, acepto),
   codexSesion: () => ipcRenderer.invoke("codex-sesion"),
   alPreguntaSsh: (f: (p: unknown) => void) => ipcRenderer.on("ssh:pregunta", (_e, p) => f(p)),
   responderSsh: (id: string, valor: string | null) => ipcRenderer.invoke("ssh:respuesta", id, valor),
