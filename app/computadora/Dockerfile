@@ -18,6 +18,11 @@ RUN apt-get update \
       xfce4-session xfwm4 xfce4-panel xfce4-terminal dbus-x11 \
       chromium chromium-l10n fonts-dejavu-core fonts-noto-color-emoji \
       locales tzdata ca-certificates curl socat procps less nano \
+      # Uso del escritorio con capturas: xwd (en x11-apps) captura la pantalla sin el cursor y xdotool
+      # inyecta ratón y teclado en el servidor X de KasmVNC, como el propio usuario (sin privilegios).
+      xdotool x11-apps \
+      # Editor de texto de XFCE: una app nativa para trabajar con capturas.
+      mousepad \
  && curl -fsSL -o /tmp/kasmvnc.deb \
       "https://github.com/kasmtech/KasmVNC/releases/download/v${KASMVNC_VERSION}/kasmvncserver_trixie_${KASMVNC_VERSION}_amd64.deb" \
  && echo "${KASMVNC_SHA256}  /tmp/kasmvnc.deb" | sha256sum -c - \
