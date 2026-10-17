@@ -38,6 +38,7 @@ RUN apt-get update \
 
 COPY kasmvnc.yaml /etc/kasmvnc/kasmvnc.yaml
 COPY xfce4-session.xml /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-session.xml
+COPY xsettings.xml /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml
 COPY iniciar.sh /usr/local/bin/iniciar
 # "sudo" de esta computadora: la app ejecuta como root los comandos que EMPIEZAN por sudo (exec -u 0);
 # este sustituto hace que un sudo a mitad de comando funcione dentro de ese root y lo explique fuera de él.

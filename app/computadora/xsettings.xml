@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Cursor grande en la vista en vivo: tema "discalaves" (la app lo escribe en ~/.icons al encender la computadora,
+     ver cursor.ts) a 48 px, el doble del normal. Lo que no trae el tema sale de Adwaita, al mismo tamaño. -->
+<channel name="xsettings" version="1.0">
+  <property name="Gtk" type="empty">
+    <property name="CursorThemeName" type="string" value="discalaves"/>
+    <property name="CursorThemeSize" type="int" value="48"/>
+  </property>
+</channel>

@@ -9,7 +9,9 @@ rm -f "$HOME/.discalaves-claves"
 
 mkdir -p "$HOME/.vnc"
 rm -f "$HOME"/.vnc/*.pid # de una sesión anterior: si no, KasmVNC cree que la pantalla :1 sigue ocupada
-printf '#!/bin/sh\nexec dbus-launch --exit-with-session startxfce4\n' > "$HOME/.vnc/xstartup"
+# Cursor grande (tema "discalaves", ver xsettings.xml): también para el fondo del escritorio y las apps sin GTK.
+export XCURSOR_THEME=discalaves XCURSOR_SIZE=48
+printf '#!/bin/sh\nxsetroot -cursor_name left_ptr\nexec dbus-launch --exit-with-session startxfce4\n' > "$HOME/.vnc/xstartup"
 chmod 755 "$HOME/.vnc/xstartup"
 touch "$HOME/.vnc/.de-was-selected" # evita la pregunta interactiva de KasmVNC por el escritorio
 
