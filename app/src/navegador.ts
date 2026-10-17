@@ -5,13 +5,14 @@ import { chromium, type BrowserContext, type Page } from "playwright-core";
 import type { Computadora } from "./computadora";
 
 const MAX_TEXTO = 2500;
+const MAX_ESTRUCTURA = 5000; // la estructura lleva referencias: más larga, para que no se corten los campos de abajo
 
 // ---- Herramientas para el modelo ----
 
 const recortar = (t: string) => (t.length > MAX_TEXTO ? t.slice(0, MAX_TEXTO) + "\n[… recortado …]" : t);
 
-async function resumen(p: Page, cuerpo: string): Promise<string> {
-  return `título: ${await p.title()}\nurl: ${p.url()}\n\n${recortar(cuerpo)}`;
+async function resumen(p: Page, cuerpo: string, limite = true): Promise<string> {
+  return `título: ${await p.title()}\nurl: ${p.url()}\n\n${limite ? recortar(cuerpo) : cuerpo}`;
 }
 
 async function textoPrincipal(p: Page): Promise<string> {
@@ -20,9 +21,18 @@ async function textoPrincipal(p: Page): Promise<string> {
   return (await origen.innerText({ timeout: 5000 })).replace(/\n{3,}/g, "\n\n").trim();
 }
 
+// Árbol de accesibilidad en modo "ai" de Playwright: cada elemento lleva una referencia corta y estable [ref=e7]
+// que hacer_clic y escribir_en aceptan (selector aria-ref). Fuera las direcciones y las marcas de cursor.
 async function estructura(p: Page): Promise<string> {
-  const arbol = await p.locator("body").ariaSnapshot({ timeout: 5000 });
-  return arbol.split("\n").filter((l) => !l.trim().startsWith("- /url:")).join("\n");
+  const arbol = await p.locator("body").ariaSnapshot({ mode: "ai", timeout: 5000 });
+  const t = arbol.split("\n").filter((l) => !l.trim().startsWith("- /url:")).map((l) => l.replace(/ \[cursor=pointer\]/g, "")).join("\n");
+  return t.length > MAX_ESTRUCTURA ? t.slice(0, MAX_ESTRUCTURA) + "\n[… recortado: usa captura_pantalla o desplázate si buscas algo más abajo …]" : t;
+}
+
+// "e7", "ref=e7", "[ref=e7]", "ref_7" o "7" → "e7".
+export function normalizarRef(ref: string): string | null {
+  const m = ref.trim().match(/^\[?(?:ref[=_:\s]*)?e?(\d+)\]?$/i);
+  return m ? `e${m[1]}` : null;
 }
 
 async function esperarCarga(p: Page) {
@@ -110,11 +120,40 @@ export class Navegador {
 
   async verPagina(): Promise<string> {
     const p = await this.paginaActual();
-    return resumen(p, await estructura(p));
+    return resumen(p, await estructura(p), false);
   }
 
-  async hacerClic(texto: string): Promise<string> {
+  // Elemento por su referencia de ver_pagina; null si la referencia no es válida o ya no está en la página.
+  private async porRef(ref: string) {
+    const r = normalizarRef(ref);
+    if (!r) return null;
+    const l = (await this.paginaActual()).locator(`aria-ref=${r}`);
+    return (await l.count().catch(() => 0)) ? l.first() : null;
+  }
+
+  // Nombre visible de un elemento por su referencia (para la regla de acciones delicadas).
+  async nombreDe(ref: string): Promise<string> {
+    const l = await this.porRef(ref);
+    if (!l) return "";
+    return (await l.evaluate((e) => [e.getAttribute("aria-label"), (e as HTMLElement).innerText, (e as HTMLInputElement).value, e.getAttribute("name"), e.getAttribute("placeholder")].filter(Boolean).join(" ")).catch(() => "")).slice(0, 200);
+  }
+
+  private async despues(p: Page, hecho: string) {
+    await esperarCarga(p);
+    const q = await this.paginaActual();
+    return `${hecho}\n` + (await resumen(q, await estructura(q), false));
+  }
+
+  async hacerClic(ref: string, texto: string): Promise<string> {
     const p = await this.paginaActual();
+    if (ref) {
+      const l = await this.porRef(ref);
+      if (l) {
+        await l.click({ timeout: 8000 });
+        return this.despues(p, `hice clic en [ref=${normalizarRef(ref)}].`);
+      }
+      if (!texto) return `no encontré la referencia "${ref}" en la página (cambia al recargar o navegar). Usa ver_pagina para ver las actuales.`;
+    }
     const candidatos = [
       p.getByRole("link", { name: texto }),
       p.getByRole("button", { name: texto }),
@@ -125,15 +164,16 @@ export class Navegador {
     for (const c of candidatos) {
       if (!(await c.count())) continue;
       await c.first().click({ timeout: 8000 });
-      await esperarCarga(p);
-      return `hice clic en "${texto}".\n` + (await resumen(await this.paginaActual(), await estructura(await this.paginaActual())));
+      return this.despues(p, `hice clic en "${texto}".`);
     }
     return `no encontré ningún enlace, botón o texto "${texto}" en la página. Usa ver_pagina para ver qué hay.`;
   }
 
-  async escribirEn(campo: string, texto: string, enviar: boolean): Promise<string> {
+  async escribirEn(ref: string, campo: string, texto: string, enviar: boolean): Promise<string> {
     const p = await this.paginaActual();
-    const candidatos = [
+    const porRef = ref ? await this.porRef(ref) : null;
+    if (ref && !porRef && !campo) return `no encontré la referencia "${ref}" en la página. Usa ver_pagina para ver las actuales.`;
+    const candidatos = porRef ? [porRef] : [
       p.getByRole("textbox", { name: campo }),
       p.getByRole("searchbox", { name: campo }),
       p.getByRole("combobox", { name: campo }),
@@ -143,11 +183,8 @@ export class Navegador {
     for (const c of candidatos) {
       if (!(await c.count())) continue;
       await c.first().fill(texto, { timeout: 8000 });
-      if (enviar) {
-        await c.first().press("Enter");
-        await esperarCarga(p);
-      }
-      return `escribí en "${campo}"${enviar ? " y lo envié" : ""}.\n` + (await resumen(await this.paginaActual(), await estructura(await this.paginaActual())));
+      if (enviar) await c.first().press("Enter");
+      return this.despues(p, `escribí en ${porRef ? `[ref=${normalizarRef(ref)}]` : `"${campo}"`}${enviar ? " y lo envié" : ""}.`);
     }
     return `no encontré el campo "${campo}". Usa ver_pagina para ver los campos disponibles.`;
   }

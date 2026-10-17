@@ -4,6 +4,7 @@
 import fs from "node:fs";
 import type { Computadora } from "./computadora";
 import type { Navegador } from "./navegador";
+import { escritorioDe, type Captura } from "./escritorio";
 
 const MAX_SALIDA = 3000; // caracteres de salida que ve el modelo
 const TIEMPO_CAJA = 120_000;
@@ -47,15 +48,17 @@ export const DEFINICIONES = [
   herramienta("abrir_pagina", "Abre una dirección en tu navegador y devuelve el texto principal de la página.", {
     url: { type: "string", description: "por ejemplo: https://es.wikipedia.org/wiki/Linux" },
   }),
-  herramienta("ver_pagina", "Muestra la estructura de la página abierta (enlaces, botones, campos) para decidir dónde hacer clic o escribir.", {}),
-  herramienta("hacer_clic", "Hace clic en un enlace o botón de la página abierta, buscándolo por su texto visible.", {
-    texto: { type: "string", description: "texto del enlace o botón" },
-  }),
-  herramienta("escribir_en", "Escribe en un campo de la página abierta, buscándolo por su nombre o etiqueta.", {
-    campo: { type: "string", description: "nombre, etiqueta o texto de ejemplo del campo" },
+  herramienta("ver_pagina", "Muestra la estructura de la página abierta: enlaces, botones y campos, cada uno con su referencia [ref=e7] para hacer_clic o escribir_en.", {}),
+  herramienta("hacer_clic", "Hace clic en un enlace o botón de la página abierta. Mejor por su referencia de ver_pagina (ref); si no, por su texto visible.", {
+    ref: { type: "string", description: "referencia de ver_pagina, por ejemplo: e7" },
+    texto: { type: "string", description: "texto del enlace o botón, si no tienes la referencia" },
+  }, ["ref", "texto"]),
+  herramienta("escribir_en", "Escribe en un campo de la página abierta. Mejor por su referencia de ver_pagina (ref); si no, por su nombre o etiqueta.", {
+    ref: { type: "string", description: "referencia de ver_pagina, por ejemplo: e12" },
+    campo: { type: "string", description: "nombre, etiqueta o texto de ejemplo del campo, si no tienes la referencia" },
     texto: { type: "string" },
     enviar: { type: "boolean", description: "true para pulsar Enter después de escribir" },
-  }),
+  }, ["ref", "campo", "enviar"]),
   // Adicionales: el usuario las activa por empleado (cada una ocupa contexto del modelo).
   herramienta("leer_archivo", "Lee un archivo de texto de tu carpeta de inicio (~), o lista el contenido de una carpeta.", {
     ruta: { type: "string", description: "ruta relativa a tu carpeta de inicio, por ejemplo: informes/resumen.md (o . para listarla)" },
@@ -80,6 +83,56 @@ export const DEFINICIONES = [
     { pregunta: { type: "string", description: "la pregunta, corta y concreta (con las opciones si las hay)" } },
   ),
 ];
+
+// Escritorio con capturas (como computer use): en el perfil van juntas como "escritorio". Solo se ofrecen si el
+// modelo acepta imágenes (main.ts lo detecta). Coordenadas de 0 a 1000 sobre la última imagen que vio.
+const XY = {
+  x: { type: "number", description: "0 a 1000, de izquierda a derecha de la captura" },
+  y: { type: "number", description: "0 a 1000, de arriba abajo de la captura" },
+};
+export const ESCRITORIO = [
+  herramienta(
+    "captura_pantalla",
+    "Toma una captura de tu escritorio (cualquier programa, no solo el navegador) para ver qué hay. Las acciones de ratón y teclado ya te devuelven una captura nueva.",
+    {},
+  ),
+  herramienta("clic", "Hace clic en un punto de la última captura. Di siempre qué pretendes pulsar.", {
+    ...XY,
+    objetivo: { type: "string", description: "qué pulsas, por ejemplo: botón Guardar" },
+    boton: { type: "string", enum: ["izquierdo", "derecho", "doble"], description: "izquierdo por defecto; doble para abrir" },
+  }, ["boton"]),
+  herramienta("mover_raton", "Mueve el ratón a un punto de la última captura sin hacer clic (por ejemplo para ver un menú).", XY),
+  herramienta("arrastrar", "Arrastra con el botón izquierdo de un punto a otro de la última captura.", {
+    ...XY,
+    hasta_x: { type: "number", description: "0 a 1000" },
+    hasta_y: { type: "number", description: "0 a 1000" },
+    objetivo: { type: "string", description: "qué arrastras y adónde" },
+  }),
+  herramienta("escribir_texto", "Escribe texto con el teclado donde esté el cursor (haz clic antes en el campo).", {
+    texto: { type: "string" },
+  }),
+  herramienta("pulsar_teclas", "Pulsa teclas o atajos, por ejemplo: ctrl+s, Intro, Escape, alt+F4, ctrl+l.", {
+    teclas: { type: "string", description: "una o varias separadas por espacios: ctrl+a Supr" },
+  }),
+  herramienta("desplazar", "Desplaza (rueda del ratón) sobre un punto de la última captura.", {
+    ...XY,
+    direccion: { type: "string", enum: ["arriba", "abajo", "izquierda", "derecha"] },
+    cantidad: { type: "number", description: "pasos de la rueda, 3 por defecto" },
+  }, ["cantidad"]),
+  herramienta(
+    "ampliar",
+    "Amplía una zona de la última captura para ver detalles pequeños. Tu siguiente acción puede usar coordenadas de la imagen ampliada.",
+    {
+      x1: { type: "number", description: "esquina superior izquierda, 0 a 1000" },
+      y1: { type: "number", description: "0 a 1000" },
+      x2: { type: "number", description: "esquina inferior derecha, 0 a 1000" },
+      y2: { type: "number", description: "0 a 1000" },
+    },
+  ),
+];
+const DE_ESCRITORIO = new Set(ESCRITORIO.map((d) => d.function.name));
+// ¿Está la herramienta en el puesto? "escritorio" en el perfil permite todas las de capturas.
+export const permitida = (permitidas: string[], nombre: string) => permitidas.includes(nombre) || (DE_ESCRITORIO.has(nombre) && permitidas.includes("escritorio"));
 
 // Herramientas del perfil de cada empleado (no usan su computadora: las resuelve main.ts con empleados.ts).
 export const LEER_PROCEDIMIENTO = herramienta(
@@ -107,29 +160,34 @@ function pasarTrabajo(companeros: { nombre: string; rol: string }[]) {
 }
 
 // Solo se envían al modelo las herramientas del puesto: menos opciones, menos errores.
-export function definicionesPara(permitidas: string[], conProcedimientos: boolean, companeros: { nombre: string; rol: string }[] = []) {
+export function definicionesPara(permitidas: string[], conProcedimientos: boolean, companeros: { nombre: string; rol: string }[] = [], vision = false) {
   return [
     ...DEFINICIONES.filter((d) => permitidas.includes(d.function.name)),
+    ...(vision && permitidas.includes("escritorio") ? ESCRITORIO : []),
     ...(permitidas.includes("pasar_trabajo") && companeros.length ? [pasarTrabajo(companeros)] : []),
     ...(conProcedimientos ? [LEER_PROCEDIMIENTO] : []),
     RECORDAR,
   ];
 }
 
-function herramienta(name: string, description: string, properties: Record<string, object>) {
-  const required = Object.keys(properties).filter((k) => k !== "enviar");
+function herramienta(name: string, description: string, properties: Record<string, object>, opcionales: string[] = ["enviar"]) {
+  const required = Object.keys(properties).filter((k) => !opcionales.includes(k));
   return { type: "function", function: { name, description, parameters: { type: "object", properties, required } } };
 }
 
-export interface Resultado { salida: string; codigo: number }
-export type Aviso = (fase: "ejecutando", detalle: string) => void;
+// imagen: captura que el modelo ve tras la herramienta (JPEG); main.ts la guarda y la manda solo si es reciente.
+export interface Resultado { salida: string; codigo: number; imagen?: Buffer }
+export type Aviso = (fase: "ejecutando" | "pausa", detalle: string) => void;
+// Captura con el punto que el modelo quiere pulsar (0–1000), para la tarjeta de aprobación.
+export interface Marca { jpeg: Buffer; x: number; y: number }
 export interface Contexto {
   carpeta: string; // su /home en su computadora
   usuario: string; // nombre dentro de su computadora: /home/<usuario>
   computadora: Computadora; // la suya: su contenedor
   navegador: Navegador; // el Chromium de su escritorio, no compartido con otras IAs
   avisar: Aviso;
-  aprobar: (descripcion: string) => Promise<boolean>; // el usuario decide en la interfaz
+  aprobar: (descripcion: string, marca?: Marca) => Promise<boolean>; // el usuario decide en la interfaz
+  senal?: AbortSignal; // Detener: corta también la pausa mientras el usuario tiene el control
 }
 
 // Acciones delicadas (borrar, enviar, pagar): necesitan la aprobación explícita del usuario.
@@ -190,13 +248,20 @@ async function terminal({ computadora, avisar }: Contexto, comando: string): Pro
   return recortar(await computadora.ejecutar(["bash", "-c", sudo[1]], { tiempo: TIEMPO_SUDO, root: true }));
 }
 
+// Con referencia, el nombre del elemento sale de la propia página (antes de pulsarlo): así un clic en "Pagar" por
+// su ref también pide aprobación. Con coordenadas, cuenta lo que el modelo declara que pulsa (objetivo).
 async function delicado(navegador: Navegador, nombre: string, args: Record<string, unknown>): Promise<string | null> {
   const t = (k: string) => String(args[k] ?? "");
   if (nombre === "terminal" && BORRADO.test(t("comando"))) return `borrar con: ${t("comando")}`;
-  if (nombre === "hacer_clic" && DELICADO.test(t("texto"))) return `hacer clic en "${t("texto")}" en ${await navegador.urlActual()}`;
-  if (nombre === "escribir_en" && args.enviar === true && !BUSQUEDA.test(t("campo"))) {
-    return `enviar "${t("texto").slice(0, 200)}" en el campo "${t("campo")}" de ${await navegador.urlActual()}`;
+  if (nombre === "hacer_clic") {
+    const quien = t("ref") ? await navegador.nombreDe(t("ref")) : t("texto");
+    if (DELICADO.test(quien)) return `hacer clic en "${quien}" en ${await navegador.urlActual()}`;
   }
+  if (nombre === "escribir_en" && args.enviar === true) {
+    const campo = t("ref") ? await navegador.nombreDe(t("ref")) : t("campo");
+    if (!BUSQUEDA.test(campo)) return `enviar "${t("texto").slice(0, 200)}" en el campo "${campo}" de ${await navegador.urlActual()}`;
+  }
+  if ((nombre === "clic" || nombre === "arrastrar") && DELICADO.test(t("objetivo"))) return `${nombre === "clic" ? "hacer clic en" : "arrastrar"} "${t("objetivo")}" en su escritorio`;
   return null;
 }
 
@@ -206,9 +271,61 @@ async function ejecutarNavegador(navegador: Navegador, nombre: string, t: (k: st
   if (nombre === "buscar_web" && t("consulta")) return navegador.buscarWeb(t("consulta"));
   if (nombre === "abrir_pagina" && t("url")) return navegador.abrirPagina(t("url"));
   if (nombre === "ver_pagina") return navegador.verPagina();
-  if (nombre === "hacer_clic" && t("texto")) return navegador.hacerClic(t("texto"));
-  if (nombre === "escribir_en" && t("campo")) return navegador.escribirEn(t("campo"), t("texto"), enviar);
+  if (nombre === "hacer_clic" && (t("ref") || t("texto"))) return navegador.hacerClic(t("ref"), t("texto"));
+  if (nombre === "escribir_en" && (t("ref") || t("campo"))) return navegador.escribirEn(t("ref"), t("campo"), t("texto"), enviar);
   return null;
+}
+
+// Coordenada del modelo: número de 0 a 1000 (algunos la mandan como texto).
+const coordenada = (v: unknown) => {
+  const n = typeof v === "number" ? v : typeof v === "string" ? Number(v.trim()) : NaN;
+  return Number.isFinite(n) ? Math.min(1000, Math.max(0, n)) : null;
+};
+const conCaptura = (salida: string, c: Captura): Resultado => ({ salida: `${salida}\ncaptura: ${c.ancho}×${c.alto}, coordenadas de 0 a 1000`, codigo: 0, imagen: c.jpeg });
+
+async function ejecutarEscritorio(ctx: Contexto, nombre: string, args: Record<string, unknown>): Promise<Resultado | null> {
+  const e = escritorioDe(ctx.computadora);
+  const n = (k: string) => coordenada(args[k]);
+  const t = (k: string) => (typeof args[k] === "string" ? (args[k] as string) : "");
+  const faltan = (...k: string[]) => k.filter((x) => n(x) === null);
+  ctx.avisar("ejecutando", `${nombre.replace("_", " ")} ${t("objetivo") || t("teclas") || t("texto").slice(0, 60)}`.trim());
+  if (nombre === "captura_pantalla") return conCaptura("tu escritorio ahora", await e.capturar());
+  if (nombre === "ampliar") {
+    if (faltan("x1", "y1", "x2", "y2").length) return { salida: "faltan x1, y1, x2, y2 (0 a 1000)", codigo: -1 };
+    return conCaptura("zona ampliada; tu siguiente acción puede usar coordenadas de esta imagen", await e.ampliar(n("x1")!, n("y1")!, n("x2")!, n("y2")!));
+  }
+  if (nombre === "escribir_texto") return t("texto") ? conCaptura(`escribí ${t("texto").length} caracteres`, (await e.escribir(t("texto"))).captura) : { salida: "falta el texto", codigo: -1 };
+  if (nombre === "pulsar_teclas") return t("teclas") ? conCaptura(`pulsé ${t("teclas")}`, (await e.pulsar(t("teclas"))).captura) : { salida: "faltan las teclas", codigo: -1 };
+  if (faltan("x", "y").length) return { salida: "faltan x e y (0 a 1000 sobre la última captura)", codigo: -1 };
+  const [x, y] = [n("x")!, n("y")!];
+  if (nombre === "clic") {
+    const boton = ["derecho", "doble"].includes(t("boton")) ? (t("boton") as "derecho" | "doble") : "izquierdo";
+    const r = await e.clic(x, y, boton);
+    return conCaptura(`clic ${boton === "izquierdo" ? "" : boton + " "}en ${t("objetivo") || "el punto"} (${r.punto.x}, ${r.punto.y} de la pantalla)`, r.captura);
+  }
+  if (nombre === "mover_raton") return conCaptura("moví el ratón", (await e.mover(x, y)).captura);
+  if (nombre === "desplazar") return conCaptura(`desplacé hacia ${t("direccion") || "abajo"}`, (await e.desplazar(x, y, t("direccion"), Number(args.cantidad) || 3)).captura);
+  if (nombre === "arrastrar") {
+    if (faltan("hasta_x", "hasta_y").length) return { salida: "faltan hasta_x y hasta_y (0 a 1000)", codigo: -1 };
+    return conCaptura(`arrastré ${t("objetivo")}`.trim(), (await e.arrastrar(x, y, n("hasta_x")!, n("hasta_y")!)).captura);
+  }
+  return null;
+}
+
+// Mientras el usuario tiene el control de su escritorio, el empleado no envía acciones: espera (en pausa, visible
+// en la interfaz) y al soltarlo sigue con una captura nueva, sin hacer la acción que pidió con la pantalla vieja.
+async function pausaPorControl(ctx: Contexto, nombre: string): Promise<Resultado | null> {
+  if (!ctx.computadora.controlUsuario) return null;
+  ctx.avisar("pausa", "tienes el control de su escritorio; seguirá cuando lo sueltes");
+  while (ctx.computadora.controlUsuario) {
+    if (ctx.senal?.aborted) throw new Error("detenida");
+    await new Promise((r) => setTimeout(r, 300));
+  }
+  ctx.avisar("ejecutando", "retoma con una captura nueva");
+  const aviso = "el usuario tomó el control de tu escritorio y ya lo devolvió; no hice tu última acción porque la pantalla pudo cambiar.";
+  if (nombre in NAVEGADOR) return { salida: `${aviso} Mira la página otra vez (ver_pagina) antes de seguir.`, codigo: 1 };
+  const c = await escritorioDe(ctx.computadora).capturar();
+  return { ...conCaptura(`${aviso} Esta es tu pantalla ahora: decide de nuevo.`, c), codigo: 1 };
 }
 
 export async function ejecutarHerramienta(ctx: Contexto, nombre: string, argumentosJson: string): Promise<Resultado> {
@@ -222,8 +339,25 @@ export async function ejecutarHerramienta(ctx: Contexto, nombre: string, argumen
   }
   const texto = (k: string) => (typeof args[k] === "string" ? (args[k] as string).trim() : "");
 
-  const accion = await delicado(navegador, nombre, args);
-  if (accion && !(await ctx.aprobar(accion))) return { salida: "el usuario no lo permitió; no se hizo nada", codigo: 1 };
+  if (nombre in NAVEGADOR || DE_ESCRITORIO.has(nombre)) {
+    const pausa = await pausaPorControl(ctx, nombre);
+    if (pausa) return pausa;
+  }
+  const accion = await delicado(navegador, nombre, args).catch(() => null);
+  if (accion) {
+    const ultima = DE_ESCRITORIO.has(nombre) ? escritorioDe(computadora).ultima : undefined;
+    const marca = ultima && coordenada(args.x) !== null ? { jpeg: ultima.jpeg, x: coordenada(args.x)!, y: coordenada(args.y) ?? 0 } : undefined;
+    if (!(await ctx.aprobar(accion, marca))) return { salida: "el usuario no lo permitió; no se hizo nada", codigo: 1 };
+  }
+  if (DE_ESCRITORIO.has(nombre)) {
+    try {
+      await computadora.encender((d) => avisar("ejecutando", d));
+      const r = await ejecutarEscritorio(ctx, nombre, args);
+      if (r) return r;
+    } catch (e) {
+      return { salida: `error en su escritorio: ${(e as Error).message.split("\n")[0]}`, codigo: 1 };
+    }
+  }
 
   if (nombre === "terminal" && texto("comando")) return terminal(ctx, texto("comando"));
   // Los archivos se leen y escriben desde dentro del contenedor: así un enlace simbólico creado por el modelo
@@ -269,12 +403,9 @@ export async function ejecutarHerramienta(ctx: Contexto, nombre: string, argumen
     const recortado = cuerpo.length > MAX_LECTURA ? `${cuerpo.slice(0, MAX_LECTURA)}\n[… recortado …]` : cuerpo;
     return { salida: `título: ${titulo}\nurl: ${url}\n\n${recortado || "(la página no tiene texto sin JavaScript; prueba con abrir_pagina)"}`, codigo: 0 };
   }
-  if (nombre in NAVEGADOR && computadora.controlUsuario) {
-    return { salida: "el usuario tomó el control de tu navegador; espera a que lo devuelva o pregúntale.", codigo: 1 };
-  }
   try {
     if (nombre in NAVEGADOR) await computadora.encender((d) => avisar("ejecutando", d));
-    avisar("ejecutando", `${nombre.replace("_", " ")} ${texto("consulta") || texto("url") || texto("texto") || texto("campo")}`.trim());
+    avisar("ejecutando", `${nombre.replace("_", " ")} ${texto("consulta") || texto("url") || texto("texto") || texto("campo") || texto("ref")}`.trim());
     const salida = await ejecutarNavegador(navegador, nombre, texto, args.enviar === true);
     if (salida !== null) return { salida, codigo: 0 };
   } catch (e) {

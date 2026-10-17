@@ -193,14 +193,26 @@ interface Llamada { id: string; nombre: string; argumentos: string }
 type Mensaje =
   | { de: "yo"; texto: string; t: number }
   | { de: "ia"; texto: string; t: number; llamadas?: Llamada[] }
-  | { de: "herramienta"; id: string; nombre: string; argumentos: string; salida: string; codigo: number; t: number };
+  | { de: "herramienta"; id: string; nombre: string; argumentos: string; salida: string; codigo: number; t: number; imagen?: string }; // imagen: captura en carpetaCapturas
 type Estado =
   | { fase: "cargando" | "listo" | "escribiendo" }
-  | { fase: "ejecutando" | "esperando-aprobacion" | "error"; detalle: string };
+  | { fase: "ejecutando" | "esperando-aprobacion" | "pausa" | "error"; detalle: string }; // pausa: el usuario tiene el control de su escritorio
 
 const carpetaConversaciones = () => path.join(app.getPath("userData"), "conversaciones");
 const archivoHistorial = (id: string) => path.join(carpetaConversaciones(), `${id}.json`);
 const archivoIndice = () => path.join(carpetaConversaciones(), "indice.json");
+// Capturas que vio cada empleado (una por acción en su escritorio). Al modelo solo viajan las 2 más recientes.
+const carpetaCapturas = (id: string) => path.join(carpetaConversaciones(), "capturas", id);
+const CAPTURAS_EN_CONTEXTO = 2; // ~690 tokens cada una (Qwen 3.5, 1024×640); las anteriores pasan a una nota
+const CAPTURAS_GUARDADAS = 10; // en disco, por empleado (las más antiguas se borran)
+function guardarCaptura(id: string, jpeg: Buffer): string {
+  const carpeta = carpetaCapturas(id);
+  fs.mkdirSync(carpeta, { recursive: true });
+  const nombre = `${Date.now()}-${randomBytes(3).toString("hex")}.jpg`;
+  fs.writeFileSync(path.join(carpeta, nombre), jpeg);
+  for (const viejo of fs.readdirSync(carpeta).sort().slice(0, -CAPTURAS_GUARDADAS)) fs.rmSync(path.join(carpeta, viejo), { force: true });
+  return nombre;
+}
 let equipo: Empleados; // se crea al arrancar (necesita la carpeta de datos)
 let conversaciones: Conversacion[] = [];
 const historiales = new Map<string, Mensaje[]>();
