@@ -188,6 +188,15 @@ export interface Contexto {
   avisar: Aviso;
   aprobar: (descripcion: string, marca?: Marca) => Promise<boolean>; // el usuario decide en la interfaz
   senal?: AbortSignal; // Detener: corta también la pausa mientras el usuario tiene el control
+  // Ubica un objetivo en una captura con una pregunta corta al mismo modelo (0–1000); null si no supo.
+  ubicar?: (jpeg: Buffer, objetivo: string) => Promise<{ x: number; y: number } | null>;
+}
+
+// Respuesta del modelo a "¿dónde está…?": "x,y", "[x, y]" o una caja "[x1, y1, x2, y2]" (su centro), en 0–1000.
+export function leerPunto(texto: string): { x: number; y: number } | null {
+  const n = (texto.match(/\d+(?:\.\d+)?/g) ?? []).map(Number);
+  const p = n.length >= 4 ? { x: (n[0] + n[2]) / 2, y: (n[1] + n[3]) / 2 } : n.length >= 2 ? { x: n[0], y: n[1] } : null;
+  return p && p.x <= 1000 && p.y <= 1000 ? { x: Math.round(p.x), y: Math.round(p.y) } : null;
 }
 
 // Acciones delicadas (borrar, enviar, pagar): necesitan la aprobación explícita del usuario.
@@ -343,9 +352,17 @@ export async function ejecutarHerramienta(ctx: Contexto, nombre: string, argumen
     const pausa = await pausaPorControl(ctx, nombre);
     if (pausa) return pausa;
   }
+  // Clic: el modelo dice qué pulsa (objetivo) y la app lo ubica en la última captura con una pregunta corta al mismo
+  // modelo. Medido con Qwen 3.5 9B (2026-10-17): solo, ubica un botón a ≤5 milésimas; dentro de una tarea larga
+  // repetía las coordenadas de sus clics anteriores en vez de mirar la captura (132 pasos sin cerrar un diálogo).
+  // Sus x, y quedan de respaldo.
+  const ultima = DE_ESCRITORIO.has(nombre) ? escritorioDe(computadora).ultima : undefined;
+  if (nombre === "clic" && ctx.ubicar && ultima && typeof args.objetivo === "string" && args.objetivo.trim()) {
+    const p = await ctx.ubicar(ultima.jpeg, args.objetivo.trim()).catch(() => null);
+    if (p) Object.assign(args, p);
+  }
   const accion = await delicado(navegador, nombre, args).catch(() => null);
   if (accion) {
-    const ultima = DE_ESCRITORIO.has(nombre) ? escritorioDe(computadora).ultima : undefined;
     const marca = ultima && coordenada(args.x) !== null ? { jpeg: ultima.jpeg, x: coordenada(args.x)!, y: coordenada(args.y) ?? 0 } : undefined;
     if (!(await ctx.aprobar(accion, marca))) return { salida: "el usuario no lo permitió; no se hizo nada", codigo: 1 };
   }

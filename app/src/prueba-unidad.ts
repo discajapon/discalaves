@@ -2,7 +2,7 @@
 // runner de Windows de GitHub Actions: npm run prueba:unidad
 import assert from "node:assert/strict";
 import { Empleados, leerIdentidad, promptEmpleado, textoIdentidad } from "./empleados";
-import { textoDeHtml, verificar } from "./herramientas";
+import { leerPunto, textoDeHtml, verificar } from "./herramientas";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -201,6 +201,12 @@ void (async () => {
   assert.deepEqual(zona, { x: 320, y: 200, ancho: 321, alto: 201 });
   assert.deepEqual(aPantalla(500, 500, zona), { x: 480, y: 300 });
   assert.deepEqual(region(999, 999, 1000, 1000, vistas[0]), { x: 1264, y: 784, ancho: 16, alto: 16 }, "zona mínima de 16 px dentro de la pantalla");
+  // Lo que responde el modelo al ubicar un objetivo: punto, punto entre corchetes o caja (su centro).
+  assert.deepEqual(leerPunto("532,560"), { x: 532, y: 560 });
+  assert.deepEqual(leerPunto("[630, 394]"), { x: 630, y: 394 });
+  assert.deepEqual(leerPunto("[10,92,27,116]"), { x: 19, y: 104 });
+  assert.equal(leerPunto("no lo veo"), null);
+  assert.equal(leerPunto("1500, 20"), null, "fuera de 0–1000");
   // Teclas como las escribe el modelo.
   assert.deepEqual(teclas("ctrl+s"), ["ctrl+s"]);
   assert.deepEqual(teclas("Intro"), ["Return"]);
