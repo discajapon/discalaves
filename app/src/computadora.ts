@@ -42,7 +42,7 @@ const SIN_CAPACIDADES = PODMAN ? ["setpriv", "--ambient-caps=-all", "--inh-caps=
 
 export interface Resultado { salida: string; codigo: number }
 
-function motor(args: string[], opciones: { entrada?: string; tiempo?: number } = {}): Promise<Resultado> {
+function motor(args: string[], opciones: { entrada?: string | Buffer; tiempo?: number } = {}): Promise<Resultado> {
   return new Promise((resolver) => {
     const hijo = spawn(ORDEN[0], [...ORDEN.slice(1), ...args], { timeout: opciones.tiempo, stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
     const trozos: Buffer[] = [];
@@ -173,6 +173,27 @@ export async function responde(url: string, init?: RequestInit): Promise<boolean
 
 export type Avisar = (detalle: string) => void;
 
+// Cursor de la vista en vivo (Xcursor, ver cursor.ts): el de Discalaves o el que cargó el usuario. main.ts lo fija al
+// arrancar y al cambiarlo en Configuración; se aplica a todas las computadoras, también a las encendidas.
+let cursor: Buffer | undefined;
+export function usarCursor(b: Buffer) {
+  cursor = b;
+  for (const c of computadoras.values()) if (c.encendida) void c.ponerCursor().catch(() => {});
+}
+// Lo escribe su usuario dentro de su computadora (no la app en su carpeta: podría haber un enlace simbólico) y
+// avisa a la sesión: xfsettingsd recarga el tema al cambiar su nombre y xsetroot pone el del fondo.
+const PONER_CURSOR = `set -e
+d="$HOME/.icons/discalaves"; mkdir -p "$d/cursors"
+printf '[Icon Theme]\\nName=Discalaves\\nInherits=Adwaita\\n' > "$d/index.theme"
+cat > "$d/cursors/left_ptr.nuevo" && mv -f "$d/cursors/left_ptr.nuevo" "$d/cursors/left_ptr"
+for n in default arrow top_left_arrow; do ln -sfn left_ptr "$d/cursors/$n"; done
+s=$(pgrep -u "$(id -u)" -x xfce4-session | head -n1) || true
+if [ -n "$s" ]; then
+  export $(tr '\\0' '\\n' < /proc/$s/environ | grep '^DBUS_SESSION_BUS_ADDRESS=')
+  xfconf-query -c xsettings -p /Gtk/CursorThemeName -s Adwaita && xfconf-query -c xsettings -p /Gtk/CursorThemeName -s discalaves || true
+fi
+xsetroot -cursor_name left_ptr || true`;
+
 export class Computadora {
   readonly nombre: string;
   readonly home: string;
@@ -182,6 +203,7 @@ export class Computadora {
   private navegador: Promise<string> | undefined;
   private puertoPantalla = "";
   controlUsuario = false; // mientras el usuario la controla, las herramientas le dicen a la IA que espere
+  encendida = false;
 
   constructor(readonly carpeta: string, readonly usuario: string) {
     this.nombre = `discalaves-${usuario}`;
@@ -252,7 +274,11 @@ export class Computadora {
     }
     this.puertoPantalla = await this.puerto(6901);
     for (let i = 0; i < 120; i++) {
-      if (await responde(`http://${this.puertoPantalla}/`, { headers: { authorization: this.autorizacion("ver") } })) return;
+      if (await responde(`http://${this.puertoPantalla}/`, { headers: { authorization: this.autorizacion("ver") } })) {
+        this.encendida = true;
+        await this.ponerCursor().catch(() => {}); // sin cursor grande sigue funcionando
+        return;
+      }
       await esperar(250);
     }
     throw new Error("su escritorio no arrancó (revisa: " + MOTOR + " logs " + this.nombre + ")");
@@ -269,8 +295,13 @@ export class Computadora {
 
   // Ejecuta un comando dentro de su computadora, como su usuario (o como root de su contenedor, para
   // su "sudo"). El límite de tiempo va dentro del contenedor: matar "exec" desde fuera no lo detendría.
-  async ejecutar(argumentos: string[], opciones: { entrada?: string; tiempo: number; root?: boolean }): Promise<Resultado> {
+  async ejecutar(argumentos: string[], opciones: { entrada?: string | Buffer; tiempo: number; root?: boolean }): Promise<Resultado> {
     await this.encender();
+    return this.dentro(argumentos, opciones);
+  }
+
+  // Lo mismo sin esperar al arranque: para lo que hace el propio arranque (el cursor).
+  private dentro(argumentos: string[], opciones: { entrada?: string | Buffer; tiempo: number; root?: boolean }): Promise<Resultado> {
     const segundos = String(Math.ceil(opciones.tiempo / 1000));
     const usuario = opciones.root ? ["-u", "0", "-e", "HOME=/root"] : [];
     const capacidades = opciones.root ? [] : SIN_CAPACIDADES;
@@ -278,6 +309,12 @@ export class Computadora {
       ["exec", "-i", ...usuario, "-w", this.home, this.nombre, ...capacidades, "timeout", "-k", "5", segundos, ...argumentos],
       { entrada: opciones.entrada, tiempo: opciones.tiempo + 15_000 },
     );
+  }
+
+  async ponerCursor() {
+    if (!cursor) return;
+    const r = await this.dentro(["sh", "-c", PONER_CURSOR], { entrada: cursor, tiempo: 20_000 });
+    if (r.codigo !== 0) throw new Error(`no pude poner el cursor: ${r.salida.trim().slice(0, 200)}`);
   }
 
   // Dirección CDP del Chromium con ventana de su escritorio; lo abre si no está abierto.
