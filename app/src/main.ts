@@ -3,7 +3,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { BORRADO, definicionesPara, ejecutarHerramienta, permitida, verificar, type Marca } from "./herramientas";
+import { BORRADO, definicionesPara, ejecutarHerramienta, leerPunto, permitida, verificar, type Marca } from "./herramientas";
 import { ADICIONALES_OC, OpenClaw, PRINCIPALES_OC } from "./openclaw";
 import { COLORES, Empleados, HERRAMIENTAS, PRINCIPALES, leerIdentidad, promptEmpleado, type Empleado, type Identidad } from "./empleados";
 import { apagarTodas, computadoraDe, responde, usarCursor, type Computadora } from "./computadora";
@@ -404,6 +404,32 @@ function iniciarServidor(): Promise<boolean> {
       await new Promise((r) => setTimeout(r, 1000));
     }
   })();
+}
+
+// Ubica un objetivo en una captura con una pregunta corta al mismo modelo del empleado, sin su historial (ahí es
+// donde acierta: ver herramientas.ts). Prompt y formato medidos con Qwen 3.5 9B.
+async function ubicar(c: Conversacion, jpeg: Buffer, objetivo: string, senal: AbortSignal): Promise<{ x: number; y: number } | null> {
+  if (!(await aceptaImagenes(c))) return null;
+  const url = c.proveedor === "qwen" ? `http://127.0.0.1:${PUERTO}/v1` : `${OLLAMA}/v1`;
+  const cuerpo = {
+    model: c.modelo, max_tokens: 40, temperature: 0,
+    messages: [{ role: "user", content: [
+      { type: "image_url", image_url: { url: `data:image/jpeg;base64,${jpeg.toString("base64")}` } },
+      { type: "text", text: `Captura de pantalla. Responde solo con el punto del centro de: ${objetivo.slice(0, 200)}. Formato x,y en coordenadas relativas de 0 a 1000.` },
+    ] }],
+  };
+  if (c.proveedor === "qwen") enVuelo++;
+  try {
+    const r = await fetch(`${url}/chat/completions`, {
+      method: "POST", signal: senal, body: JSON.stringify(cuerpo),
+      headers: { "content-type": "application/json", ...(c.proveedor === "qwen" && { authorization: `Bearer ${CLAVE}` }) },
+    });
+    if (!r.ok) return null;
+    const j = (await r.json()) as { choices?: { message?: { content?: string } }[] };
+    return leerPunto(j.choices?.[0]?.message?.content ?? "");
+  } finally {
+    if (c.proveedor === "qwen") enVuelo--;
+  }
 }
 
 // ¿Acepta imágenes el modelo de este empleado? Se detecta, no se supone: qwen si el servidor tiene su proyector de
@@ -1236,6 +1262,7 @@ async function usarHerramienta(c: Conversacion, l: Llamada, interfaz: Electron.W
   return ejecutarHerramienta(
     {
       ...computadora(c), avisar: (fase, detalle) => cambiarEstado(c, { fase, detalle }), senal: parar.signal,
+      ubicar: (jpeg, objetivo) => ubicar(c, jpeg, objetivo, parar.signal),
       aprobar: async (d, marca) => c.libre === true || pedirAprobacion(c, interfaz, d, marca),
     },
     l.nombre,
