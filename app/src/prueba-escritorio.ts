@@ -8,7 +8,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { app, nativeImage } from "electron";
-import { borrar, computadoraDe } from "./computadora";
+import { borrar, computadoraDe, usarCursor } from "./computadora";
+import { cursorNeon, escribirXcursor } from "./cursor";
 import { aPantalla, escritorioDe } from "./escritorio";
 import { ejecutarHerramienta, type Marca } from "./herramientas";
 import { navegadorDe } from "./navegador";
@@ -16,6 +17,7 @@ import { navegadorDe } from "./navegador";
 const esperar = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 async function main() {
+  usarCursor(escribirXcursor([cursorNeon()])); // como main.ts al arrancar
   const carpeta = fs.mkdtempSync(path.join(os.tmpdir(), "discalaves-escritorio-"));
   const computadora = computadoraDe(carpeta, "escritorio-prueba");
   const marcas: Marca[] = [];
@@ -40,6 +42,16 @@ async function main() {
     const img = nativeImage.createFromBuffer(r.imagen!);
     assert.deepEqual(img.getSize(), { width: 1024, height: 640 });
     assert.deepEqual(e.ultima!.vista, { x: 0, y: 0, ancho: 1280, alto: 800 });
+    // Con la sesión XFCE, Xvnc da 24 bits empaquetados: la barra superior (clara) debe llegar al borde derecho. Leída
+    // como 32 bits, la imagen salía encogida al 75 % y a la derecha todo negro.
+    for (let i = 0; i < 40 && !(await computadora.ejecutar(["pgrep", "-x", "xfce4-panel"], { tiempo: 5000 })).salida.trim(); i++) await esperar(250);
+    await esperar(1500);
+    const barra = nativeImage.createFromBuffer((await e.capturar()).jpeg).crop({ x: 1000, y: 2, width: 20, height: 12 }).toBitmap();
+    assert.ok(barra.reduce((s, v) => s + v, 0) / barra.length > 120, "la captura no llega al borde derecho (¿formato de píxel mal leído?)");
+
+    // Cursor grande de la vista en vivo: el tema "discalaves" (Xcursor) está en su computadora y la sesión lo usa a 48 px.
+    const t = await computadora.ejecutar(["sh", "-c", "head -c 4 ~/.icons/discalaves/cursors/left_ptr; readlink ~/.icons/discalaves/cursors/default; tr '\\0' '\\n' < /proc/$(pgrep -x xfce4-session)/environ | grep XCURSOR | sort"], { tiempo: 10_000 });
+    assert.equal(t.salida, "Xcurleft_ptr\nXCURSOR_SIZE=48\nXCURSOR_THEME=discalaves\n", t.salida);
 
     // El cursor no sale en la captura del modelo: con el ratón en dos sitios del fondo, la zona es la misma.
     const zona = { x: 600, y: 300, width: 80, height: 80 };
