@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, dialog, ipcMain, safeStorage, session, shell } from "electron";
+import { app, BrowserWindow, clipboard, dialog, ipcMain, nativeImage, safeStorage, session, shell } from "electron";
 import { spawn, type ChildProcess } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import fs from "node:fs";
@@ -6,7 +6,8 @@ import path from "node:path";
 import { BORRADO, definicionesPara, ejecutarHerramienta, permitida, verificar, type Marca } from "./herramientas";
 import { ADICIONALES_OC, OpenClaw, PRINCIPALES_OC } from "./openclaw";
 import { COLORES, Empleados, HERRAMIENTAS, PRINCIPALES, leerIdentidad, promptEmpleado, type Empleado, type Identidad } from "./empleados";
-import { apagarTodas, computadoraDe, responde, type Computadora } from "./computadora";
+import { apagarTodas, computadoraDe, responde, usarCursor, type Computadora } from "./computadora";
+import { convertir, cursorNeon, escribirXcursor } from "./cursor";
 import { navegadorDe } from "./navegador";
 import { especificaciones } from "./especificaciones";
 import { apagar as apagarOllama, asegurar as asegurarOllama, MODELO_RECOMENDADO, OLLAMA } from "./ollama";
@@ -737,6 +738,43 @@ ipcMain.handle("modelos", async () => {
     }
   }
   return { modelos: [...qwen, ...(ollama ?? []), ...nube], ollama: ollama !== null };
+});
+
+// ---- Cursor de la vista en vivo (cursor.ts): el de Discalaves o el del usuario, en sus datos (fuera del repositorio) ----
+const archivoCursor = () => path.join(app.getPath("userData"), "cursor.xcursor");
+function cursorActual(): Buffer {
+  try {
+    return fs.readFileSync(archivoCursor());
+  } catch {
+    return escribirXcursor([cursorNeon()]);
+  }
+}
+ipcMain.handle("cursor:estado", () => ({ propio: fs.existsSync(archivoCursor()) }));
+ipcMain.handle("cursor:cargar", async () => {
+  const { filePaths } = await dialog.showOpenDialog(ventana!, {
+    title: "Elegir un cursor", properties: ["openFile"],
+    filters: [{ name: "Cursores (.cur, .ani, PNG o Xcursor)", extensions: ["cur", "ani", "png", "ico", "*"] }],
+  });
+  if (!filePaths[0]) return { propio: fs.existsSync(archivoCursor()) };
+  try {
+    if (fs.statSync(filePaths[0]).size > 4_000_000) throw new Error("el archivo es demasiado grande para un cursor");
+    const png = (b: Buffer) => {
+      const im = nativeImage.createFromBuffer(b);
+      if (im.isEmpty()) throw new Error("no pude leer la imagen PNG");
+      return { ancho: im.getSize().width, alto: im.getSize().height, bgra: im.toBitmap() };
+    };
+    const xcursor = convertir(fs.readFileSync(filePaths[0]), path.basename(filePaths[0]), png);
+    fs.writeFileSync(archivoCursor(), xcursor);
+    usarCursor(xcursor);
+    return { propio: true };
+  } catch (e) {
+    return { error: (e as Error).message, propio: fs.existsSync(archivoCursor()) };
+  }
+});
+ipcMain.handle("cursor:restablecer", () => {
+  fs.rmSync(archivoCursor(), { force: true });
+  usarCursor(cursorActual());
+  return { propio: false };
 });
 
 // ---- Gestor de modelos (modelos.ts): buscar en Hugging Face, ver la VRAM e instalar en Ollama ----
@@ -1541,6 +1579,7 @@ app.whenReady().then(() => {
   codex = new Codex(path.join(datos, "codex"));
   // ponytail: 16k por empleado de OpenClaw; el servidor comparte 12k × RANURAS (-kvu), así que con varios a la vez puede faltar
   openclaw = new OpenClaw(path.join(datos, "openclaw"), { url: `http://127.0.0.1:${PUERTO}`, clave: CLAVE, modelo: QWEN_MODELO, contexto: 16384 }, puenteOpenClaw());
+  usarCursor(cursorActual()); // antes de encender ninguna computadora
   migrarConversaciones();
   leerConversaciones();
   void asegurarOllama(path.join(datos, "ollama.log")); // el del usuario si ya corre; si no, el instalado
