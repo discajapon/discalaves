@@ -185,7 +185,8 @@ const BASE_SOLO_CHAT =
 
 // Uso del escritorio con capturas: corto, es un modelo de 9B. Va al final (la base común sigue igual para la caché).
 const CON_ESCRITORIO =
-  "Tu escritorio: con captura_pantalla lo ves; actúa de a una acción (clic, escribir_texto, pulsar_teclas…) y mira en la captura nueva que salió bien. " +
+  "Tu escritorio: con captura_pantalla lo ves; actúa de a una acción (clic, escribir_texto, pulsar_teclas…) y mira en la captura nueva que salió bien; si no, corrígelo. " +
+  "Antes de escribir, haz clic dentro de la ventana correcta: el texto va a la ventana activa (la de título resaltado). " +
   "Coordenadas de 0 a 1000 sobre la última captura. Si algo es pequeño, usa ampliar. Prefiere atajos de teclado (ctrl+s guarda). " +
   "En páginas web usa primero ver_pagina y las referencias (ref) con hacer_clic y escribir_en; las coordenadas, solo si no hay referencia.";
 
