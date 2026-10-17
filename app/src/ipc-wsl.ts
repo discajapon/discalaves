@@ -1,11 +1,13 @@
 // Canales de la pantalla de primer arranque en Windows (ver primer-arranque.ts). En Linux, "wsl:estado"
 // responde "no-aplica" y la pantalla no aparece.
 import type { IpcMain } from "electron";
+import fs from "node:fs";
 import { instalar, pendientes, type Pieza } from "./instalar";
 import { binario, MODELO_RECOMENDADO, modelos, version } from "./ollama";
 
-const IDS = ["motor", "ollama", "modelo", "runtime", "qwen"];
+const IDS = ["motor", "ollama", "modelo", "runtime", "qwen", "vision"];
 import { activarWsl, estadoWsl, prepararDistro } from "./wsl";
+import { rutas } from "./rutas";
 
 export function registrarWsl(ipcMain: IpcMain, alInstalar: (reiniciar: boolean) => void) {
   ipcMain.handle("wsl:estado", () => estadoWsl());
@@ -25,7 +27,10 @@ export function registrarWsl(ipcMain: IpcMain, alInstalar: (reiniciar: boolean) 
   ipcMain.handle("ollama:estado", async () => {
     const v = await version();
     const lista = await modelos();
-    return { version: v, instalado: v !== null || binario() !== null, modelos: lista.length, recomendado: MODELO_RECOMENDADO, recomendadoInstalado: lista.includes(MODELO_RECOMENDADO) };
+    return {
+      version: v, instalado: v !== null || binario() !== null, modelos: lista.length, recomendado: MODELO_RECOMENDADO, recomendadoInstalado: lista.includes(MODELO_RECOMENDADO),
+      qwen: fs.existsSync(rutas.modelo), visionQwen: fs.existsSync(rutas.mmproj), // capturas de pantalla con qwen (escritorio.ts)
+    };
   });
   ipcMain.handle("instalar:ejecutar", async (ev, pedidas: unknown) => {
     try {

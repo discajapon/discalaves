@@ -12,7 +12,7 @@ import { asegurar, binario, instalar as instalarOllama, MODELO_RECOMENDADO, mode
 import { instalar as instalarEnOllama } from "./modelos";
 import { rutas } from "./rutas";
 
-export interface Pieza { id: "motor" | "ollama" | "modelo" | "runtime" | "qwen"; nombre: string; mb: number }
+export interface Pieza { id: "motor" | "ollama" | "modelo" | "runtime" | "qwen" | "vision"; nombre: string; mb: number }
 export type Progreso = (texto: string) => void;
 interface Archivo { url: string; sha256: string; mb: number }
 
@@ -22,6 +22,13 @@ const MODELO: Archivo = {
   url: "https://huggingface.co/unsloth/Qwen3.5-9B-GGUF/resolve/main/Qwen3.5-9B-Q4_K_M.gguf",
   sha256: "03b74727a860a56338e042c4420bb3f04b2fec5734175f4cb9fa853daf52b7e8", // el mismo que publica Hugging Face (x-linked-etag)
   mb: 5417,
+};
+// Proyector de visión del mismo repositorio que el modelo (capturas de pantalla, ver escritorio.ts). Hay F16, BF16 y
+// F32; F16 es el más pequeño y el que se midió (2026-10-17).
+const MMPROJ: Archivo = {
+  url: "https://huggingface.co/unsloth/Qwen3.5-9B-GGUF/resolve/main/mmproj-F16.gguf",
+  sha256: "f70dc3509053962b0d0d3ee8a7eacebf5d60aa560cad78254ae8698516ae029f", // x-linked-etag de Hugging Face
+  mb: 876,
 };
 // Runtime por sistema y tarjeta: CUDA (NVIDIA) con sus bibliotecas, o Vulkan (cualquier otra GPU).
 const RUNTIME: Record<string, Archivo[]> = {
@@ -149,5 +156,6 @@ export async function instalar(progreso: Progreso, senal?: AbortSignal, ids?: Pi
   }
   if (falta.includes("runtime")) await instalarRuntime(progreso, senal);
   if (falta.includes("qwen")) await bajar(MODELO.url, rutas.modelo, MODELO.sha256, progreso, "Qwen 3.5", senal);
+  if (falta.includes("qwen") || falta.includes("vision")) await bajar(MMPROJ.url, rutas.mmproj, MMPROJ.sha256, progreso, "Visión de Qwen 3.5", senal);
   return falta.includes("motor");
 }

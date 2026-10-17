@@ -329,7 +329,8 @@ async function modelosOllama(): Promise<Modelo[] | null> {
 // Cada cambio de modo recarga el modelo (~8 s).
 type ModoServidor = "texto" | "vision";
 let modoServidor: ModoServidor = "texto";
-let visionQwen = fs.existsSync(rutas.mmproj); // se desmiente si el servidor no anuncia visión en /props
+let sinVision = false; // el servidor cargó el mmproj pero no anunció visión en /props
+const visionQwen = () => !sinVision && fs.existsSync(rutas.mmproj); // se puede bajar desde Configuración con la app abierta
 const usandoVision = new Set<string>(); // empleados de qwen cuya tarea en curso tiene capturas
 let enVuelo = 0; // peticiones a llama-server en curso: un cambio de modo espera a que terminen
 let cambioModo: Promise<void> = Promise.resolve();
@@ -337,7 +338,7 @@ let reiniciando = false;
 
 function pedirModo(modo: ModoServidor): Promise<void> {
   cambioModo = cambioModo.then(async () => {
-    if (modo === modoServidor || (modo === "vision" && !visionQwen)) return;
+    if (modo === modoServidor || (modo === "vision" && !visionQwen())) return;
     while (enVuelo > 0) await new Promise((r) => setTimeout(r, 200));
     modoServidor = modo;
     const viejo = servidor;
@@ -352,7 +353,7 @@ function pedirModo(modo: ModoServidor): Promise<void> {
     if (modo !== "vision") return;
     const props = await fetch(`http://127.0.0.1:${PUERTO}/props`, { headers: { authorization: `Bearer ${CLAVE}` } })
       .then((r) => r.json() as Promise<{ modalities?: { vision?: boolean } }>, () => ({ modalities: undefined }));
-    if (props.modalities?.vision !== true) visionQwen = false; // sin visión de verdad: no se ofrecen las capturas
+    if (props.modalities?.vision !== true) sinVision = true; // sin visión de verdad: no se ofrecen las capturas
   });
   return cambioModo;
 }
@@ -409,7 +410,7 @@ function iniciarServidor(): Promise<boolean> {
 // remoto, Codex) no reciben capturas: el servidor remoto nunca recibe imágenes (decisión del 2026-10-02).
 const visionOllama = new Map<string, boolean>();
 async function aceptaImagenes(c: Conversacion): Promise<boolean> {
-  if (c.proveedor === "qwen") return visionQwen;
+  if (c.proveedor === "qwen") return visionQwen();
   if (c.proveedor !== "ollama") return false;
   if (!visionOllama.has(c.modelo)) {
     const info = await fetch(`${OLLAMA}/api/show`, { method: "POST", body: JSON.stringify({ model: c.modelo }), signal: AbortSignal.timeout(3000) })
