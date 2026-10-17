@@ -47,7 +47,7 @@ declare const discalaves: {
   alRecibirTrozo(f: (t: { id: string; texto: string }) => void): void;
   alPaso(f: (id: string) => void): void;
   aprobar(id: string, si: boolean): Promise<void>;
-  alAprobacion(f: (p: { id: string; conversacion: string; descripcion: string; enHilo: boolean }) => void): void;
+  alAprobacion(f: (p: { id: string; conversacion: string; descripcion: string; enHilo: boolean; captura?: { imagen: string; x: number; y: number } }) => void): void;
   alEquipo(f: (activos: string[]) => void): void;
   gestorVram(): Promise<{ nombre: string; total: number; libre: number } | null>;
   gestorBuscar(q: string): Promise<{ repo: string; descargas: number; meGusta: number }[] | { error: string }>;
@@ -405,12 +405,24 @@ document.getElementById("redactor")!.addEventListener("submit", async (ev) => {
 
 // Acción delicada: la IA espera a que el usuario la permita o la rechace. Si la pide otra
 // conversación, se cambia a ella para que la tarjeta se vea donde corresponde.
-discalaves.alAprobacion(async ({ id, conversacion, descripcion, enHilo }) => {
+// Un clic por coordenadas llega con la captura que vio el modelo y el punto que quiere pulsar (x, y de 0 a 1).
+discalaves.alAprobacion(async ({ id, conversacion, descripcion, enHilo, captura }) => {
   if (conversacion !== activa && !(enHilo && activa === HILO)) await seleccionar(conversacion);
   const nombre = conversaciones.find((c) => c.id === conversacion)?.nombre ?? "la IA";
   const fila = crear("div", "mensaje");
   const t = crear("div", "burbuja aprobacion");
   t.append(crear("p", "", `${nombre} quiere `), crear("strong", "", descripcion));
+  if (captura) {
+    const marco = crear("div", "captura-marcada");
+    const img = crear("img") as HTMLImageElement;
+    img.src = captura.imagen;
+    img.alt = `captura de su escritorio con el punto donde quiere ${descripcion}`;
+    const punto = crear("span", "punto");
+    punto.style.left = `${captura.x * 100}%`;
+    punto.style.top = `${captura.y * 100}%`;
+    marco.append(img, punto);
+    t.append(marco);
+  }
   const acciones = crear("div", "acciones");
   const responder = (si: boolean) => {
     void discalaves.aprobar(id, si);

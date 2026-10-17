@@ -415,6 +415,13 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 .aprobacion { border: 1px solid var(--borde); background: var(--fondo); }
 .aprobacion p { display: inline; }
 .aprobacion .acciones { margin-top: var(--e2); }
+/* Clic por coordenadas: la captura que vio el empleado con el punto que quiere pulsar. */
+.captura-marcada { position: relative; margin-top: var(--e2); border-radius: var(--radio-fila); overflow: hidden; border: 1px solid var(--borde); }
+.captura-marcada img { display: block; width: 100%; height: auto; }
+.captura-marcada .punto {
+  position: absolute; width: 22px; height: 22px; transform: translate(-50%, -50%); border-radius: var(--radio-total);
+  border: 3px solid var(--notificacion); box-shadow: 0 0 0 2px var(--sobre-oscuro), 0 0 12px var(--notificacion);
+}
 .decision { font-size: var(--texto-chico); color: var(--secundario); }
 
 /* Pantalla de qwen en vivo: ocupa la parte de arriba del panel y el hilo queda debajo */

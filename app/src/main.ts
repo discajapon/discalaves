@@ -3,7 +3,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { BORRADO, definicionesPara, ejecutarHerramienta, verificar } from "./herramientas";
+import { BORRADO, definicionesPara, ejecutarHerramienta, permitida, verificar, type Marca } from "./herramientas";
 import { ADICIONALES_OC, OpenClaw, PRINCIPALES_OC } from "./openclaw";
 import { COLORES, Empleados, HERRAMIENTAS, PRINCIPALES, leerIdentidad, promptEmpleado, type Empleado, type Identidad } from "./empleados";
 import { apagarTodas, computadoraDe, responde, type Computadora } from "./computadora";
@@ -493,11 +493,13 @@ function anotarGasto(c: Conversacion, uso: Uso) {
 
 // Aprobación de acciones delicadas: la interfaz muestra la tarjeta y responde con el id.
 const aprobaciones = new Map<string, { conversacion: string; resolver: (si: boolean) => void }>();
-function pedirAprobacion(c: Conversacion, interfaz: Electron.WebContents, descripcion: string): Promise<boolean> {
+// marca: un clic por coordenadas se aprueba viendo la captura con el punto marcado.
+function pedirAprobacion(c: Conversacion, interfaz: Electron.WebContents, descripcion: string, marca?: Marca): Promise<boolean> {
   const id = randomBytes(8).toString("hex");
   cambiarEstado(c, { fase: "esperando-aprobacion", detalle: descripcion });
   const enHilo = [...abiertas.values()].some((col) => col.some((x) => x.id === c.id && !x.hasta));
-  interfaz.send("aprobacion", { id, conversacion: c.id, descripcion, enHilo });
+  const captura = marca && { imagen: `data:image/jpeg;base64,${marca.jpeg.toString("base64")}`, x: marca.x / 1000, y: marca.y / 1000 };
+  interfaz.send("aprobacion", { id, conversacion: c.id, descripcion, enHilo, captura });
   return new Promise((resolver) => aprobaciones.set(id, { conversacion: c.id, resolver }));
 }
 ipcMain.handle("aprobar", (_e, id: unknown, si: unknown) => {
@@ -1043,7 +1045,7 @@ async function usarHerramienta(c: Conversacion, l: Llamada, interfaz: Electron.W
     return { salida: `no existe ese procedimiento. Tienes: ${equipo.procedimientos(c.id).map((x) => x.nombre).join(", ") || "ninguno"}`, codigo: 1 };
   }
   if (l.nombre === "recordar") return { salida: equipo.recordar(c.id, texto("texto")), codigo: 0 };
-  if (!c.permitidas.includes(l.nombre)) return { salida: `no tienes la herramienta ${l.nombre} en tu puesto; hazlo con las que tienes o dilo.`, codigo: 1 };
+  if (!permitida(c.permitidas, l.nombre)) return { salida: `no tienes la herramienta ${l.nombre} en tu puesto; hazlo con las que tienes o dilo.`, codigo: 1 };
   if (l.nombre === "pasar_trabajo") {
     const quien = texto("empleado").trim().toLowerCase();
     const otro = conversaciones.find((o) => o.id !== c.id && (o.nombre.toLowerCase() === quien || o.id === quien));
@@ -1068,7 +1070,10 @@ async function usarHerramienta(c: Conversacion, l: Llamada, interfaz: Electron.W
     }
   }
   return ejecutarHerramienta(
-    { ...computadora(c), avisar: (fase, detalle) => cambiarEstado(c, { fase, detalle }), aprobar: async (d) => c.libre === true || pedirAprobacion(c, interfaz, d) },
+    {
+      ...computadora(c), avisar: (fase, detalle) => cambiarEstado(c, { fase, detalle }), senal: parar.signal,
+      aprobar: async (d, marca) => c.libre === true || pedirAprobacion(c, interfaz, d, marca),
+    },
     l.nombre,
     l.argumentos,
   );
