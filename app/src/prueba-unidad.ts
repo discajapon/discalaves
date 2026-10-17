@@ -15,6 +15,7 @@ import { turnoOpenAI } from "./proveedores";
 import { rutasPara } from "./rutas";
 import { cuantDe, nombreValido } from "./modelos";
 import { distrosDe, textoWsl } from "./wsl";
+import { convertir, cursorNeon, escribirXcursor, leerXcursor, TAMANO } from "./cursor";
 import { ANCHO_IMAGEN, aNormal, aPantalla, leerXwd, region, tamanoImagen, teclas, trayecto, type Vista } from "./escritorio";
 
 // Linux: igual que siempre.
@@ -216,8 +217,49 @@ void (async () => {
   const leido = leerXwd(xwd);
   assert.deepEqual([leido.ancho, leido.alto], [2, 2]);
   assert.deepEqual([...leido.bgra.subarray(0, 8)], [0x33, 0x22, 0x11, 255, 0x66, 0x55, 0x44, 255]);
-  // Xvnc con visual DirectColor dice 24 bits por píxel pero guarda 4 bytes: manda el largo de la línea.
-  xwd.writeUInt32BE(24, 11 * 4);
-  assert.deepEqual([...leerXwd(xwd).bgra.subarray(4, 8)], [0x66, 0x55, 0x44, 255]);
+  // Xvnc con la sesión XFCE: 24 bits empaquetados en 3 bytes y líneas con relleno (como 1280 px en 5120 bytes).
+  const x24 = Buffer.alloc(100 + 2 * 8);
+  [100, 7, 2, 24, 2, 2, 0, 0, 32, 0, 8, 24, 8, 5, 0xff0000, 0xff00, 0xff, 8, 0, 0].forEach((v, i) => x24.writeUInt32BE(v, i * 4));
+  Buffer.from([0x33, 0x22, 0x11, 0x66, 0x55, 0x44, 0, 0, 0x99, 0x88, 0x77, 0xcc, 0xbb, 0xaa, 0, 0]).copy(x24, 100);
+  assert.deepEqual([...leerXwd(x24).bgra], [0x33, 0x22, 0x11, 255, 0x66, 0x55, 0x44, 255, 0x99, 0x88, 0x77, 255, 0xcc, 0xbb, 0xaa, 255]);
+  // Cursor neón: 48 px (2× el normal) y el punto activo en la punta de la flecha: opaco en la punta, transparente
+  // por encima y a la izquierda (solo el halo), así el clic cae donde se ve la punta.
+  const neon = cursorNeon();
+  assert.deepEqual([neon.ancho, neon.alto], [TAMANO, TAMANO]);
+  const alfa = (x: number, y: number) => neon.argb[y * neon.ancho + x] >>> 24;
+  assert.ok(alfa(neon.xhot + 1, neon.yhot + 2) > 200, "la punta es opaca");
+  assert.ok(alfa(neon.xhot - 3, neon.yhot - 3) < 80, "nada sólido antes de la punta");
+  assert.ok(alfa(TAMANO - 1, 0) === 0, "esquina vacía");
+  // Xcursor: ida y vuelta.
+  const ida = leerXcursor(escribirXcursor([neon]));
+  assert.deepEqual([ida[0].ancho, ida[0].xhot, ida[0].yhot, ida[0].argb[500]], [TAMANO, neon.xhot, neon.yhot, neon.argb[500]]);
+  // .cur de 32 bits, 16×16, punto activo (3, 5): se escala a 48 (×3) con su punto activo.
+  const cur = (lado: number, xhot: number, yhot: number, color: number) => {
+    const dib = Buffer.alloc(40 + lado * lado * 4 + lado * 4);
+    [40, lado, lado * 2].forEach((v, i) => dib.writeInt32LE(v, i * 4));
+    dib.writeUInt16LE(1, 12); dib.writeUInt16LE(32, 14);
+    for (let i = 0; i < lado * lado; i++) dib.writeUInt32LE(color, 40 + i * 4);
+    const cab = Buffer.alloc(22);
+    cab.writeUInt16LE(2, 2); cab.writeUInt16LE(1, 4); cab[6] = lado; cab[7] = lado;
+    cab.writeUInt16LE(xhot, 10); cab.writeUInt16LE(yhot, 12); cab.writeUInt32LE(dib.length, 14); cab.writeUInt32LE(22, 18);
+    return Buffer.concat([cab, dib]);
+  };
+  const sinPng = () => { throw new Error("no debía usar PNG"); };
+  let x = leerXcursor(convertir(cur(16, 3, 5, 0xff00ff00), "flecha.cur", sinPng))[0];
+  assert.deepEqual([x.ancho, x.alto, x.xhot, x.yhot, x.argb[0]], [48, 48, 9, 15, 0xff00ff00]);
+  // .ani: dos fotogramas a 10/60 s cada uno.
+  const icono = (c: number) => { const f = cur(16, 0, 0, c); const h = Buffer.alloc(8); h.write("icon", 0, "latin1"); h.writeUInt32LE(f.length, 4); return Buffer.concat([h, f]); };
+  const anih = Buffer.alloc(44); anih.write("anih", 0, "latin1"); anih.writeUInt32LE(36, 4); anih.writeUInt32LE(36, 8); anih.writeUInt32LE(2, 12); anih.writeUInt32LE(2, 16); anih.writeUInt32LE(10, 36);
+  const fotos = Buffer.concat([icono(0xffff0000), icono(0xff0000ff)]);
+  const lista = Buffer.alloc(12); lista.write("LIST", 0, "latin1"); lista.writeUInt32LE(4 + fotos.length, 4); lista.write("fram", 8, "latin1");
+  const cuerpo = Buffer.concat([Buffer.from("ACON", "latin1"), anih, lista, fotos]);
+  const riff = Buffer.alloc(8); riff.write("RIFF", 0, "latin1"); riff.writeUInt32LE(cuerpo.length, 4);
+  const ani = leerXcursor(convertir(Buffer.concat([riff, cuerpo]), "espera.ani", sinPng));
+  assert.deepEqual(ani.map((f) => [f.retardo, f.argb[0]]), [[167, 0xffff0000], [167, 0xff0000ff]]);
+  // PNG (decodificado por nativeImage en la app): punto activo arriba a la izquierda.
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  x = leerXcursor(convertir(png, "mio.png", () => ({ ancho: 24, alto: 24, bgra: Buffer.alloc(24 * 24 * 4, 0xff) })))[0];
+  assert.deepEqual([x.ancho, x.xhot, x.yhot], [48, 0, 0]);
+  assert.throws(() => convertir(Buffer.from("hola"), "x.txt", sinPng), /formato no reconocido/);
   console.log("unidad: ok");
 })();
