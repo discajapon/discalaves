@@ -39,9 +39,15 @@ Grok Bot.
   computadora sin tocar la tuya. Su computadora tampoco llega a tu red local
   (ni a tu router ni a otros servicios de tu equipo), solo a internet.
 - **Usa sus herramientas.** Terminal, crear archivos, buscar en la web, abrir
-  páginas y rellenar formularios. Maneja el navegador por la estructura de la
-  página, no haciendo clic en píxeles. Ya investiga un tema y deja un informe
-  en un archivo.
+  páginas y rellenar formularios. En el navegador apunta a cada enlace, botón o
+  campo por una referencia corta de la estructura de la página. Ya investiga un
+  tema y deja un informe en un archivo.
+- **Ve su escritorio (este fork, en pruebas).** Con la visión de Qwen 3.5
+  (Configuración → Visión de Qwen), el empleado mira capturas de su pantalla y
+  usa el ratón y el teclado en cualquier programa, como hace Claude con
+  computer use. Si tomas el control, se pone en pausa; los clics delicados te
+  los pide aprobar sobre la captura. Su cursor se ve grande (y puedes poner el
+  tuyo). Qwen 9B todavía falla bastantes clics: ver [Qué falta](#qué-falta).
 - **Lo ves en vivo.** Un botón muestra su escritorio mientras trabaja, y
   puedes tomar el control con tu teclado y ratón.
 - **Trabaja hasta acabar.** No se detiene a preguntar "¿sigo?"; te cuenta
@@ -200,11 +206,16 @@ distro e instala Podman. Los archivos de cada empleado quedan en
   trabajando sin medir.
 - **Distribución:** el instalador de Linux se genera a mano; falta publicar
   descargas.
+- **Escritorio con capturas:** Qwen 9B ubica las cosas con poca precisión
+  (menús con opciones juntas, áreas grandes) y cada paso tarda varios segundos;
+  con poca VRAM libre la visión deja capas del modelo en la CPU y va más lento.
 - **Más adelante:** Mac, microVMs como modo seguro, y conectores (Matrix,
   Discord, Telegram) y acceso desde el celular.
 
 ## Licencia
 
-Apache License 2.0. Consulta [LICENSE](LICENSE) y [NOTICE](NOTICE).
+Este fork (AI-visor-for-discalaves) se publica con la GPLv3: consulta
+[LICENSE](LICENSE). Discalaves, del que parte, es Apache License 2.0:
+[LICENSE-discalaves](LICENSE-discalaves) y [NOTICE](NOTICE).
 
 Discalaves — Copyright 2026 Disca.
