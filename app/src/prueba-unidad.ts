@@ -15,6 +15,7 @@ import { turnoOpenAI } from "./proveedores";
 import { rutasPara } from "./rutas";
 import { cuantDe, nombreValido } from "./modelos";
 import { distrosDe, textoWsl } from "./wsl";
+import { ANCHO_IMAGEN, aNormal, aPantalla, leerXwd, region, tamanoImagen, teclas, trayecto, type Vista } from "./escritorio";
 
 // Linux: igual que siempre.
 let r = rutasPara("linux", {}, "/home/ana");
@@ -160,5 +161,63 @@ void (async () => {
   assert.equal(cuantDe("README.md"), null);
   assert.ok(nombreValido("hf.co/unsloth/Qwen3.5-9B-GGUF:Q4_K_M") && nombreValido("llama3.2:3b"));
   assert.ok(!nombreValido("../x") && !nombreValido("-rf") && !nombreValido("a b"));
+
+  // Mapeo de coordenadas (criterio 4): un píxel de la pantalla real se ve en un píxel de la imagen reescalada
+  // (o ampliada); el modelo apunta a ese píxel en 0–1000 (enteros, como responde) y el clic debe caer dentro de
+  // los píxeles reales que forman ese píxel de la imagen, a cualquier escala, también en los bordes.
+  const vistas: Vista[] = [
+    { x: 0, y: 0, ancho: 1280, alto: 800 }, // la pantalla de cada computadora
+    { x: 0, y: 0, ancho: 1920, alto: 1080 },
+    { x: 0, y: 0, ancho: 800, alto: 600 },
+    { x: 0, y: 0, ancho: 1024, alto: 640 }, // misma escala que la imagen
+    { x: 300, y: 200, ancho: 200, alto: 120 }, // zona ampliada (la imagen es mayor que la zona)
+    { x: 1264, y: 784, ancho: 16, alto: 16 }, // zona mínima, en la esquina
+  ];
+  for (const v of vistas) {
+    const img = tamanoImagen(v.ancho, v.alto);
+    assert.equal(img.ancho, ANCHO_IMAGEN);
+    assert.ok(Math.abs(img.alto / img.ancho - v.alto / v.ancho) < 0.01, "se conserva la proporción");
+    const muestras = [[v.x, v.y], [v.x + v.ancho - 1, v.y + v.alto - 1], [v.x + (v.ancho >> 1), v.y + (v.alto >> 1)],
+      ...Array.from({ length: 300 }, (_, i) => [v.x + ((i * 7919) % v.ancho), v.y + ((i * 104729) % v.alto)])];
+    for (const [px, py] of muestras) {
+      const ix = Math.floor(((px - v.x + 0.5) * img.ancho) / v.ancho), iy = Math.floor(((py - v.y + 0.5) * img.alto) / v.alto); // píxel de la imagen
+      const nx = Math.round(((ix + 0.5) / img.ancho) * 1000), ny = Math.round(((iy + 0.5) / img.alto) * 1000); // lo que diría el modelo
+      const p = aPantalla(nx, ny, v);
+      const margenX = v.ancho / img.ancho + v.ancho / 1000, margenY = v.alto / img.alto + v.alto / 1000; // un píxel de la imagen + el redondeo a 0–1000
+      assert.ok(Math.abs(p.x - px) <= Math.max(1, margenX) && Math.abs(p.y - py) <= Math.max(1, margenY), `vista ${JSON.stringify(v)}: ${px},${py} → ${nx},${ny} → ${p.x},${p.y}`);
+      assert.ok(p.x >= v.x && p.x < v.x + v.ancho && p.y >= v.y && p.y < v.y + v.alto, "nunca fuera de la vista");
+    }
+    // Ida y vuelta exacta desde 0–1000 sin redondear.
+    for (const [px, py] of muestras.slice(0, 50)) assert.deepEqual(aPantalla(aNormal(px, py, v).x, aNormal(px, py, v).y, v), { x: px, y: py });
+  }
+  // Un botón real: en 1280×800, "Guardar" ocupa 825–925 × 609–641; el modelo ve 1024×640 y apunta al centro.
+  const btn = aPantalla(Math.round((700 / 1024) * 1000), Math.round((500 / 640) * 1000), vistas[0]);
+  assert.ok(btn.x >= 825 && btn.x <= 925 && btn.y >= 609 && btn.y <= 641, `el clic cae en el botón: ${btn.x},${btn.y}`);
+  // Fuera de rango: se recorta al borde, no sale de la pantalla.
+  assert.deepEqual(aPantalla(-50, 2000, vistas[0]), { x: 0, y: 799 });
+  // Ampliar: la región pedida en 0–1000 de la pantalla pasa a píxeles reales; en la imagen ampliada, 500,500 es su centro.
+  const zona = region(250, 250, 500, 500, vistas[0]);
+  assert.deepEqual(zona, { x: 320, y: 200, ancho: 321, alto: 201 });
+  assert.deepEqual(aPantalla(500, 500, zona), { x: 480, y: 300 });
+  assert.deepEqual(region(999, 999, 1000, 1000, vistas[0]), { x: 1264, y: 784, ancho: 16, alto: 16 }, "zona mínima de 16 px dentro de la pantalla");
+  // Teclas como las escribe el modelo.
+  assert.deepEqual(teclas("ctrl+s"), ["ctrl+s"]);
+  assert.deepEqual(teclas("Intro"), ["Return"]);
+  assert.deepEqual(teclas("Ctrl+Shift+T, flecha abajo"), ["ctrl+shift+t", "Down"]);
+  assert.deepEqual(teclas("ctrl+a Supr"), ["ctrl+a", "Delete"]);
+  // Movimiento suave: termina exactamente en el destino y no salta.
+  const ruta = trayecto({ x: 0, y: 0 }, { x: 800, y: 400 });
+  assert.deepEqual(ruta.at(-1), { x: 800, y: 400 });
+  assert.ok(ruta.every((q, i) => i === 0 || Math.abs(q.x - ruta[i - 1].x) <= 200), "pasos cortos");
+  // Captura: un XWD de 32 bits (como el de xwd en Xvnc) pasa a BGRA.
+  const xwd = Buffer.alloc(100 + 2 * 2 * 4);
+  [100, 7, 2, 24, 2, 2, 0, 0, 32, 0, 32, 32, 8, 4, 0xff0000, 0xff00, 0xff, 8, 0, 0].forEach((v, i) => xwd.writeUInt32BE(v, i * 4));
+  [0x00112233, 0x00445566, 0x00778899, 0x00aabbcc].forEach((v, i) => xwd.writeUInt32LE(v, 100 + i * 4));
+  const leido = leerXwd(xwd);
+  assert.deepEqual([leido.ancho, leido.alto], [2, 2]);
+  assert.deepEqual([...leido.bgra.subarray(0, 8)], [0x33, 0x22, 0x11, 255, 0x66, 0x55, 0x44, 255]);
+  // Xvnc con visual DirectColor dice 24 bits por píxel pero guarda 4 bytes: manda el largo de la línea.
+  xwd.writeUInt32BE(24, 11 * 4);
+  assert.deepEqual([...leerXwd(xwd).bgra.subarray(4, 8)], [0x66, 0x55, 0x44, 255]);
   console.log("unidad: ok");
 })();
