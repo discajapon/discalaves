@@ -1,0 +1,133 @@
+// Escritorio con capturas en una computadora real (contenedor, sin modelo): npm run prueba:escritorio
+// Corre dentro de Electron (la captura usa nativeImage). Comprueba la captura (tamaño, sin cursor), que un clic en
+// coordenadas 0–1000 cae en el píxel correcto de la pantalla real (también tras ampliar), que el teclado escribe y
+// guarda en una app nativa (mousepad), la pausa por toma de control, la aprobación con la captura marcada y las
+// referencias del navegador.
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { app, nativeImage } from "electron";
+import { borrar, computadoraDe } from "./computadora";
+import { aPantalla, escritorioDe } from "./escritorio";
+import { ejecutarHerramienta, type Marca } from "./herramientas";
+import { navegadorDe } from "./navegador";
+
+const esperar = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+async function main() {
+  const carpeta = fs.mkdtempSync(path.join(os.tmpdir(), "discalaves-escritorio-"));
+  const computadora = computadoraDe(carpeta, "escritorio-prueba");
+  const marcas: Marca[] = [];
+  let aprobar = false;
+  const ctx = {
+    carpeta, usuario: "escritorio-prueba", computadora, navegador: navegadorDe(computadora), avisar: () => {},
+    aprobar: async (_d: string, m?: Marca) => (m && marcas.push(m), aprobar),
+  };
+  const correr = (nombre: string, args: object) => ejecutarHerramienta(ctx, nombre, JSON.stringify(args));
+  const raton = async () => {
+    const r = await computadora.ejecutar(["xdotool", "getmouselocation", "--shell"], { tiempo: 10_000 });
+    const m = r.salida.match(/X=(\d+)\s+Y=(\d+)/)!;
+    return { x: Number(m[1]), y: Number(m[2]) };
+  };
+  try {
+    await computadora.encender();
+    const e = escritorioDe(computadora);
+
+    // Captura: 1024 de ancho con la proporción de la pantalla (1280×800 → 1024×640), en JPEG.
+    let r = await correr("captura_pantalla", {});
+    assert.equal(r.codigo, 0, r.salida);
+    const img = nativeImage.createFromBuffer(r.imagen!);
+    assert.deepEqual(img.getSize(), { width: 1024, height: 640 });
+    assert.deepEqual(e.ultima!.vista, { x: 0, y: 0, ancho: 1280, alto: 800 });
+
+    // El cursor no sale en la captura del modelo: con el ratón en dos sitios del fondo, la zona es la misma.
+    const zona = { x: 600, y: 300, width: 80, height: 80 };
+    const bits = async (x: number, y: number) => {
+      await computadora.ejecutar(["xdotool", "mousemove", String(x), String(y)], { tiempo: 10_000 });
+      await esperar(300);
+      return nativeImage.createFromBuffer((await e.capturar()).jpeg).crop(zona).toBitmap();
+    };
+    const [a, b] = [await bits(800, 420), await bits(100, 700)]; // 800,420 (real) cae dentro de la zona de la imagen
+    let distintos = 0;
+    for (let i = 0; i < a.length; i++) if (Math.abs(a[i] - b[i]) > 24) distintos++;
+    assert.ok(distintos < a.length * 0.01, `el cursor aparece en la captura (${distintos} bytes distintos)`);
+
+    // Clic por coordenadas (criterio 4 en la pantalla real): el puntero acaba en el píxel que dice el mapeo.
+    await e.capturar();
+    for (const [nx, ny] of [[0, 0], [500, 500], [999, 999], [123, 877], [684, 781]]) {
+      r = await correr("mover_raton", { x: nx, y: ny });
+      assert.equal(r.codigo, 0, r.salida);
+      assert.deepEqual(await raton(), aPantalla(nx, ny, { x: 0, y: 0, ancho: 1280, alto: 800 }), `${nx},${ny}`);
+    }
+    // Tras ampliar, las coordenadas son las de la imagen ampliada: su centro es el centro de la zona.
+    r = await correr("ampliar", { x1: 250, y1: 250, x2: 500, y2: 500 });
+    assert.equal(r.codigo, 0, r.salida);
+    assert.deepEqual(nativeImage.createFromBuffer(r.imagen!).getSize().width, 1024);
+    r = await correr("mover_raton", { x: 500, y: 500 });
+    assert.deepEqual(await raton(), { x: 480, y: 300 }, "clic en la imagen ampliada");
+
+    // Una app nativa con teclado y ratón: mousepad, escribir una frase y guardar con ctrl+s.
+    await computadora.ejecutar(["sh", "-c", "rm -f ~/nota.txt; (mousepad >/dev/null 2>&1 &)"], { tiempo: 10_000 });
+    for (let i = 0; i < 40 && !(await computadora.ejecutar(["xdotool", "search", "--onlyvisible", "--class", "mousepad"], { tiempo: 5000 })).salida.trim(); i++) await esperar(250);
+    await esperar(800);
+    r = await correr("escribir_texto", { texto: "Hola desde Discalaves, con ñ y tildes: canción." });
+    assert.equal(r.codigo, 0, r.salida);
+    r = await correr("pulsar_teclas", { teclas: "ctrl+s" });
+    await esperar(800);
+    r = await correr("escribir_texto", { texto: `/home/escritorio-prueba/nota.txt` });
+    r = await correr("pulsar_teclas", { teclas: "Intro" });
+    await esperar(1000);
+    const nota = path.join(carpeta, "nota.txt");
+    assert.ok(fs.existsSync(nota), "mousepad no guardó el archivo");
+    assert.equal(fs.readFileSync(nota, "utf8").trim(), "Hola desde Discalaves, con ñ y tildes: canción.");
+    await correr("pulsar_teclas", { teclas: "ctrl+q" });
+
+    // Toma de control (criterio 5): no hace la acción mientras el usuario controla; al soltar, captura nueva.
+    await e.capturar();
+    const antes = await raton();
+    computadora.controlUsuario = true;
+    let fin: Awaited<ReturnType<typeof correr>> | undefined;
+    const enCurso = correr("clic", { x: 900, y: 100, objetivo: "nada" }).then((x) => (fin = x));
+    await esperar(1500);
+    assert.equal(fin, undefined, "siguió con el usuario al control");
+    assert.deepEqual(await raton(), antes, "movió el ratón con el usuario al control");
+    computadora.controlUsuario = false;
+    await enCurso;
+    assert.equal(fin!.codigo, 1);
+    assert.ok(fin!.imagen, "al soltar retoma con una captura nueva");
+    assert.match(fin!.salida, /no hice tu última acción/);
+
+    // Clic delicado por coordenadas (criterio 6): pide aprobación con la captura y el punto; "no" = no se pulsa.
+    await e.capturar();
+    const quieto = await raton();
+    r = await correr("clic", { x: 300, y: 300, objetivo: "botón Enviar pedido" });
+    assert.match(r.salida, /no lo permitió/);
+    assert.equal(marcas.length, 1);
+    assert.deepEqual([marcas[0].x, marcas[0].y], [300, 300]);
+    assert.ok(nativeImage.createFromBuffer(marcas[0].jpeg).getSize().width === 1024, "la tarjeta lleva la captura que vio");
+    assert.deepEqual(await raton(), quieto, "pulsó sin aprobación");
+    r = await correr("clic", { x: 300, y: 300, objetivo: "campo de texto" });
+    assert.equal(marcas.length, 1, "un clic normal no pide aprobación");
+
+    // Navegador: referencias cortas y estables; hacer_clic acepta la referencia.
+    r = await correr("abrir_pagina", { url: "https://example.com" });
+    assert.equal(r.codigo, 0, r.salida);
+    r = await correr("ver_pagina", {});
+    const ref = r.salida.match(/link "[^"]+" \[ref=(e\d+)\]/)?.[1];
+    assert.ok(ref, `ver_pagina sin referencias:\n${r.salida}`);
+    assert.equal((await correr("ver_pagina", {})).salida.includes(`[ref=${ref}]`), true, "la referencia cambia entre lecturas");
+    r = await correr("hacer_clic", { ref });
+    assert.equal(r.codigo, 0, r.salida);
+    assert.match(r.salida, /url: https:\/\/www\.iana\.org/);
+    r = await correr("hacer_clic", { ref: "e99999" });
+    assert.match(r.salida, /no encontré la referencia/);
+    console.log("escritorio: ok");
+  } finally {
+    await navegadorDe(computadora).cerrar();
+    await borrar(computadora).catch(() => {});
+    fs.rmSync(carpeta, { recursive: true, force: true });
+  }
+}
+
+app.whenReady().then(() => main()).then(() => app.exit(0), (e) => (console.error(e), app.exit(1)));
