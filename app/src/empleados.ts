@@ -11,7 +11,8 @@ import { ADICIONALES_OC, PRINCIPALES_OC } from "./openclaw";
 
 // Principales: las que traen las plantillas. Adicionales: el usuario las activa por empleado; pasar_trabajo ya viene en
 // todas las plantillas (sin ella no hay equipo: decisión del usuario, 2026-09-30).
-export const PRINCIPALES = ["terminal", "escribir_archivo", "buscar_web", "abrir_pagina", "ver_pagina", "hacer_clic", "escribir_en"];
+// "escritorio": las herramientas de capturas y coordenadas (herramientas.ts), solo si el modelo ve imágenes.
+export const PRINCIPALES = ["terminal", "escribir_archivo", "buscar_web", "abrir_pagina", "ver_pagina", "hacer_clic", "escribir_en", "escritorio"];
 export const ADICIONALES = ["leer_archivo", "editar_archivo", "leer_web", "preguntar", "pasar_trabajo"];
 export const HERRAMIENTAS = [...PRINCIPALES, ...ADICIONALES];
 // Nombres válidos en el perfil: los del bucle propio y los de OpenClaw (cada motor usa los suyos).

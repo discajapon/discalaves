@@ -455,6 +455,7 @@ const NOMBRES_HERRAMIENTAS: Record<string, string> = {
   ver_pagina: "ver páginas",
   hacer_clic: "hacer clic",
   escribir_en: "escribir en formularios",
+  escritorio: "usar su escritorio con capturas",
 };
 // Apagadas al principio: el usuario las activa si el puesto las necesita (cada una ocupa contexto del modelo).
 const NOMBRES_ADICIONALES: Record<string, string> = {
