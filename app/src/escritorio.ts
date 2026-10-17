@@ -6,7 +6,7 @@
 // píxeles de la pantalla real lo hace la app (aPantalla), nunca el modelo.
 import type { Computadora } from "./computadora";
 
-export const ANCHO_IMAGEN = 1024; // ancho de las capturas que ve el modelo (~690 tokens con Qwen 3.5 a 1024×640)
+export const ANCHO_IMAGEN = 1024; // ancho de las capturas que ve el modelo (~1120 tokens con Qwen 3.5 y --image-min-tokens 1024)
 const ESPERA = 600; // ms para que la pantalla se asiente tras una acción, antes de la captura nueva
 const PASOS = 8; // pasos del movimiento suave del ratón (se ve en vivo, no salta)
 const ENTRE_PASOS = 0.015; // s entre pasos: ~120 ms, que se descuentan de ESPERA (no retrasa al empleado)
