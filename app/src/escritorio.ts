@@ -44,11 +44,12 @@ export function leerXwd(b: Buffer): { ancho: number; alto: number; bgra: Buffer 
   const campo = (i: number) => b.readUInt32BE(i * 4); // la cabecera va siempre en big-endian
   const [tamCabecera, formato, ancho, alto, ordenBytes, bitsPixel, bytesLinea] = [campo(0), campo(2), campo(4), campo(5), campo(7), campo(11), campo(12)];
   const [rojo, verde, azul, colores] = [campo(14), campo(15), campo(16), campo(19)];
-  // Xvnc no siempre dice lo mismo: a veces 32 bits por píxel y a veces 24 con líneas de 4 bytes por píxel (visual
-  // DirectColor, visto 2026-10-17). Manda el largo real de cada línea. ponytail: se supone el mapa de colores
-  // identidad de DirectColor (el de Xvnc); con otro mapa los colores saldrían cambiados.
-  const bytesPixel = Math.floor(bytesLinea / ancho);
-  if (formato !== 2 || bitsPixel < 24 || (bytesPixel !== 3 && bytesPixel !== 4)) throw new Error(`captura en un formato que no sé leer (formato ${formato}, ${bitsPixel} bits, ${bytesPixel} bytes por píxel)`);
+  // Xvnc no siempre da lo mismo: 32 bits por píxel al arrancar y, con la sesión XFCE (visual DirectColor), 24 bits
+  // empaquetados en 3 bytes con líneas más largas de lo necesario (visto 2026-10-17). Leer 4 bytes por píxel ahí
+  // dejaba la imagen encogida al 75 % y con colores corridos. ponytail: se supone el mapa de colores identidad de
+  // DirectColor (el de Xvnc); con otro mapa los colores saldrían cambiados.
+  const bytesPixel = bitsPixel / 8;
+  if (formato !== 2 || (bitsPixel !== 24 && bitsPixel !== 32) || bytesLinea < ancho * bytesPixel) throw new Error(`captura en un formato que no sé leer (formato ${formato}, ${bitsPixel} bits por píxel)`);
   const bajo = (m: number) => 31 - Math.clz32(m & -m); // primer bit de la máscara
   const [dr, dg, db] = [bajo(rojo), bajo(verde), bajo(azul)];
   const inicio = tamCabecera + colores * 12;
