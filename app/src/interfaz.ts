@@ -8,7 +8,7 @@ type MensajeChat = (
 ) & { quien?: string; a?: string };
 type EstadoQwen =
   | { fase: "cargando" | "listo" | "escribiendo" }
-  | { fase: "ejecutando" | "esperando-aprobacion" | "error"; detalle: string };
+  | { fase: "ejecutando" | "esperando-aprobacion" | "pausa" | "error"; detalle: string };
 interface Conversacion {
   id: string; nombre: string; rol: string; color: string; proveedor: string; modelo: string; herramientas: boolean; libre?: boolean;
   origen: "local" | "nube" | "remoto"; donde: string;
@@ -72,6 +72,7 @@ const TEXTO_ESTADO: Record<EstadoQwen["fase"], string> = {
   escribiendo: "escribiendo…",
   ejecutando: "ejecutando",
   "esperando-aprobacion": "esperando tu aprobación para",
+  pausa: "en pausa",
   error: "sin conexión",
 };
 

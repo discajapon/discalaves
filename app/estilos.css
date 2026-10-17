@@ -386,6 +386,7 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 .cab-titulo .nombre { line-height: 1.2; }
 .cab-estado { font-size: var(--texto-chico); color: var(--secundario); }
 .cab-estado[data-fase="error"] { color: var(--notificacion-texto); }
+.cab-estado[data-fase="pausa"] { color: var(--tinta); font-weight: 600; } /* el usuario tiene el control: el empleado espera */
 .burbuja p { white-space: pre-wrap; overflow-wrap: anywhere; }
 .aviso { color: var(--notificacion-texto); }
 .pensando::after { content: "…"; animation: latido 1s ease-in-out infinite; }
