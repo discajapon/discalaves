@@ -18,6 +18,7 @@ export interface Rutas {
   ia: string; // runtime (llama.cpp) y modelos
   servidor: string; // ejecutable de llama-server
   modelo: string;
+  mmproj: string; // proyector de visión de Qwen 3.5 (mmproj-F16.gguf de unsloth/Qwen3.5-9B-GGUF), junto al modelo
   datos: string | null; // datos de la app (conversaciones, registros); null = la carpeta por defecto de Electron
   distro: string | null; // dónde guarda Windows el disco de la distro WSL
   trabajo(usuario: string): string; // carpeta de trabajo de un empleado, vista desde la app
@@ -35,6 +36,7 @@ export function rutasPara(plataforma: string = process.platform, entorno: NodeJS
     ia,
     servidor: p.join(ia, "llama.cpp", windows ? "llama-server.exe" : "llama-server"),
     modelo: p.join(ia, "modelos", "Qwen3.5-9B-Q4_K_M.gguf"),
+    mmproj: p.join(ia, "modelos", "Qwen3.5-9B-mmproj-F16.gguf"),
     datos: entorno.DISCALAVES_DATOS || (windows ? p.join(base, "datos") : null), // DISCALAVES_DATOS: una instancia aparte (pruebas)
     distro: windows ? p.join(base, "wsl") : null,
     trabajo: (usuario) =>
