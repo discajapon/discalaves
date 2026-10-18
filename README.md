@@ -214,8 +214,6 @@ distro e instala Podman. Los archivos de cada empleado quedan en
 
 ## Licencia
 
-Este fork (AI-visor-for-discalaves) se publica con la GPLv3: consulta
-[LICENSE](LICENSE). Discalaves, del que parte, es Apache License 2.0:
-[LICENSE-discalaves](LICENSE-discalaves) y [NOTICE](NOTICE).
+Apache License 2.0. Consulta [LICENSE](LICENSE) y [NOTICE](NOTICE).
 
 Discalaves — Copyright 2026 Disca.
