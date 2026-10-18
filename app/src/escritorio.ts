@@ -216,6 +216,12 @@ export class Escritorio {
     const veces = String(Math.min(30, Math.max(1, Math.round(cantidad) || 3)));
     return { punto: p, captura: await this.actuar([...(await this.moverA(p)), "click", "--repeat", veces, "--delay", "30", boton]) };
   }
+
+  // Espera a que algo cargue (una app que abre, una descarga) y mira de nuevo. Entre 0,5 y 30 s.
+  async esperarYVer(segundos: number) {
+    await esperar(Math.min(30, Math.max(0.5, Number(segundos) || 2)) * 1000);
+    return { captura: await this.capturar() };
+  }
 }
 
 const escritorios = new Map<string, Escritorio>();
