@@ -514,6 +514,16 @@ imagen, ~2 min).
     (punta arriba a la izquierda) o Xcursor; se convierte, se guarda en `<datos>/cursor.xcursor` y se aplica a
     todas. El movimiento entre acciones es suave (8 pasos, ~120 ms descontados de la espera, no retrasa). Verificado
     en el cliente de KasmVNC: la punta cae en el píxel del puntero.
+    Revisado con cursores reales (2026-10-18; los .cur, .ani y Xcursor de Yaru, Adwaita y DMZ del sistema): un Xcursor
+    de tema trae varios tamaños nominales y se mezclaban como fotogramas (el cursor "palpitaba"): se queda el más
+    cercano a 48. De un .cur se usa la imagen de 48 (o la menor que lo supere) con su propio punto activo, no la
+    mayor reducida; en un .ico el punto activo es (0, 0) (antes leía planos/bits). Al reducir se promedian los
+    píxeles. Archivos vacíos o cortados dan un mensaje claro. La sesión se espera (hasta ~15 s) antes de avisarle
+    del tema, en segundo plano, sin retrasar el encendido; `xsetroot` recibe el tema y el tamaño. `prueba-cursor.ts`
+    (contenedor + cliente de KasmVNC, fuera de pantalla) mira el cursor sobre el fondo, el panel y el menú y el
+    texto de Mousepad: el neón al encender, uno propio cambiado en caliente, un .ani (se ven sus dos fotogramas: el
+    animado llega a la vista en vivo) y la vuelta al neón. `prueba-configuracion.ts` hace lo mismo desde la hoja de
+    Configuración (cargar, cancelar, archivo roto o que no es cursor sin tocar el guardado, y restablecer).
   - **Pruebas:** `prueba-unidad.ts` (mapeo, XWD, teclas, cursor y formatos), `prueba-escritorio.ts` (contenedor
     real, sin modelo: tamaño, sin cursor en la captura, ancho completo, clic exacto, mousepad escribe y guarda con
     ñ, pausa, aprobación con captura, referencias, cursor instalado) y `prueba-vision.ts` (Qwen real).
