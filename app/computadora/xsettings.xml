@@ -1,9 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- Cursor grande en la vista en vivo: tema "discalaves" (la app lo escribe en ~/.icons al encender la computadora,
-     ver cursor.ts) a 48 px, el doble del normal. Lo que no trae el tema sale de Adwaita, al mismo tamaño. -->
+     ver cursor.ts) a 48 px, el doble del normal. Lo que no trae el tema sale de Adwaita, al mismo tamaño.
+     DialogsUseHeader: los botones de los diálogos (Guardar, Cancelar) van arriba. El de "Guardar como" mide más que
+     la pantalla (1096×856 en 1280×800) y sus botones de abajo quedaban fuera: el empleado no podía guardar. -->
 <channel name="xsettings" version="1.0">
   <property name="Gtk" type="empty">
     <property name="CursorThemeName" type="string" value="discalaves"/>
     <property name="CursorThemeSize" type="int" value="48"/>
+    <property name="DialogsUseHeader" type="bool" value="true"/>
   </property>
 </channel>
