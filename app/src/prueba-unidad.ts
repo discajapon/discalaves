@@ -271,6 +271,21 @@ void (async () => {
   assert.deepEqual(unTamano([24, 32, 64].map((n) => ({ ...tam(n, 1), nominal: n }))).map((i) => i.ancho), [64], "a igual distancia, el mayor");
   const animado = unTamano([{ ...tam(32, 1), nominal: 32 }, { ...tam(32, 2), nominal: 32 }, { ...tam(24, 3), nominal: 24 }]);
   assert.deepEqual(animado.map((i) => i.argb[0]), [1, 2], "los fotogramas del tamaño elegido se conservan");
+  // .cur con varias imágenes (96, 48 y 24, como los de Yaru): se usa la de 48 con su punto activo, sin escalar.
+  const curVarios = (() => {
+    const lados = [96, 48, 24], dibs = lados.map((l) => cur(l, 0, 0, 0xff000000 + l).subarray(22));
+    const cab = Buffer.alloc(6 + 16 * lados.length);
+    cab.writeUInt16LE(2, 2); cab.writeUInt16LE(lados.length, 4);
+    let pos = cab.length;
+    lados.forEach((l, i) => {
+      const e = 6 + i * 16;
+      cab[e] = l % 256; cab[e + 1] = l % 256; cab.writeUInt16LE(l / 8, e + 4); cab.writeUInt16LE(l / 16, e + 6);
+      cab.writeUInt32LE(dibs[i].length, e + 8); cab.writeUInt32LE(pos, e + 12); pos += dibs[i].length;
+    });
+    return Buffer.concat([cab, ...dibs]);
+  })();
+  x = leerXcursor(convertir(curVarios, "yaru.cur", sinPng))[0];
+  assert.deepEqual([x.ancho, x.xhot, x.yhot, x.argb[0]], [48, 6, 3, 0xff000030], "la imagen de 48 y su propio punto activo");
   // PNG (decodificado por nativeImage en la app): punto activo arriba a la izquierda.
   const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
   x = leerXcursor(convertir(png, "mio.png", () => ({ ancho: 24, alto: 24, bgra: Buffer.alloc(24 * 24 * 4, 0xff) })))[0];
