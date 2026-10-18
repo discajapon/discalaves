@@ -562,6 +562,15 @@ function dibujarNube() {
 }
 campo<HTMLSelectElement>("modelo").addEventListener("change", dibujarNube);
 
+// El escritorio con capturas solo se ofrece a modelos que ven imágenes (aceptaImagenes en main.ts): si el elegido
+// no ve, se avisa junto a la casilla en vez de dejarla marcar sin efecto.
+function avisarVision() {
+  const aviso = document.getElementById("empleado-sin-vision");
+  if (!aviso) return; // motor OpenClaw: sin escritorio
+  const m = modelos.find((x) => x.valor === campo<HTMLSelectElement>("modelo").value);
+  aviso.hidden = !m || m.vision;
+  aviso.textContent = "este modelo no ve imágenes: con él no tendrá el escritorio";
+}
 // Las casillas dependen del motor: cada uno tiene sus herramientas.
 function dibujarHerramientas(motor: string, marcadas: string[]) {
   const casillas = (nombres: Record<string, string>) =>
@@ -577,6 +586,7 @@ function dibujarHerramientas(motor: string, marcadas: string[]) {
     crear("span", "subtitulo", "adicionales: actívalas solo si el puesto las necesita"),
     ...casillas(oc ? NOMBRES_OC_ADICIONALES : NOMBRES_ADICIONALES),
   );
+  avisarVision();
 }
 // OpenClaw solo corre con el qwen incluido.
 function permitirMotor() {
