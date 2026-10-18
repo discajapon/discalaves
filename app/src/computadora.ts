@@ -341,12 +341,8 @@ export class Computadora {
       `f="${perfil}/Default/Preferences"; [ -f "$f" ] && sed -i ` +
       `-e 's/"exit_type":"[A-Za-z]*"/"exit_type":"Normal"/' -e 's/"exited_cleanly":false/"exited_cleanly":true/' "$f"; exec "$@"`;
     await motorOk([
-      "exec", "-d", this.nombre, ...SIN_CAPACIDADES, "sh", "-c", marcarCerrado, "chromium",
-      "chromium", "--no-sandbox", // el aislamiento lo da el contenedor
-      "--test-type", // sin la barra de aviso de --no-sandbox
-      "--hide-crash-restore-bubble",
-      "--no-first-run", "--no-default-browser-check", "--start-maximized", "--lang=es-ES",
-      "--remote-debugging-port=9222", `--user-data-dir=${perfil}`, "about:blank",
+      // navegador (en la imagen) lleva el perfil y el puerto de depuración: el mismo que abre el panel del escritorio.
+      "exec", "-d", this.nombre, ...SIN_CAPACIDADES, "sh", "-c", marcarCerrado, "navegador", "navegador", "about:blank",
     ]);
     const direccion = `http://${await this.puerto(9223)}`;
     for (let i = 0; i < 80; i++) {
