@@ -70,6 +70,11 @@ async function main() {
       assert.equal(leerXcursor(fs.readFileSync(guardado))[0].xhot, 8, "un error no debe tocar el cursor guardado");
     }
 
+    // Volver al de Discalaves.
+    await w.click("#config-cursor-restablecer");
+    await w.waitForFunction(() => /neón de Discalaves/.test(document.getElementById("config-cursor-estado")!.textContent ?? ""));
+    assert.equal(fs.existsSync(guardado), false);
+    assert.equal(await w.isVisible("#config-cursor-restablecer"), false);
     console.log("configuración (cursor): ok");
   } finally {
     await app.close().catch(() => {});
