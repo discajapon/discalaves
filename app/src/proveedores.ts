@@ -95,6 +95,7 @@ export interface Pedido {
   alTexto: (t: string) => void;
   modoTexto?: boolean; // sin herramientas nativas: órdenes escritas como texto (modo-texto.ts)
   respetar429?: boolean; // servidor remoto: ante un 429 espera lo que pida y repite (hasta 3 veces)
+  ranura?: number; // llama-server: ranura fija (id_slot) para conservar la caché de esta conversación
 }
 
 // ---- Adaptador compatible con OpenAI (/chat/completions en streaming) ----
@@ -131,6 +132,7 @@ async function unTurnoOpenAI(p: Pedido): Promise<Turno> {
     stream_options: { include_usage: true },
     ...(p.herramientas.length && !marca && { tools: p.herramientas }),
     ...(marca && { stop: [cierra(marca)] }),
+    ...(p.ranura !== undefined && { id_slot: p.ranura }),
     messages: [{ role: "system", content: marca ? `${p.sistema}\n\n${instrucciones(marca, p.herramientas)}` : p.sistema }, ...(marca ? aTexto(p.mensajes, marca) : p.mensajes)],
   };
   const r = await fetch(`${p.url}/chat/completions`, {
