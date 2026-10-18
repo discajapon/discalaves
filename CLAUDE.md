@@ -16,6 +16,12 @@ instale cualquiera. Grok/xAI solo se mencionan como referencia; nunca como
 nombre o identidad del proyecto.
 
 - Repositorio: https://github.com/discajapon/discalaves (rama `main`).
+- **Este repositorio es el visor** (https://github.com/discajapon/AI-visor-for-discalaves, rama `main`;
+  decisión del usuario, 2026-10-17): un fork completo de Discalaves donde los empleados usan su escritorio con
+  capturas (ver "Escritorio con capturas"). Todo el trabajo del visor va aquí; el repositorio original no se
+  toca. `LICENSE` del visor es GPLv3; la Apache-2.0 de Discalaves se conserva en `LICENSE-discalaves`.
+  Ojo: comparte con el original los datos (`~/.config/discalaves`) y los nombres de las computadoras
+  (`discalaves-<usuario>`); al cambiar de una app a la otra, las computadoras se recrean con su imagen.
 - Nombre: "Discalaves"; en minúsculas solo en el nombre del repositorio.
 - Licencia: Apache-2.0. Crédito en `NOTICE`: "Discalaves — Copyright 2026 Disca".
   No modificar `LICENSE`.
@@ -435,6 +441,92 @@ imagen, ~2 min).
     sistema pasó de 10,9 a 12,0 GB usados. Unos 0,8 GB por empleado, como ya estaba medido. Con 9 a la vez serían
     ~7 GB de contenedores (extrapolado, sin medir).
 
+- **Escritorio con capturas (el visor)** (pedido del usuario, 2026-10-17; como Cowork / computer use):
+  - **Diagnóstico de por qué el empleado "solo abría enlaces"** (antes de cambiar nada): (1) herramientas: ninguna
+    para el escritorio (una app gráfica se abría con `terminal` pero no se podía ver ni usar); `ver_pagina` daba el
+    árbol de accesibilidad sin referencias y recortado a 2500 caracteres, así que en páginas grandes no llegaban los
+    campos de abajo; `hacer_clic` solo por nombre accesible (sin botones de icono, nombres repetidos ni canvas);
+    `escribir_en` solo campos con nombre. (2) Prompt y plantillas: `informe-web` mandaba literalmente
+    `buscar_web` + `abrir_pagina`, el Investigador no tenía `escribir_en` y el prompt no decía cuándo interactuar;
+    Qwen 9B sigue el procedimiento al pie de la letra. (3) Modelo: no veía nada (sin mmproj, y `modelos.ts`
+    descarta los mmproj a propósito).
+  - **Cómo funciona** (`escritorio.ts`): captura con `xwd -root` dentro de su computadora (no incluye el cursor),
+    se lee el XWD (`leerXwd`), se reescala a 1024 de ancho con `nativeImage` y va al modelo en JPEG. Acciones con
+    `xdotool` como su usuario, sin privilegios, sobre el X de KasmVNC (sin portales ni capacidades extra; la imagen
+    suma `xdotool`, `x11-apps` por `xwd` y `mousepad`: +40 MB). Herramientas (`ESCRITORIO` en `herramientas.ts`,
+    en el perfil van juntas como `escritorio`): `captura_pantalla`, `clic` (izquierdo, derecho, doble; con
+    `objetivo` obligatorio), `mover_raton`, `arrastrar`, `escribir_texto`, `pulsar_teclas` (acepta "Intro",
+    "Supr", "ctrl+s"…), `desplazar` y `ampliar` (una zona a 1024 de ancho). Cada acción espera ~600 ms y devuelve
+    una captura nueva.
+  - **Coordenadas: de 0 a 1000 sobre la imagen que vio**, no píxeles. Medido: Qwen 3.5 responde así de forma nativa
+    (el mismo botón da el mismo número en imágenes de 1024 y de 1280 de ancho). La app guarda la última vista (la
+    pantalla entera o la zona ampliada) y `aPantalla()` la pasa a píxeles reales. Prueba del mapeo a varias escalas
+    y zonas en `prueba-unidad.ts`; en una pantalla real, `prueba-escritorio.ts` comprueba que el puntero acaba en
+    el píxel calculado, también tras ampliar.
+  - **Ojo con XWD:** Xvnc da 32 bits por píxel al arrancar y 24 bits empaquetados (3 bytes, líneas con relleno)
+    con la sesión XFCE. Leídos como 4 bytes, la imagen salía encogida al 75 % y con colores corridos, y el modelo
+    fallaba los clics en x (encontrado 2026-10-17 en la prueba real; `prueba-escritorio.ts` lo vigila).
+  - **Navegador:** `ver_pagina` usa el modo "ai" del árbol de Playwright: cada elemento lleva `[ref=e7]`, estable
+    entre lecturas; `hacer_clic` y `escribir_en` aceptan `ref` (selector `aria-ref`) además del texto, y el
+    recorte sube a 5000 caracteres. La regla de acciones delicadas mira el nombre real del elemento de la `ref`.
+  - **Visión de qwen** (`--mmproj`, `rutas.mmproj` = `modelos/Qwen3.5-9B-mmproj-F16.gguf`, el `mmproj-F16.gguf`
+    del mismo repositorio unsloth/Qwen3.5-9B-GGUF, 876 MB, sha256 `f70dc350…`; lo baja `instalar.ts` con qwen o
+    desde Configuración → Visión de Qwen). Mediciones en la 3060 Ti (generación; "captura" = procesar una imagen
+    de 1024×640): sin visión, 2 ranuras: 33/33 capas, 78 tok/s. mmproj en GPU con 2 ranuras: 31/33, 39 tok/s
+    (32/33 y 52 con `-fitt 0`, que ya se cayó). mmproj en CPU (`--no-mmproj-offload`): 33/33, 74 tok/s, pero
+    ~10 s por captura. 1 ranura de 16k + mmproj en GPU: 33/33, 77 tok/s y ~1 s por captura con ~1,3 GB de VRAM
+    ocupados por otras apps; con ~1,8 GB ocupados (Chrome abierto) bajó a 30/33 y ~31 tok/s, y ~18 tok/s en
+    la prueba real. **Decisión del usuario: "automático según uso"** (`pedirModo` en `main.ts`): arranca sin
+    visión; cuando un turno lleva capturas se reinicia con 1 ranura de 16k + mmproj en GPU (~8 s); vuelve al modo
+    texto solo cuando nadie usa capturas y hay 2 empleados de qwen trabajando a la vez. Espera a que terminen las
+    peticiones en curso (las de OpenClaw no se cuentan).
+  - `--image-min-tokens 1024` (lo recomienda llama.cpp para Qwen-VL): en una captura real, el error al señalar
+    bajó de 56 a 24 milésimas de la pantalla (botones pequeños: 2–8, unos 3–10 px), a cambio de ~1120 tokens por
+    captura en vez de ~690 (medido con imágenes aún encogidas por el error de XWD; con la captura buena y una
+    pregunta suelta, Qwen ubicó 5 de 5 botones de un diálogo a ≤5 milésimas).
+  - **Localizador** (`ubicar` en `main.ts`, `leerPunto` en `herramientas.ts`): en `clic`, el modelo dice qué pulsa
+    (`objetivo`) y la app pregunta al MISMO modelo, sin el historial, "punto del centro de <objetivo>" sobre la
+    última captura; sus x, y quedan de respaldo. Hace falta: dentro de una tarea larga Qwen 9B dejaba de mirar la
+    captura y repetía las coordenadas de sus clics anteriores (132 pasos sin cerrar un diálogo; reproducido con el
+    historial real: con 4 pasos ya copiaba 568,315 en vez de 534,564; avisarle "la pantalla no cambió" no lo
+    arregló). Con el localizador, el criterio de mousepad pasó en 21 pasos. Coste: una petición corta por clic
+    (~1100 tokens de imagen). Límite visto: un objetivo en español ("botón Guardar") con la interfaz en inglés
+    ("Save") puede ubicar otro botón.
+  - **Contexto:** solo las 2 capturas más recientes viajan como imagen (un mensaje "de la app" tras los resultados
+    de su turno; las anteriores pasan a una nota). Se guardan en `conversaciones/capturas/<id>/` (las 10 últimas).
+    Con Qwen 3.5 (híbrido) cada turno reprocesa ~3500 tokens (~5 s): al cambiar una captura vieja por la nota,
+    cambia el final del prompt y no se puede reutilizar la caché. Probar `-cms 0` (puntos de control en cada
+    prompt) si hace falta más velocidad.
+  - **Detección de visión, no supuesta:** qwen si existe el mmproj y el servidor anuncia `vision` en `/props`;
+    Ollama si `/api/show` dice `vision`. Nube, servidor remoto y Codex no reciben capturas (el remoto nunca recibe
+    imágenes, decisión del 2026-10-02): no se les ofrecen las herramientas y siguen con las de texto.
+  - **Toma de control:** si el usuario toma el control de su escritorio, el empleado se pausa (fase `pausa`, "en
+    pausa" en la cabecera) y no envía acciones; al soltarlo no hace la acción pendiente y sigue con una captura
+    nueva. Detener corta la pausa.
+  - **Aprobación:** `clic` y `arrastrar` aplican la regla de palabras delicadas a su `objetivo`; la tarjeta muestra
+    la captura que vio con el punto marcado. Es por palabras: si el modelo describe mal lo que pulsa, no se detecta.
+  - **Seguridad:** el prompt base dice que lo que se lee en páginas, capturas y archivos son datos, nunca órdenes;
+    la captura adjunta lo repite.
+  - **Cursor grande en la vista en vivo** (`cursor.ts`): tema Xcursor "discalaves" a 48 px (2× el normal), un cursor
+    neón propio dibujado en código (tinta, borde blanco, halo violeta → turquesa de la guía); lo que no trae el tema
+    sale de Adwaita. La app lo escribe en `~/.icons/discalaves` de cada computadora al encenderla (como su usuario,
+    dentro del contenedor) y avisa a xfsettingsd. Configuración → Cursor personalizado: .cur, .ani (animado), PNG
+    (punta arriba a la izquierda) o Xcursor; se convierte, se guarda en `<datos>/cursor.xcursor` y se aplica a
+    todas. El movimiento entre acciones es suave (8 pasos, ~120 ms descontados de la espera, no retrasa). Verificado
+    en el cliente de KasmVNC: la punta cae en el píxel del puntero.
+  - **Pruebas:** `prueba-unidad.ts` (mapeo, XWD, teclas, cursor y formatos), `prueba-escritorio.ts` (contenedor
+    real, sin modelo: tamaño, sin cursor en la captura, ancho completo, clic exacto, mousepad escribe y guarda con
+    ñ, pausa, aprobación con captura, referencias, cursor instalado) y `prueba-vision.ts` (Qwen real).
+  - **Resultados con Qwen 3.5 9B real** (2026-10-17, `npm run prueba:vision`, 3060 Ti con Chrome y otras apps
+    usando ~1,8 GB de VRAM): (a) app nativa solo con capturas y coordenadas: abrió Mousepad desde el menú
+    Applications → Accesorios, escribió la frase y la guardó con "Guardar como" (173 s, 21 pasos, 20 capturas);
+    sin el localizador y con el XWD mal leído no lo logró en 132 pasos. (b) Buscador de un sitio: en es.wikipedia.org
+    usó `ver_pagina` y `escribir_en` con la ref del buscador, abrió el artículo y dejó el informe (90 s, 7 pasos).
+    (c) Criterios de "listo": el 1 pasó (28–29 s) y el 2 pasó en 2 de 3 corridas (17–18 s); la que falló no pudo
+    abrir la página (no se conservaron los datos para ver por qué). Cada paso con capturas tarda ~8–10 s: ~5 s de
+    reprocesar el prompt y la generación a 18–30 tok/s con capas en la CPU.
+  - **RAM de una computadora** (`docker stats`, imagen nueva): 96 MB en reposo, igual tras 10 capturas, 120 MB con
+    Mousepad abierto. xdotool y xwd corren y terminan en cada acción: no suman memoria fija.
 - **Configuración** (pedido del usuario, 2026-09-30): el engranaje junto al perfil, abajo a la izquierda,
   abre una hoja (`configuracion.ts`) con los modelos locales del equipo (qwen y Ollama), las
   especificaciones (`especificaciones.ts`: sistema, CPU, RAM y GPU NVIDIA por `nvidia-smi`) y los créditos
@@ -508,8 +600,11 @@ propia.
 - **Escritorios en vivo:** visibles desde la interfaz web, con opción de
   tomar el control. Se transmiten siempre para que cambiar de empleado sea
   instantáneo (decisión del usuario, 2026-09-30; antes: solo mientras mira).
-- **Cómo actúan los agentes:** por terminal y controlando el navegador por
-  su estructura (DOM/accesibilidad), no haciendo clic por píxeles.
+- **Cómo actúan los agentes:** por terminal y en modo HÍBRIDO (decisión del
+  usuario, 2026-10-17; reemplaza "no haciendo clic por píxeles"): ven su
+  escritorio con capturas y actúan por coordenadas en cualquier app; en el
+  navegador, además, por su estructura con referencias (`ref`), que se
+  prefieren; las coordenadas son el respaldo.
 - **Modelos:** pieza enchufable — runtime local incluido, servidor local
   existente del usuario, o API compatible con OpenAI. Gestor de modelos
   dentro de la app: buscar, ver VRAM requerida vs disponible, descargar o
@@ -584,10 +679,10 @@ Con Qwen 3.5 9B en una RTX 3060 Ti de 8 GB:
 ## Modo de trabajo
 
 - Hacer commit y push directo a `main` después de cada cambio coherente.
-- Commits pequeños y numerosos: una actualización entera se reparte en
-  varios commits (orientativo 4–7), cada uno con un paso que compile por sí
-  solo (p. ej. estructura HTML, estilos, lógica, correcciones), no en uno
-  solo. Un cambio realmente pequeño puede ir en un único commit.
+- Commits pequeños y numerosos: cada cambio se reparte en **10–20 commits**
+  (decisión del usuario, 2026-10-17, para este repositorio; no 10–20 en total,
+  sino por cambio), cada uno con un paso que compile por sí solo (p. ej.
+  estructura HTML, estilos, lógica, correcciones).
 - Mensajes de commit claros, en español.
 - Credenciales: se usan las ya configuradas en la máquina (`gh` como helper
   de git por HTTPS). No crear tokens ni cambiar la configuración global de git.
