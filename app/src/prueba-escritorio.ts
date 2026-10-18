@@ -10,7 +10,7 @@ import path from "node:path";
 import { app, nativeImage } from "electron";
 import { borrar, computadoraDe, usarCursor } from "./computadora";
 import { cursorNeon, escribirXcursor } from "./cursor";
-import { aPantalla, escritorioDe } from "./escritorio";
+import { aNormal, aPantalla, escritorioDe } from "./escritorio";
 import { ejecutarHerramienta, type Marca } from "./herramientas";
 import { navegadorDe } from "./navegador";
 
@@ -83,8 +83,17 @@ async function main() {
     await computadora.ejecutar(["sh", "-c", "rm -f ~/nota.txt; (mousepad >/dev/null 2>&1 &)"], { tiempo: 10_000 });
     for (let i = 0; i < 40 && !(await computadora.ejecutar(["xdotool", "search", "--onlyvisible", "--class", "mousepad"], { tiempo: 5000 })).salida.trim(); i++) await esperar(250);
     await esperar(800);
-    r = await correr("escribir_texto", { texto: "Hola desde Discalaves, con ñ y tildes: canción." });
+    r = await correr("escribir_texto", { texto: "Hola desde Discalaves" });
     assert.equal(r.codigo, 0, r.salida);
+    // Centro de la ventana de mousepad (en 0–1000 de la captura): ahí está su área de texto.
+    const g = (await computadora.ejecutar(["sh", "-c", "xdotool search --onlyvisible --class mousepad | head -1 | xargs xdotool getwindowgeometry --shell"], { tiempo: 5000 })).salida;
+    const [gx, gy, gw, gh] = ["X", "Y", "WIDTH", "HEIGHT"].map((k) => Number(g.match(new RegExp(`^${k}=(\\d+)`, "m"))![1]));
+    await e.capturar();
+    const centro = aNormal(gx + gw / 2, gy + gh / 2, { x: 0, y: 0, ancho: 1280, alto: 800 });
+    // Clic triple: selecciona la línea y lo que se escribe la reemplaza.
+    r = await correr("clic", { ...centro, objetivo: "texto del editor", boton: "triple" });
+    assert.equal(r.codigo, 0, r.salida);
+    r = await correr("escribir_texto", { texto: "Hola desde Discalaves, con ñ y tildes: canción." });
     r = await correr("pulsar_teclas", { teclas: "ctrl+s" });
     await esperar(800);
     r = await correr("escribir_texto", { texto: `/home/escritorio-prueba/nota.txt` });
