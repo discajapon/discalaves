@@ -79,6 +79,18 @@ async function main() {
     r = await correr("mover_raton", { x: 500, y: 500 });
     assert.deepEqual(await raton(), { x: 480, y: 300 }, "clic en la imagen ampliada");
 
+    // Trampas del escritorio que encontró Qwen (2026-10-18): el lanzador de archivos del panel preguntaba qué
+    // programa usar (no había gestor de archivos) y el de navegador debe abrir el Chromium de la app (CDP en 9222).
+    const sh = async (c: string) => (await computadora.ejecutar(["sh", "-c", c], { tiempo: 20_000 })).salida.trim();
+    await sh("(exo-open --launch FileManager >/dev/null 2>&1 &)");
+    for (let i = 0; i < 40 && !(await sh("xdotool search --onlyvisible --class thunar")); i++) await esperar(250);
+    assert.ok(await sh("xdotool search --onlyvisible --class thunar"), "el lanzador de archivos no abrió Thunar");
+    assert.equal(await sh("xdotool search --onlyvisible --name 'Choose Preferred' | wc -l"), "0", "pregunta qué programa usar");
+    await sh("pkill -x thunar; true");
+    assert.match(await sh("grep -h '^WebBrowser=' /etc/xdg/xfce4/helpers.rc"), /^WebBrowser=navegador$/);
+    // Botones de los diálogos arriba: el de "Guardar como" es más alto que la pantalla y los de abajo no se veían.
+    assert.equal(await sh("xfconf-query -c xsettings -p /Gtk/DialogsUseHeader"), "true");
+
     // Una app nativa con teclado y ratón: mousepad, escribir una frase y guardar con ctrl+s.
     await computadora.ejecutar(["sh", "-c", "rm -f ~/nota.txt; (mousepad >/dev/null 2>&1 &)"], { tiempo: 10_000 });
     for (let i = 0; i < 40 && !(await computadora.ejecutar(["xdotool", "search", "--onlyvisible", "--class", "mousepad"], { tiempo: 5000 })).salida.trim(); i++) await esperar(250);
@@ -101,10 +113,11 @@ async function main() {
     const t0 = Date.now();
     r = await correr("esperar", { segundos: 1 });
     assert.ok(r.imagen && Date.now() - t0 >= 1000, r.salida);
-    // Una acción (orden + espera a que la pantalla se asiente + captura) en menos de 1 s: antes ~1,05 s un clic.
+    // Una acción (orden + al menos 0,6 s hasta que la pantalla se asiente + captura) en una sola llamada: sin
+    // atascarse esperando a una pantalla que no cambia (como mucho ~1,5 s).
     const t1 = Date.now();
     r = await correr("mover_raton", { x: 10, y: 990 });
-    assert.ok(Date.now() - t1 < 1000, `una acción tardó ${Date.now() - t1} ms`);
+    assert.ok(Date.now() - t1 >= 600 && Date.now() - t1 < 1500, `una acción tardó ${Date.now() - t1} ms`);
     r = await correr("pulsar_teclas", { teclas: "ctrl+s" });
     await esperar(800);
     r = await correr("escribir_texto", { texto: `/home/escritorio-prueba/nota.txt` });
