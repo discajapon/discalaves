@@ -101,6 +101,10 @@ async function main() {
     const t0 = Date.now();
     r = await correr("esperar", { segundos: 1 });
     assert.ok(r.imagen && Date.now() - t0 >= 1000, r.salida);
+    // Una acción (orden + espera a que la pantalla se asiente + captura) en menos de 1 s: antes ~1,05 s un clic.
+    const t1 = Date.now();
+    r = await correr("mover_raton", { x: 10, y: 990 });
+    assert.ok(Date.now() - t1 < 1000, `una acción tardó ${Date.now() - t1} ms`);
     r = await correr("pulsar_teclas", { teclas: "ctrl+s" });
     await esperar(800);
     r = await correr("escribir_texto", { texto: `/home/escritorio-prueba/nota.txt` });
