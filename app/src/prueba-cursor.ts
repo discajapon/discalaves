@@ -116,6 +116,17 @@ async function main() {
 
     await pc.ejecutar(["pkill", "-x", "mousepad"], { tiempo: 5000 }); // que no tape el fondo
     await esperar(800);
+    // 3) Animado (.ani): en la vista en vivo deben verse sus dos colores.
+    usarCursor(convertir(aniDosColores(), "anim.ani", png));
+    await esperar(3000);
+    let vistos = 0;
+    for (let i = 0; i < 6; i++) {
+      const [r, a] = [await mirar(fondo.x, fondo.y, rojo, 150 + i * 70), await mirar(fondo.x, fondo.y, azul, 0)];
+      vistos |= (r.n > 200 ? 1 : 0) | (a.n > 200 ? 2 : 0);
+    }
+    console.log(`  animado: ${vistos === 3 ? "se ven los dos fotogramas" : vistos === 1 || vistos === 2 ? "solo se ve un fotograma" : "no se ve"}`);
+    assert.ok(vistos, "el cursor animado no se ve");
+
     console.log("cursor: ok");
   } finally {
     await borrar(pc).catch(() => {});
