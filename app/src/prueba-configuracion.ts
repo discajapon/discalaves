@@ -54,6 +54,13 @@ async function main() {
     assert.deepEqual([x.length, x[0].ancho, x[0].xhot, x[0].yhot, x[0].nominal], [1, 48, 8, 5, 48], "Xcursor guardado: 48 px, punto activo escalado");
     assert.equal(await w.isVisible("#config-cursor-restablecer"), true);
 
+    // Cancelar el diálogo no cambia nada.
+    await elegir(null);
+    await w.click("#config-cursor-cargar");
+    await w.waitForTimeout(500);
+    assert.match(await estado(), /propio cursor/);
+    assert.ok(fs.existsSync(guardado));
+
     console.log("configuración (cursor): ok");
   } finally {
     await app.close().catch(() => {});
