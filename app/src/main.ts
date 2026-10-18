@@ -376,10 +376,12 @@ function iniciarServidor(): Promise<boolean> {
     // Caché KV unificada: 12k por ranura, compartidos; cada conversación manda ~11k como mucho (con 16k para 3
     // conversaciones largas a la vez, llama-server rechazaba las peticiones). Si hay más empleados trabajando
     // que ranuras, llama-server los pone en cola. -ub 256: búfer de cálculo menor, para que quepan más capas.
-    // Con visión: una ranura de 16k y el mmproj en la GPU. --image-min-tokens 1024 (lo recomienda llama.cpp para
-    // ubicar cosas con Qwen-VL): medido en una captura real, el error al señalar baja de 56 a 24 milésimas de la
-    // pantalla (botones pequeños: 2–8), a cambio de ~1120 tokens por captura en vez de ~690 (2 capturas ≈ 2250).
-    ...(vision ? ["-c", "16384", "-np", "1", "--mmproj", rutas.mmproj, "--image-min-tokens", "1024"] : ["-c", String(12288 * RANURAS), "-np", String(RANURAS), "-kvu"]),
+    // Con visión: el mmproj en la GPU y 2 ranuras sobre 18k compartidos: la del empleado (hasta 16k) y otra para las
+    // preguntas cortas del localizador (ubicar), que así no le quitan su estado (con una sola ranura, cada clic le
+    // obligaba a reprocesar todo el prompt). --image-min-tokens 1024 (lo recomienda llama.cpp para ubicar cosas con
+    // Qwen-VL): medido en una captura real, el error al señalar baja de 56 a 24 milésimas de la pantalla (botones
+    // pequeños: 2–8), a cambio de ~1120 tokens por captura en vez de ~690.
+    ...(vision ? ["-c", String(16384 + 2048), "-np", "2", "-kvu", "--mmproj", rutas.mmproj, "--image-min-tokens", "1024"] : ["-c", String(12288 * RANURAS), "-np", String(RANURAS), "-kvu"]),
     "-ub", "256",
     "-ctk", "q8_0", "-ctv", "q8_0", // caché en 8 bits: 16k de contexto (páginas web) casi sin coste de VRAM
     // Margen de VRAM bajo: con el de 1 GB por defecto, en 8 GB quedan capas en CPU y va a la mitad de velocidad.
