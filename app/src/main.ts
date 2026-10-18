@@ -450,20 +450,17 @@ async function aceptaImagenes(c: Conversacion): Promise<boolean> {
   return visionOllama.get(c.modelo)!;
 }
 
-// Últimos mensajes que caben, empezando siempre en un mensaje del usuario para no partir
-// una llamada a herramienta de su resultado.
+// Últimos mensajes que caben, empezando siempre en un mensaje del usuario para no partir una llamada a herramienta
+// de su resultado. Se recorta con holgura y recordando lo ya recortado (recorte.ts): así el principio del prompt no
+// cambia de un turno a otro y llama-server reutiliza su caché.
+// ponytail: recorte, no resumen; se pierde lo que el modelo hizo al principio de una tarea muy larga.
 type MensajeOA = { role: string; content: string; [otros: string]: unknown };
+const recortes = new Map<string, Recorte>(); // por conversación, en memoria: al reabrir la app se recalcula una vez
+const salidaCorta = (texto: string) => `${texto.slice(0, 200)}\n[… salida antigua recortada para que quepa la tarea …]`;
 function contexto(c: Conversacion, vision = false): MensajeOA[] {
   const historial = historialDe(c.id);
   const limite = c.ventana ? c.ventana * CARACTERES_POR_TOKEN_UTIL : c.proveedor === "ollama" ? CONTEXTO_OLLAMA : CONTEXTO_CARACTERES;
-  let inicio = 0, caracteres = 0;
-  for (let i = historial.length - 1; i >= 0; i--) {
-    caracteres += JSON.stringify(historial[i]).length;
-    if (historial[i].de !== "yo") continue;
-    inicio = i;
-    if (caracteres > limite) break;
-  }
-  const mensajes: MensajeOA[] = historial.slice(inicio).map((m) => {
+  const todos: MensajeOA[] = historial.map((m) => {
     if (m.de === "yo") return { role: "user", content: m.texto };
     if (m.de === "herramienta") return { role: "tool", tool_call_id: m.id, content: `código de salida ${m.codigo}\n${m.salida}` };
     return {
@@ -472,28 +469,16 @@ function contexto(c: Conversacion, vision = false): MensajeOA[] {
       ...(m.llamadas && { tool_calls: m.llamadas.map((l) => ({ id: l.id, type: "function", function: { name: l.nombre, arguments: !l.argumentos.trim() || jsonValido(l.argumentos) ? l.argumentos : "{}" } })) }),
     };
   });
-  // Una sola tarea larga puede no caber: se acortan las salidas de herramientas más antiguas
-  // (las últimas quedan enteras) hasta entrar en la ventana.
-  // Si aun acortadas no caben (tareas de cientos de pasos), se descartan los pasos más antiguos, de a uno con sus
-  // resultados, y se deja un aviso. Sin esto el prompt llenaba el contexto del servidor y la generación se cortaba
-  // a mitad de una llamada a herramienta (visto: "Failed to parse tool call arguments", n_tokens = 24575).
-  // ponytail: recorte, no resumen; se pierde lo que el modelo hizo al principio de la tarea.
-  let total = JSON.stringify(mensajes).length;
-  const herramientas = mensajes.filter((m) => m.role === "tool");
-  for (const m of herramientas.slice(0, -3)) {
-    if (total <= limite) break;
-    if (m.content.length <= 300) continue;
-    const corto = `${m.content.slice(0, 200)}\n[… salida antigua recortada para que quepa la tarea …]`;
-    total -= m.content.length - corto.length;
-    m.content = corto;
-  }
-  let omitidos = 0;
-  while (total > limite && mensajes.length > 4) {
-    do total -= JSON.stringify(mensajes.splice(1, 1)[0]).length; while (mensajes[1]?.role === "tool");
-    omitidos++;
-  }
-  if (omitidos) mensajes[0].content += "\n[… se omitieron los pasos más antiguos de esta tarea para que quepa; sigue desde lo que ves …]";
-  return conCapturas(c, historial.slice(inicio), mensajes, vision);
+  const piezas: Pieza[] = todos.map((m) => {
+    const largo = JSON.stringify(m).length;
+    const corto = m.role === "tool" && m.content.length > 300 ? largo - m.content.length + salidaCorta(m.content).length : largo;
+    return { rol: m.role as Pieza["rol"], largo, corto };
+  });
+  const r = recortar(piezas, limite, recortes.get(c.id));
+  recortes.set(c.id, r);
+  const mensajes = todos.flatMap((m, i) => (i < r.inicio || r.fuera.has(i) ? [] : [r.cortas.has(i) ? { ...m, content: salidaCorta(m.content) } : m]));
+  if (r.fuera.size) mensajes[0].content += "\n[… se omitieron los pasos más antiguos de esta tarea para que quepa; sigue desde lo que ves …]";
+  return conCapturas(c, historial.slice(r.inicio), mensajes, vision);
 }
 
 // Capturas: solo las CAPTURAS_EN_CONTEXTO más recientes viajan como imagen, en un mensaje tras los resultados de
