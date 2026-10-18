@@ -46,6 +46,14 @@ async function main() {
     assert.match(await estado(), /neón de Discalaves/);
     assert.equal(await w.isVisible("#config-cursor-restablecer"), false);
 
+    // Uno propio: se convierte, se guarda en sus datos y la hoja lo dice.
+    await elegir(archivos.bueno);
+    await w.click("#config-cursor-cargar");
+    await w.waitForFunction(() => /propio cursor/.test(document.getElementById("config-cursor-estado")!.textContent ?? ""));
+    const x = leerXcursor(fs.readFileSync(guardado));
+    assert.deepEqual([x.length, x[0].ancho, x[0].xhot, x[0].yhot, x[0].nominal], [1, 48, 8, 5, 48], "Xcursor guardado: 48 px, punto activo escalado");
+    assert.equal(await w.isVisible("#config-cursor-restablecer"), true);
+
     console.log("configuración (cursor): ok");
   } finally {
     await app.close().catch(() => {});
