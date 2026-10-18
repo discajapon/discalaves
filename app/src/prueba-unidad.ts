@@ -286,6 +286,10 @@ void (async () => {
   })();
   x = leerXcursor(convertir(curVarios, "yaru.cur", sinPng))[0];
   assert.deepEqual([x.ancho, x.xhot, x.yhot, x.argb[0]], [48, 6, 3, 0xff000030], "la imagen de 48 y su propio punto activo");
+  // .ico: esos campos son planos y bits, no un punto activo.
+  const ico = cur(32, 1, 32, 0xffffffff);
+  ico.writeUInt16LE(1, 2);
+  assert.deepEqual([leerXcursor(convertir(ico, "icono.ico", sinPng))[0].xhot, leerXcursor(convertir(ico, "icono.ico", sinPng))[0].yhot], [0, 0]);
   // PNG (decodificado por nativeImage en la app): punto activo arriba a la izquierda.
   const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
   x = leerXcursor(convertir(png, "mio.png", () => ({ ancho: 24, alto: 24, bgra: Buffer.alloc(24 * 24 * 4, 0xff) })))[0];
