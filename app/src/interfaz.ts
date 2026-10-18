@@ -15,7 +15,7 @@ interface Conversacion {
   estado: EstadoQwen; ultimo?: MensajeChat;
   equipo?: boolean; colores?: string[]; // el hilo compartido del equipo
 }
-interface Modelo { proveedor: string; modelo: string; valor: string; detalle: string; herramientas: boolean; origen: "local" | "nube" | "remoto"; donde: string; aviso?: string; predeterminado?: boolean }
+interface Modelo { proveedor: string; modelo: string; valor: string; detalle: string; herramientas: boolean; vision: boolean; origen: "local" | "nube" | "remoto"; donde: string; aviso?: string; predeterminado?: boolean }
 interface Identidad { nombre: string; rol: string; color: string; modelo: string; herramientas: string[]; instrucciones: string; motor?: string }
 interface Gasto { tope?: number; precio?: { entrada: number | string; salida: number | string } }
 interface ServidorVista { modelos: string[]; modelo?: string; contexto?: number; contextoDelServidor: boolean; herramientas?: "nativas" | "texto"; aceptado: boolean; predeterminado: boolean; aviso: string; peticiones: number }
