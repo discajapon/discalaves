@@ -67,7 +67,7 @@ interface Conversacion {
   ventana?: number; // tokens de contexto del modelo remoto (se averigua al empezar un turno)
   openclaw?: boolean; // su bucle lo hace OpenClaw (solo con qwen, ver tareaOpenClaw)
 }
-interface Modelo { proveedor: Conversacion["proveedor"]; modelo: string; valor: string; detalle: string; herramientas: boolean; vision?: boolean; origen: Origen; donde: string; aviso?: string; predeterminado?: boolean }
+interface Modelo { proveedor: Conversacion["proveedor"]; modelo: string; valor: string; detalle: string; herramientas: boolean; vision: boolean; origen: Origen; donde: string; aviso?: string; predeterminado?: boolean }
 const QWEN_MODELO = "Qwen3.5-9B";
 // qwen (llama-server propio) es opcional: sin su runtime y su modelo, el motor por defecto es Ollama.
 const hayQwen = () => fs.existsSync(SERVIDOR) && fs.existsSync(MODELO);
