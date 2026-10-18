@@ -396,6 +396,7 @@ async function pruebaApp(base: string) {
     const todos = (await api<any[]>("conversaciones")).filter((c) => !c.equipo);
     assert.ok(todos.every((c) => c.origen === "remoto" && c.modelo === "falso-criterio1"), "todos debían quedar en el servidor remoto");
     assert.equal((await api<{ modelos: any[] }>("modelos")).modelos.find((m) => m.predeterminado)?.valor, `nube:${r.id}:falso-criterio1`);
+    assert.equal((await api<{ modelos: any[] }>("modelos")).modelos.find((m) => m.predeterminado)?.vision, false, "el servidor remoto no recibe capturas");
     // sin precios ni tope: un empleado remoto se crea sin ellos
     const remoto = async (nombre: string, modelo: string) => crear(nombre, `nube:${r.id}:${modelo}`, { precio: undefined, tope: undefined });
     const unoNativo = await remoto("Remoto Nativo", "falso-criterio1");
