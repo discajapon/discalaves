@@ -23,6 +23,8 @@ RUN apt-get update \
       xdotool x11-apps \
       # Editor de texto de XFCE: una app nativa para trabajar con capturas.
       mousepad \
+      # Gestor de archivos: el panel ya trae su lanzador (sin él, preguntaba qué programa usar).
+      thunar \
  && curl -fsSL -o /tmp/kasmvnc.deb \
       "https://github.com/kasmtech/KasmVNC/releases/download/v${KASMVNC_VERSION}/kasmvncserver_trixie_${KASMVNC_VERSION}_amd64.deb" \
  && echo "${KASMVNC_SHA256}  /tmp/kasmvnc.deb" | sha256sum -c - \
@@ -40,9 +42,15 @@ COPY kasmvnc.yaml /etc/kasmvnc/kasmvnc.yaml
 COPY xfce4-session.xml /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xfce4-session.xml
 COPY xsettings.xml /etc/xdg/xfce4/xfconf/xfce-perchannel-xml/xsettings.xml
 COPY iniciar.sh /usr/local/bin/iniciar
+COPY navegador /usr/local/bin/navegador
+# El lanzador de navegador del panel abre el mismo Chromium que usa la app (ver navegador).
+COPY navegador.desktop /usr/share/xfce4/helpers/navegador.desktop
+COPY discalaves.gschema.override /usr/share/glib-2.0/schemas/90_discalaves.gschema.override
 # "sudo" de esta computadora: la app ejecuta como root los comandos que EMPIEZAN por sudo (exec -u 0);
 # este sustituto hace que un sudo a mitad de comando funcione dentro de ese root y lo explique fuera de él.
-RUN chmod 755 /usr/local/bin/iniciar \
+RUN chmod 755 /usr/local/bin/iniciar /usr/local/bin/navegador \
+ && sed -i '/^WebBrowser=/d' /etc/xdg/xfce4/helpers.rc && echo "WebBrowser=navegador" >> /etc/xdg/xfce4/helpers.rc \
+ && /usr/lib/x86_64-linux-gnu/glib-2.0/glib-compile-schemas /usr/share/glib-2.0/schemas \
  && printf '#!/bin/sh\n[ "$(id -u)" = 0 ] && exec "$@"\necho "sudo: pon sudo al principio del comando para ejecutarlo como root de tu computadora" >&2\nexit 1\n' > /usr/local/bin/sudo \
  && chmod 755 /usr/local/bin/sudo
 
