@@ -202,13 +202,31 @@ function deBgra({ ancho, alto, bgra }: { ancho: number; alto: number; bgra: Buff
   return { ancho, alto, xhot, yhot, retardo: 0, argb };
 }
 
-// Lleva cada imagen a TAMANO de alto como máximo (vecino más cercano: los cursores son pixel art) y escala el punto activo.
-function ajustar(im: Imagen): Imagen {
+// Lleva cada imagen a TAMANO de lado mayor y escala el punto activo. Al ampliar, vecino más cercano (los cursores
+// pequeños son pixel art); al reducir, el promedio de los píxeles que caen en cada uno (si no, una imagen grande
+// sale dentada y con huecos). Los píxeles son premultiplicados: se pueden promediar canal a canal.
+export function ajustar(im: Imagen): Imagen {
   const f = TAMANO / Math.max(im.ancho, im.alto);
   if (f === 1) return im;
   const ancho = Math.max(1, Math.round(im.ancho * f)), alto = Math.max(1, Math.round(im.alto * f));
   const argb = new Uint32Array(ancho * alto);
-  for (let y = 0; y < alto; y++) for (let x = 0; x < ancho; x++) argb[y * ancho + x] = im.argb[Math.min(im.alto - 1, Math.floor(y / f)) * im.ancho + Math.min(im.ancho - 1, Math.floor(x / f))];
+  for (let y = 0; y < alto; y++) {
+    for (let x = 0; x < ancho; x++) {
+      if (f > 1) {
+        argb[y * ancho + x] = im.argb[Math.min(im.alto - 1, Math.floor(y / f)) * im.ancho + Math.min(im.ancho - 1, Math.floor(x / f))];
+        continue;
+      }
+      const [x0, x1] = [Math.floor(x / f), Math.max(Math.floor(x / f) + 1, Math.min(im.ancho, Math.floor((x + 1) / f)))];
+      const [y0, y1] = [Math.floor(y / f), Math.max(Math.floor(y / f) + 1, Math.min(im.alto, Math.floor((y + 1) / f)))];
+      const suma = [0, 0, 0, 0];
+      for (let yy = y0; yy < y1; yy++) for (let xx = x0; xx < x1; xx++) {
+        const p = im.argb[yy * im.ancho + xx];
+        suma[0] += p >>> 24; suma[1] += (p >>> 16) & 255; suma[2] += (p >>> 8) & 255; suma[3] += p & 255;
+      }
+      const n = (x1 - x0) * (y1 - y0);
+      argb[y * ancho + x] = ((Math.round(suma[0] / n) << 24) | (Math.round(suma[1] / n) << 16) | (Math.round(suma[2] / n) << 8) | Math.round(suma[3] / n)) >>> 0;
+    }
+  }
   return { ...im, ancho, alto, xhot: Math.min(ancho - 1, Math.round(im.xhot * f)), yhot: Math.min(alto - 1, Math.round(im.yhot * f)), argb };
 }
 
