@@ -194,7 +194,7 @@ if [ -n "$s" ]; then
   export $(tr '\\0' '\\n' < /proc/$s/environ | grep '^DBUS_SESSION_BUS_ADDRESS=')
   xfconf-query -c xsettings -p /Gtk/CursorThemeName -s Adwaita && xfconf-query -c xsettings -p /Gtk/CursorThemeName -s discalaves || true
 fi
-xsetroot -cursor_name left_ptr || true`;
+XCURSOR_THEME=discalaves XCURSOR_SIZE=48 xsetroot -cursor_name left_ptr || true`;
 
 export class Computadora {
   readonly nombre: string;
