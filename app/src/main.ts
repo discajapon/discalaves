@@ -759,7 +759,7 @@ ipcMain.handle("modelos", async () => {
       nube.push({
         proveedor: p.tipo === "codex" ? "codex" : "nube", modelo: m.modelo, valor: p.tipo === "codex" ? `codex:${m.modelo}` : `nube:${p.id}:${m.modelo}`,
         detalle: p.tipo === "codex" ? "ChatGPT vía Codex · no oficial, puede dejar de funcionar" : p.nombre,
-        herramientas: m.herramientas, origen, donde, aviso: avisoPrivacidad(origen, donde),
+        herramientas: m.herramientas, vision: false, origen, donde, aviso: avisoPrivacidad(origen, donde),
         ...(`nube:${p.id}:${m.modelo}` === modeloPorDefecto() && { predeterminado: true }),
       });
     }
