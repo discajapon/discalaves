@@ -112,7 +112,11 @@ export class Escritorio {
   async capturar(zona?: Vista): Promise<Captura> {
     const r = await this.computadora.ejecutar(["sh", "-c", "xwd -root -silent 2>/dev/null | base64 -w0"], { tiempo: 20_000 });
     if (r.codigo !== 0) throw new Error(`no pude capturar su pantalla: ${r.salida.trim().slice(0, 200)}`);
-    const { ancho, alto, bgra } = leerXwd(Buffer.from(r.salida, "base64"));
+    return this.procesar(r.salida, zona);
+  }
+
+  private procesar(base64: string, zona?: Vista): Captura {
+    const { ancho, alto, bgra } = leerXwd(Buffer.from(base64, "base64"));
     const { nativeImage } = require("electron") as typeof import("electron"); // solo en Electron (las pruebas de unidad no la usan)
     let imagen = nativeImage.createFromBitmap(bgra, { width: ancho, height: alto });
     const vista = zona ?? { x: 0, y: 0, ancho, alto };
