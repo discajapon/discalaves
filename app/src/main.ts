@@ -311,6 +311,7 @@ async function modelosOllama(): Promise<Modelo[] | null> {
           donde: "Ollama",
           detalle: [m.details?.parameter_size, m.details?.quantization_level].filter(Boolean).join(" · "),
           herramientas: capacidades.includes("tools"),
+          vision: capacidades.includes("vision"),
           chat: capacidades.includes("completion"), // los de solo embeddings no conversan
         };
       }),
