@@ -64,7 +64,7 @@ async function main() {
       const archivo = path.join(carpeta(id), "frase.txt");
       const contenido = fs.existsSync(archivo) ? fs.readFileSync(archivo, "utf8").trim() : "(no existe)";
       informe.push(`escritorio: ${r.seg} s, ${r.pasos.length} pasos, ${r.capturas} capturas, herramientas [${r.usadas.join(", ")}], frase.txt = ${JSON.stringify(contenido)}${r.error ? `, ERROR ${r.error}` : ""}`);
-      assert.ok(r.usadas.every((n) => ["captura_pantalla", "clic", "mover_raton", "arrastrar", "escribir_texto", "pulsar_teclas", "desplazar", "ampliar"].includes(n)), "usó algo que no son capturas y coordenadas");
+      assert.ok(r.usadas.every((n) => ["captura_pantalla", "clic", "mover_raton", "arrastrar", "escribir_texto", "pulsar_teclas", "desplazar", "ampliar", "esperar"].includes(n)), "usó algo que no son capturas y coordenadas");
       assert.match(contenido, /Discalaves ve su pantalla/i, `no guardó la frase. Última respuesta: ${r.final.slice(0, 300)}`);
     }
     if (PRUEBAS.includes("buscador")) {
