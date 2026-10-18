@@ -278,7 +278,7 @@ export class Computadora {
     for (let i = 0; i < 120; i++) {
       if (await responde(`http://${this.puertoPantalla}/`, { headers: { authorization: this.autorizacion("ver") } })) {
         this.encendida = true;
-        await this.ponerCursor().catch(() => {}); // sin cursor grande sigue funcionando
+        void this.ponerCursor().catch(() => {}); // en segundo plano (espera a la sesión); sin cursor grande sigue funcionando
         return;
       }
       await esperar(250);
