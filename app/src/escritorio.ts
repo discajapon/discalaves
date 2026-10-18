@@ -8,6 +8,21 @@ import type { Computadora } from "./computadora";
 
 export const ANCHO_IMAGEN = 1024; // ancho de las capturas que ve el modelo (~1120 tokens con Qwen 3.5 y --image-min-tokens 1024)
 const ESPERA = 600; // ms para que la pantalla se asiente tras una acción, antes de la captura nueva
+// Tras una acción, la captura nueva se toma en cuanto la pantalla está quieta (dos capturas seguidas iguales, cada
+// ~0,1 s): si cambió, enseguida; si no cambió nada, a los ~0,4 s; si sigue moviéndose, como mucho ~1,2 s (una app
+// que tarda en abrir: para eso está esperar). Antes era una espera fija de 600 ms y tres llamadas a la computadora.
+const ACTUAR = [
+  'f=/tmp/.discalaves-captura.$$',
+  'xwd -root -silent > "$f" 2>/dev/null; antes=$(cksum < "$f")',
+  'xdotool "$@" 2> "$f.err" || { cat "$f.err"; rm -f "$f" "$f.err"; exit 3; }',
+  'previa=$antes; i=0',
+  'while [ $i -lt 8 ]; do',
+  '  sleep 0.1; xwd -root -silent > "$f" 2>/dev/null; ahora=$(cksum < "$f"); i=$((i+1))',
+  '  [ "$ahora" = "$previa" ] && { [ "$ahora" != "$antes" ] || [ $i -ge 3 ]; } && break',
+  '  previa=$ahora',
+  'done',
+  'base64 -w0 "$f"; rm -f "$f" "$f.err"',
+].join("\n");
 const PASOS = 8; // pasos del movimiento suave del ratón (se ve en vivo, no salta)
 const ENTRE_PASOS = 0.015; // s entre pasos: ~120 ms, que se descuentan de ESPERA (no retrasa al empleado)
 
@@ -113,6 +128,13 @@ export class Escritorio {
     const r = await this.computadora.ejecutar(["sh", "-c", "xwd -root -silent 2>/dev/null | base64 -w0"], { tiempo: 20_000 });
     if (r.codigo !== 0) throw new Error(`no pude capturar su pantalla: ${r.salida.trim().slice(0, 200)}`);
     return this.procesar(r.salida, zona);
+  }
+
+  // Acción de xdotool, espera a que la pantalla se asiente y captura nueva, en una sola llamada (ACTUAR).
+  private async actuar(args: string[]): Promise<Captura> {
+    const r = await this.computadora.ejecutar(["sh", "-c", ACTUAR, "sh", ...args], { tiempo: 20_000 });
+    if (r.codigo !== 0) throw new Error(`no pude actuar en su escritorio: ${r.salida.trim().slice(0, 200)}`);
+    return this.procesar(r.salida);
   }
 
   private procesar(base64: string, zona?: Vista): Captura {
