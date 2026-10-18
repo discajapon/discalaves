@@ -535,7 +535,9 @@ async function turno(c: Conversacion, interfaz: Electron.WebContents, senal: Abo
       await pedirModo(usandoVision.size ? "vision" : trabajandoQwen >= 2 ? "texto" : modoServidor);
       enVuelo++;
       try {
-        return await turnoOpenAI({ ...pedido, url: `http://127.0.0.1:${PUERTO}/v1`, clave: CLAVE });
+        // Con visión, la ranura 0 es la del empleado y la 1 la del localizador (ubicar): si llama-server eligiera
+        // (por antigüedad, con las dos vacías eligió la 1), cada pregunta del localizador vaciaría la del empleado.
+        return await turnoOpenAI({ ...pedido, url: `http://127.0.0.1:${PUERTO}/v1`, clave: CLAVE, ...(modoServidor === "vision" && { ranura: 0 }) });
       } finally {
         enVuelo--;
       }
