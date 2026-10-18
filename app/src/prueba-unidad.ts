@@ -303,6 +303,7 @@ void (async () => {
   assert.throws(() => convertir(Buffer.from("hola, esto no es un cursor"), "x.txt", sinPng), /formato no reconocido/);
   assert.throws(() => convertir(Buffer.from("xx"), "x.cur", sinPng), /vacío/);
   assert.throws(() => convertir(cur(16, 3, 5, 0xff00ff00).subarray(0, 300), "roto.cur", sinPng), /cortado/);
+
   // ---- Recorte del historial: estable entre turnos para que llama-server reutilice su caché ----
   {
     const tam = (r: Recorte, p: Pieza[]) => p.reduce((s, x, i) => (i < r.inicio || r.fuera.has(i) ? s : s + (r.cortas.has(i) ? x.corto : x.largo)), 0);
@@ -322,6 +323,14 @@ void (async () => {
       previo = r;
     }
     assert.ok(cambios <= 50, `el principio cambió en ${cambios} de 300 turnos`); // deslizándose cambiaba en casi todos
+    // Una sola tarea muy larga: recorta salidas y omite pasos enteros, nunca una llamada sin su resultado.
+    const larga: Pieza[] = [{ rol: "user", largo: 300, corto: 300 }];
+    for (let i = 0; i < 200; i++) larga.push({ rol: "assistant", largo: 200, corto: 200 }, { rol: "tool", largo: 3000, corto: 250 });
+    r = recortar(larga, 30_000);
+    assert.equal(r.inicio, 0);
+    assert.ok(tam(r, larga) <= 30_000 && r.fuera.size > 0 && r.cortas.size > 0);
+    for (let i = 1; i < larga.length; i++) if (larga[i].rol === "tool") assert.equal(r.fuera.has(i), r.fuera.has(i - 1), `paso partido en ${i}`);
+    for (const i of [larga.length - 1, larga.length - 3, larga.length - 5]) assert.ok(!r.cortas.has(i) && !r.fuera.has(i), "las 3 últimas salidas van enteras");
     // Si el historial se vacía o cambia, lo recordado no vale.
     assert.equal(recortar([{ rol: "user", largo: 10, corto: 10 }], 1000, { inicio: 40, cortas: new Set([41]), fuera: new Set() }).inicio, 0);
   }
