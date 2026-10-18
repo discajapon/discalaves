@@ -211,7 +211,7 @@ type Estado =
 const carpetaConversaciones = () => path.join(app.getPath("userData"), "conversaciones");
 const archivoHistorial = (id: string) => path.join(carpetaConversaciones(), `${id}.json`);
 const archivoIndice = () => path.join(carpetaConversaciones(), "indice.json");
-// Capturas que vio cada empleado (una por acción en su escritorio). Al modelo solo viajan las 2 más recientes.
+// Capturas que vio cada empleado (una por acción en su escritorio). Al modelo solo viaja la más reciente (conCaptura).
 const carpetaCapturas = (id: string) => path.join(carpetaConversaciones(), "capturas", id);
 const CAPTURAS_GUARDADAS = 10; // en disco, por empleado (las más antiguas se borran)
 function guardarCaptura(id: string, jpeg: Buffer): string {
