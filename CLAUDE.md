@@ -688,7 +688,7 @@ Con Qwen 3.5 9B en una RTX 3060 Ti de 8 GB:
 
 - Hacer commit y push directo a `main` después de cada cambio coherente.
 - Commits pequeños y numerosos: cada cambio se reparte en **10–20 commits**
-  (decisión del usuario, 2026-10-17, para este repositorio; no 10–20 en total,
+  (decisión del usuario, 2026-10-17; no 10–20 en total,
   sino por cambio), cada uno con un paso que compile por sí solo (p. ej.
   estructura HTML, estilos, lógica, correcciones).
 - Mensajes de commit claros, en español.
