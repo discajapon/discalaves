@@ -569,7 +569,7 @@ function avisarVision() {
   if (!aviso) return; // motor OpenClaw: sin escritorio
   const m = modelos.find((x) => x.valor === campo<HTMLSelectElement>("modelo").value);
   aviso.hidden = !m || m.vision;
-  aviso.textContent = "este modelo no ve imágenes: con él no tendrá el escritorio";
+  aviso.textContent = m?.proveedor === "qwen" ? "falta la visión de Qwen: bájala en Configuración" : "este modelo no ve imágenes: con él no tendrá el escritorio";
 }
 // Las casillas dependen del motor: cada uno tiene sus herramientas.
 function dibujarHerramientas(motor: string, marcadas: string[]) {
