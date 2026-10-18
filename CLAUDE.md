@@ -16,12 +16,10 @@ instale cualquiera. Grok/xAI solo se mencionan como referencia; nunca como
 nombre o identidad del proyecto.
 
 - Repositorio: https://github.com/discajapon/discalaves (rama `main`).
-- **Este repositorio es el visor** (https://github.com/discajapon/AI-visor-for-discalaves, rama `main`;
-  decisión del usuario, 2026-10-17): un fork completo de Discalaves donde los empleados usan su escritorio con
-  capturas (ver "Escritorio con capturas"). Todo el trabajo del visor va aquí; el repositorio original no se
-  toca. `LICENSE` del visor es GPLv3; la Apache-2.0 de Discalaves se conserva en `LICENSE-discalaves`.
-  Ojo: comparte con el original los datos (`~/.config/discalaves`) y los nombres de las computadoras
-  (`discalaves-<usuario>`); al cambiar de una app a la otra, las computadoras se recrean con su imagen.
+- El escritorio con capturas (ver "Escritorio con capturas") se hizo primero en el fork
+  https://github.com/discajapon/AI-visor-for-discalaves y se trajo aquí el 2026-10-18 con sus mismos commits.
+  Ambos comparten los datos (`~/.config/discalaves`) y los nombres de las computadoras (`discalaves-<usuario>`):
+  al cambiar de una app a la otra, las computadoras se recrean con su imagen.
 - Nombre: "Discalaves"; en minúsculas solo en el nombre del repositorio.
 - Licencia: Apache-2.0. Crédito en `NOTICE`: "Discalaves — Copyright 2026 Disca".
   No modificar `LICENSE`.
