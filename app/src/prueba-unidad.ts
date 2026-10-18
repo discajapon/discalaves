@@ -266,6 +266,8 @@ void (async () => {
   const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
   x = leerXcursor(convertir(png, "mio.png", () => ({ ancho: 24, alto: 24, bgra: Buffer.alloc(24 * 24 * 4, 0xff) })))[0];
   assert.deepEqual([x.ancho, x.xhot, x.yhot], [48, 0, 0]);
-  assert.throws(() => convertir(Buffer.from("hola"), "x.txt", sinPng), /formato no reconocido/);
+  assert.throws(() => convertir(Buffer.from("hola, esto no es un cursor"), "x.txt", sinPng), /formato no reconocido/);
+  assert.throws(() => convertir(Buffer.from("xx"), "x.cur", sinPng), /vacío/);
+  assert.throws(() => convertir(cur(16, 3, 5, 0xff00ff00).subarray(0, 300), "roto.cur", sinPng), /cortado/);
   console.log("unidad: ok");
 })();
