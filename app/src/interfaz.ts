@@ -559,6 +559,7 @@ function dibujarNube() {
   entiendo.required = fuera && valor !== modeloGuardado; // se confirma al asignar un origen nuevo
   entiendo.checked = fuera && valor === modeloGuardado;
   campo<HTMLElement>("gasto").hidden = !valor.startsWith("nube:") || m?.origen === "remoto"; // el servidor remoto no tiene precios ni tope
+  avisarVision();
 }
 campo<HTMLSelectElement>("modelo").addEventListener("change", dibujarNube);
 
