@@ -120,6 +120,9 @@ export const ESCRITORIO = [
     direccion: { type: "string", enum: ["arriba", "abajo", "izquierda", "derecha"] },
     cantidad: { type: "number", description: "pasos de la rueda, 3 por defecto" },
   }, ["cantidad"]),
+  herramienta("esperar", "Espera unos segundos a que algo termine de cargar o abrir y te devuelve una captura nueva.", {
+    segundos: { type: "number", description: "de 1 a 30" },
+  }),
   herramienta(
     "ampliar",
     "Amplía una zona de la última captura para ver detalles pequeños. Tu siguiente acción puede usar coordenadas de la imagen ampliada.",
@@ -306,6 +309,7 @@ async function ejecutarEscritorio(ctx: Contexto, nombre: string, args: Record<st
   }
   if (nombre === "escribir_texto") return t("texto") ? conCaptura(`escribí ${t("texto").length} caracteres`, (await e.escribir(t("texto"))).captura) : { salida: "falta el texto", codigo: -1 };
   if (nombre === "pulsar_teclas") return t("teclas") ? conCaptura(`pulsé ${t("teclas")}`, (await e.pulsar(t("teclas"))).captura) : { salida: "faltan las teclas", codigo: -1 };
+  if (nombre === "esperar") return conCaptura("esperé; tu escritorio ahora", (await e.esperarYVer(Number(args.segundos) || 2)).captura);
   if (faltan("x", "y").length) return { salida: "faltan x e y (0 a 1000 sobre la última captura)", codigo: -1 };
   const [x, y] = [n("x")!, n("y")!];
   if (nombre === "clic") {
