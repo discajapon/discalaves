@@ -11,6 +11,7 @@ import { convertir, cursorNeon, escribirXcursor } from "./cursor";
 import { navegadorDe } from "./navegador";
 import { especificaciones } from "./especificaciones";
 import { apagar as apagarOllama, asegurar as asegurarOllama, MODELO_RECOMENDADO, OLLAMA } from "./ollama";
+import { recortar, type Pieza, type Recorte } from "./recorte";
 import { rutas } from "./rutas";
 import { registrarWsl } from "./ipc-wsl";
 import { Boveda, SinAlmacenSeguro } from "./boveda";
