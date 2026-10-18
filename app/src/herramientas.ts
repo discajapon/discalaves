@@ -100,7 +100,8 @@ export const ESCRITORIO = [
     ...XY,
     objetivo: { type: "string", description: "qué pulsas, por ejemplo: botón Guardar" },
     boton: { type: "string", enum: ["izquierdo", "derecho", "doble", "triple", "central"], description: "izquierdo por defecto; doble para abrir; triple selecciona una línea" },
-  }, ["boton"]),
+    mantener: { type: "string", description: "teclas mantenidas durante el clic, por ejemplo ctrl o mayús (para seleccionar varios)" },
+  }, ["boton", "mantener"]),
   herramienta("mover_raton", "Mueve el ratón a un punto de la última captura sin hacer clic (por ejemplo para ver un menú).", XY),
   herramienta("arrastrar", "Arrastra con el botón izquierdo de un punto a otro de la última captura.", {
     ...XY,
@@ -309,8 +310,9 @@ async function ejecutarEscritorio(ctx: Contexto, nombre: string, args: Record<st
   const [x, y] = [n("x")!, n("y")!];
   if (nombre === "clic") {
     const boton = (["derecho", "doble", "triple", "central"] as const).find((b) => b === t("boton")) ?? "izquierdo";
-    const r = await e.clic(x, y, boton);
-    return conCaptura(`clic ${boton === "izquierdo" ? "" : boton + " "}en ${t("objetivo") || "el punto"} (${r.punto.x}, ${r.punto.y} de la pantalla)`, r.captura);
+    const r = await e.clic(x, y, boton, t("mantener"));
+    const con = t("mantener") ? ` con ${t("mantener")}` : "";
+    return conCaptura(`clic ${boton === "izquierdo" ? "" : boton + " "}en ${t("objetivo") || "el punto"}${con} (${r.punto.x}, ${r.punto.y} de la pantalla)`, r.captura);
   }
   if (nombre === "mover_raton") return conCaptura("moví el ratón", (await e.mover(x, y)).captura);
   if (nombre === "desplazar") return conCaptura(`desplacé hacia ${t("direccion") || "abajo"}`, (await e.desplazar(x, y, t("direccion"), Number(args.cantidad) || 3)).captura);
