@@ -1,0 +1,4 @@
+# La computadora se apaga con la app (no se cierra "bien"): sin esto, Mousepad pregunta al abrirse si restaura la
+# sesión anterior, un diálogo que el empleado no esperaba.
+[org.xfce.mousepad.preferences.file]
+session-restore='never'
