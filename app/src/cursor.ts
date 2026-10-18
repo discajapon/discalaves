@@ -212,11 +212,24 @@ function ajustar(im: Imagen): Imagen {
 // Archivo del usuario → Xcursor listo para el tema. Un PNG lleva el punto activo arriba a la izquierda (0, 0).
 export function convertir(b: Buffer, nombre: string, png: DecodificarPng): Buffer {
   const ext = nombre.toLowerCase().split(".").pop() ?? "";
+  if (b.length < 8) throw new Error("el archivo está vacío o no es un cursor");
   let imagenes: Imagen[];
-  if (b.toString("latin1", 0, 4) === "Xcur") imagenes = leerXcursor(b);
+  try {
+    imagenes = leer(b, ext, png);
+  } catch (e) {
+    // Un archivo cortado o mal formado da errores de lectura de bytes: se explican en palabras.
+    if (e instanceof RangeError) throw new Error("el archivo está dañado o cortado: no pude leer el cursor");
+    throw e;
+  }
+  return escribirXcursor(imagenes.map(ajustar));
+}
+
+function leer(b: Buffer, ext: string, png: DecodificarPng): Imagen[] {
+  let imagenes: Imagen[];
+  if (b.toString("latin1", 0, 4) === "Xcur") imagenes = unTamano(leerXcursor(b));
   else if (b.toString("latin1", 0, 4) === "RIFF") imagenes = leerAni(b, png);
   else if (b[0] === 0x89 && b.toString("latin1", 1, 4) === "PNG") imagenes = [deBgra(png(b), 0, 0)];
   else if (b.readUInt16LE(0) === 0 && (ext === "cur" || ext === "ico" || b.readUInt16LE(2) === 2)) imagenes = [leerCur(b, png)];
   else throw new Error("formato no reconocido: usa .cur, .ani, PNG o un cursor Xcursor");
-  return escribirXcursor(imagenes.map(ajustar));
+  return imagenes;
 }
