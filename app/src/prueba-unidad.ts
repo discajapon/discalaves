@@ -310,6 +310,18 @@ void (async () => {
     // Cabe: viaja todo desde el primer mensaje del usuario.
     let r = recortar([{ rol: "user", largo: 100, corto: 100 }, { rol: "assistant", largo: 100, corto: 100 }], 1000);
     assert.deepEqual([r.inicio, r.cortas.size, r.fuera.size], [0, 0, 0]);
+    // Conversación que crece (varias tareas): el principio del prompt cambia pocas veces y nunca se pasa del límite.
+    const p: Pieza[] = [];
+    let previo: Recorte | undefined, cambios = 0;
+    for (let turno = 0; turno < 300; turno++) {
+      if (turno % 40 === 0) p.push({ rol: "user", largo: 300, corto: 300 });
+      p.push({ rol: "assistant", largo: 200, corto: 200 }, { rol: "tool", largo: 2000, corto: 250 });
+      r = recortar(p, 30_000, previo);
+      assert.ok(tam(r, p) <= 30_000, `turno ${turno}: ${tam(r, p)} caracteres`);
+      if (previo && !igual(previo, r)) cambios++;
+      previo = r;
+    }
+    assert.ok(cambios <= 50, `el principio cambió en ${cambios} de 300 turnos`); // deslizándose cambiaba en casi todos
     // Si el historial se vacía o cambia, lo recordado no vale.
     assert.equal(recortar([{ rol: "user", largo: 10, corto: 10 }], 1000, { inicio: 40, cortas: new Set([41]), fuera: new Set() }).inicio, 0);
   }
