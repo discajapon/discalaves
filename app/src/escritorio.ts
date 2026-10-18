@@ -176,21 +176,19 @@ export class Escritorio {
   async clic(nx: number, ny: number, boton: "izquierdo" | "derecho" | "doble" = "izquierdo") {
     const p = await this.punto(nx, ny);
     const clic = boton === "derecho" ? ["click", "3"] : boton === "doble" ? ["click", "--repeat", "2", "--delay", "80", "1"] : ["click", "1"];
-    await this.xdotool([...(await this.moverA(p)), ...clic]);
-    return { punto: p, captura: await this.despues() };
+    return { punto: p, captura: await this.actuar([...(await this.moverA(p)), ...clic]) };
   }
 
   async mover(nx: number, ny: number) {
     const p = await this.punto(nx, ny);
-    await this.xdotool(await this.moverA(p));
-    return { punto: p, captura: await this.despues() };
+    return { punto: p, captura: await this.actuar(await this.moverA(p)) };
   }
 
   async arrastrar(x1: number, y1: number, x2: number, y2: number) {
     const a = await this.punto(x1, y1), b = await this.punto(x2, y2);
     const ida = trayecto(a, b).flatMap((q) => ["sleep", String(ENTRE_PASOS), "mousemove", String(q.x), String(q.y)]);
-    await this.xdotool([...(await this.moverA(a)), "mousedown", "1", ...ida, "mouseup", "1"]);
-    return { punto: a, hasta: b, captura: await this.despues() };
+    const captura = await this.actuar([...(await this.moverA(a)), "mousedown", "1", ...ida, "mouseup", "1"]);
+    return { punto: a, hasta: b, captura };
   }
 
   async escribir(texto: string) {
@@ -207,8 +205,7 @@ export class Escritorio {
     const p = await this.punto(nx, ny);
     const boton = { arriba: "4", abajo: "5", izquierda: "6", derecha: "7" }[direccion] ?? "5";
     const veces = String(Math.min(30, Math.max(1, Math.round(cantidad) || 3)));
-    await this.xdotool([...(await this.moverA(p)), "click", "--repeat", veces, "--delay", "30", boton]);
-    return { punto: p, captura: await this.despues() };
+    return { punto: p, captura: await this.actuar([...(await this.moverA(p)), "click", "--repeat", veces, "--delay", "30", boton]) };
   }
 }
 
