@@ -420,6 +420,8 @@ async function ubicar(c: Conversacion, jpeg: Buffer, objetivo: string, senal: Ab
   const url = c.proveedor === "qwen" ? `http://127.0.0.1:${PUERTO}/v1` : `${OLLAMA}/v1`;
   const cuerpo = {
     model: c.modelo, max_tokens: 40, temperature: 0,
+    // Su propia ranura (la 1): la del empleado conserva su estado y su siguiente turno sigue desde la caché.
+    ...(c.proveedor === "qwen" && modoServidor === "vision" && { id_slot: 1 }),
     messages: [{ role: "user", content: [
       { type: "image_url", image_url: { url: `data:image/jpeg;base64,${jpeg.toString("base64")}` } },
       { type: "text", text: `Captura de pantalla. Responde solo con el punto del centro de: ${objetivo.slice(0, 200)}. Formato x,y en coordenadas relativas de 0 a 1000.` },
