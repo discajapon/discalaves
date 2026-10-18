@@ -95,6 +95,27 @@ async function main() {
     assert.ok(v.n > 60 && v.alto > 28, `neón sobre el fondo: ${JSON.stringify(v)}`);
     assert.ok(Math.abs(v.x0 - fondo.x) <= 2 && Math.abs(v.y0 - fondo.y) <= 2, `punta del neón en el puntero: ${JSON.stringify(v)}`);
 
+    // 2) Uno propio, cambiado con la computadora encendida: PNG rojo (punta en 0,0), en el fondo, el panel y una app.
+    usarCursor(convertir(flechaRoja(), "flecha.png", png));
+    await esperar(3000);
+    for (const [donde, punto] of [["fondo", fondo], ["panel", panel]] as const) {
+      v = await mirar(punto.x, punto.y, rojo);
+      assert.ok(v.n > 300 && v.alto > 36, `propio sobre el ${donde}: ${JSON.stringify(v)}`);
+      assert.ok(Math.abs(v.x0 - punto.x) <= 2 && Math.abs(v.y0 - punto.y) <= 2, `punta del propio en el puntero (${donde}): ${JSON.stringify(v)}`);
+    }
+    await pc.ejecutar(["sh", "-c", "(mousepad >/dev/null 2>&1 &)"], { tiempo: 5000 });
+    for (let i = 0; i < 40 && !(await xdo("search", "--onlyvisible", "--class", "mousepad")).salida.trim(); i++) await esperar(250);
+    await esperar(1500);
+    const g = (await xdo("search", "--onlyvisible", "--class", "mousepad", "getwindowgeometry", "--shell")).salida;
+    const [mx, my] = [Number(g.match(/X=(\d+)/)![1]), Number(g.match(/Y=(\d+)/)![1])];
+    // Sobre el texto, la "I" (la hereda de Adwaita) también grande; sobre su menú "File", la flecha propia.
+    v = await mirar(mx + 20, my + 10, (r, g, b) => r < 60 && g < 60 && b < 60);
+    assert.ok(v.alto > 30, `la "I" de una app GTK no sale grande: ${JSON.stringify(v)}`);
+    v = await mirar(mx + 14, my - 17, rojo);
+    assert.ok(v.n > 300, `propio sobre el menú de una app GTK (mousepad): ${JSON.stringify(v)}`);
+
+    await pc.ejecutar(["pkill", "-x", "mousepad"], { tiempo: 5000 }); // que no tape el fondo
+    await esperar(800);
     console.log("cursor: ok");
   } finally {
     await borrar(pc).catch(() => {});
