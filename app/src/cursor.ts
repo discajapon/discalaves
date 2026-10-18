@@ -34,19 +34,28 @@ export function escribirXcursor(imagenes: Imagen[], nominal = TAMANO): Buffer {
   return Buffer.concat([salida, ...bloques]);
 }
 
-export function leerXcursor(b: Buffer): Imagen[] {
+// Un Xcursor de un tema trae el mismo cursor en varios tamaños nominales (Adwaita: 24, 32, 48, 64 y 96); las
+// imágenes del mismo tamaño son los fotogramas de su animación. Se queda el tamaño más cercano a TAMANO (a igual
+// distancia, el mayor): mezclarlos haría que el cursor "palpitara" entre tamaños.
+export function unTamano(imagenes: (Imagen & { nominal: number })[]): Imagen[] {
+  const nominales = [...new Set(imagenes.map((i) => i.nominal))];
+  const elegido = nominales.sort((a, c) => Math.abs(a - TAMANO) - Math.abs(c - TAMANO) || c - a)[0];
+  return imagenes.filter((i) => i.nominal === elegido).map(({ nominal: _, ...im }) => im);
+}
+
+export function leerXcursor(b: Buffer): (Imagen & { nominal: number })[] {
   if (b.toString("latin1", 0, 4) !== "Xcur") throw new Error("no es un archivo Xcursor");
   const n = b.readUInt32LE(12);
-  const imagenes: Imagen[] = [];
+  const imagenes: (Imagen & { nominal: number })[] = [];
   for (let i = 0; i < n; i++) {
-    const [tipo, , posicion] = [0, 4, 8].map((d) => b.readUInt32LE(16 + i * 12 + d));
+    const [tipo, nominal, posicion] = [0, 4, 8].map((d) => b.readUInt32LE(16 + i * 12 + d));
     if (tipo !== 0xfffd0002) continue; // comentarios
     const c = (k: number) => b.readUInt32LE(posicion + k * 4);
     const [ancho, alto] = [c(4), c(5)];
     if (!ancho || !alto || ancho > 256 || alto > 256) throw new Error("imagen de cursor de tamaño no válido");
     const argb = new Uint32Array(ancho * alto);
     for (let p = 0; p < argb.length; p++) argb[p] = b.readUInt32LE(posicion + 36 + p * 4);
-    imagenes.push({ ancho, alto, xhot: c(6), yhot: c(7), retardo: c(8), argb });
+    imagenes.push({ nominal, ancho, alto, xhot: Math.min(c(6), ancho - 1), yhot: Math.min(c(7), alto - 1), retardo: c(8), argb });
   }
   if (!imagenes.length) throw new Error("el Xcursor no trae imágenes");
   return imagenes;
