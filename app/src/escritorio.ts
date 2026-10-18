@@ -175,13 +175,16 @@ export class Escritorio {
   }
 
   // Cada acción devuelve una captura nueva para que el modelo vea el resultado.
-  async clic(nx: number, ny: number, boton: Boton = "izquierdo") {
+  async clic(nx: number, ny: number, boton: Boton = "izquierdo", mantener = "") {
     const p = await this.punto(nx, ny);
     const clic = {
       izquierdo: ["click", "1"], derecho: ["click", "3"], central: ["click", "2"],
       doble: ["click", "--repeat", "2", "--delay", "80", "1"], triple: ["click", "--repeat", "3", "--delay", "80", "1"],
     }[boton] ?? ["click", "1"];
-    return { punto: p, captura: await this.actuar([...(await this.moverA(p)), ...clic]) };
+    // Teclas mantenidas durante el clic (ctrl+clic, mayús+clic…): se pulsan antes y se sueltan después.
+    const modificadores = teclas(mantener);
+    const abajo = modificadores.flatMap((t) => ["keydown", t]), arriba = [...modificadores].reverse().flatMap((t) => ["keyup", t]);
+    return { punto: p, captura: await this.actuar([...(await this.moverA(p)), ...abajo, ...clic, ...arriba]) };
   }
 
   async mover(nx: number, ny: number) {
