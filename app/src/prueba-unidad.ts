@@ -290,6 +290,11 @@ void (async () => {
   const ico = cur(32, 1, 32, 0xffffffff);
   ico.writeUInt16LE(1, 2);
   assert.deepEqual([leerXcursor(convertir(ico, "icono.ico", sinPng))[0].xhot, leerXcursor(convertir(ico, "icono.ico", sinPng))[0].yhot], [0, 0]);
+  // Reducir promedia: un tablero blanco y transparente de 96 px queda gris medio a 48, sin huecos.
+  const tablero = { ancho: 96, alto: 96, xhot: 10, yhot: 20, retardo: 0, argb: new Uint32Array(96 * 96).map((_, i) => ((i % 96) + Math.floor(i / 96)) % 2 ? 0xffffffff : 0) };
+  const reducido = ajustar(tablero);
+  assert.deepEqual([reducido.ancho, reducido.xhot, reducido.yhot], [48, 5, 10]);
+  assert.ok(reducido.argb.every((p) => p >>> 24 === 128), "cada píxel es la media de los cuatro que cubre");
   // PNG (decodificado por nativeImage en la app): punto activo arriba a la izquierda.
   const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
   x = leerXcursor(convertir(png, "mio.png", () => ({ ancho: 24, alto: 24, bgra: Buffer.alloc(24 * 24 * 4, 0xff) })))[0];
