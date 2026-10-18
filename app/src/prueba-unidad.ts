@@ -15,7 +15,7 @@ import { turnoOpenAI } from "./proveedores";
 import { rutasPara } from "./rutas";
 import { cuantDe, nombreValido } from "./modelos";
 import { distrosDe, textoWsl } from "./wsl";
-import { convertir, cursorNeon, escribirXcursor, leerXcursor, TAMANO } from "./cursor";
+import { ajustar, convertir, cursorNeon, escribirXcursor, leerXcursor, TAMANO, unTamano } from "./cursor";
 import { ANCHO_IMAGEN, aNormal, aPantalla, leerXwd, region, tamanoImagen, teclas, trayecto, type Vista } from "./escritorio";
 
 // Linux: igual que siempre.
@@ -262,6 +262,15 @@ void (async () => {
   const riff = Buffer.alloc(8); riff.write("RIFF", 0, "latin1"); riff.writeUInt32LE(cuerpo.length, 4);
   const ani = leerXcursor(convertir(Buffer.concat([riff, cuerpo]), "espera.ani", sinPng));
   assert.deepEqual(ani.map((f) => [f.retardo, f.argb[0]]), [[167, 0xffff0000], [167, 0xff0000ff]]);
+  // Xcursor de un tema con varios tamaños (como Adwaita: 24, 32, 48…): se queda el de 48, sin mezclarlos como fotogramas.
+  const tam = (n: number, color: number) => ({ ...cursorNeon(n), argb: new Uint32Array(n * n).fill(color) });
+  const tema = leerXcursor(Buffer.concat([escribirXcursor([tam(24, 1)], 24)]));
+  assert.equal(tema[0].nominal, 24);
+  const variosTamanos = [24, 32, 48, 64].map((n, i) => ({ ...tam(n, 0xff000000 + i), nominal: n }));
+  assert.deepEqual(unTamano(variosTamanos).map((i) => i.ancho), [48]);
+  assert.deepEqual(unTamano([24, 32, 64].map((n) => ({ ...tam(n, 1), nominal: n }))).map((i) => i.ancho), [64], "a igual distancia, el mayor");
+  const animado = unTamano([{ ...tam(32, 1), nominal: 32 }, { ...tam(32, 2), nominal: 32 }, { ...tam(24, 3), nominal: 24 }]);
+  assert.deepEqual(animado.map((i) => i.argb[0]), [1, 2], "los fotogramas del tamaño elegido se conservan");
   // PNG (decodificado por nativeImage en la app): punto activo arriba a la izquierda.
   const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
   x = leerXcursor(convertir(png, "mio.png", () => ({ ancho: 24, alto: 24, bgra: Buffer.alloc(24 * 24 * 4, 0xff) })))[0];
