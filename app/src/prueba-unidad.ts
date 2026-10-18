@@ -16,6 +16,7 @@ import { rutasPara } from "./rutas";
 import { cuantDe, nombreValido } from "./modelos";
 import { distrosDe, textoWsl } from "./wsl";
 import { ajustar, convertir, cursorNeon, escribirXcursor, leerXcursor, TAMANO, unTamano } from "./cursor";
+import { recortar, type Pieza, type Recorte } from "./recorte";
 import { ANCHO_IMAGEN, aNormal, aPantalla, leerXwd, region, tamanoImagen, teclas, trayecto, type Vista } from "./escritorio";
 
 // Linux: igual que siempre.
@@ -302,5 +303,15 @@ void (async () => {
   assert.throws(() => convertir(Buffer.from("hola, esto no es un cursor"), "x.txt", sinPng), /formato no reconocido/);
   assert.throws(() => convertir(Buffer.from("xx"), "x.cur", sinPng), /vacío/);
   assert.throws(() => convertir(cur(16, 3, 5, 0xff00ff00).subarray(0, 300), "roto.cur", sinPng), /cortado/);
+  // ---- Recorte del historial: estable entre turnos para que llama-server reutilice su caché ----
+  {
+    const tam = (r: Recorte, p: Pieza[]) => p.reduce((s, x, i) => (i < r.inicio || r.fuera.has(i) ? s : s + (r.cortas.has(i) ? x.corto : x.largo)), 0);
+    const igual = (a: Recorte, b: Recorte) => a.inicio === b.inicio && [...a.cortas].join() === [...b.cortas].join() && [...a.fuera].join() === [...b.fuera].join();
+    // Cabe: viaja todo desde el primer mensaje del usuario.
+    let r = recortar([{ rol: "user", largo: 100, corto: 100 }, { rol: "assistant", largo: 100, corto: 100 }], 1000);
+    assert.deepEqual([r.inicio, r.cortas.size, r.fuera.size], [0, 0, 0]);
+    // Si el historial se vacía o cambia, lo recordado no vale.
+    assert.equal(recortar([{ rol: "user", largo: 10, corto: 10 }], 1000, { inicio: 40, cortas: new Set([41]), fuera: new Set() }).inicio, 0);
+  }
   console.log("unidad: ok");
 })();
