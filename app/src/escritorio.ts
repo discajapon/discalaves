@@ -194,15 +194,13 @@ export class Escritorio {
   }
 
   async escribir(texto: string) {
-    await this.xdotool(["type", "--delay", "12", "--", texto]);
-    return { captura: await this.despues() };
+    return { captura: await this.actuar(["type", "--delay", "12", "--", texto]) };
   }
 
   async pulsar(combinacion: string) {
     const lista = teclas(combinacion);
     if (!lista.length) throw new Error("no dijiste qué teclas pulsar");
-    await this.xdotool(["key", "--delay", "60", "--", ...lista]);
-    return { captura: await this.despues() };
+    return { captura: await this.actuar(["key", "--delay", "60", "--", ...lista]) };
   }
 
   async desplazar(nx: number, ny: number, direccion: string, cantidad: number) {
