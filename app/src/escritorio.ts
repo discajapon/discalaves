@@ -112,6 +112,7 @@ const esperar = (ms: number) => new Promise((r) => setTimeout(r, ms));
 // Escritorio de una computadora: captura y acciones. Recuerda la última vista para mapear las coordenadas.
 export class Escritorio {
   private vista: Vista | undefined;
+  private raton: { x: number; y: number } | undefined; // dónde dejó el ratón la última acción
   ultima: Captura | undefined; // la última imagen que vio el modelo (la tarjeta de aprobación marca el punto en ella)
 
   constructor(readonly computadora: Computadora) {}
@@ -160,10 +161,16 @@ export class Escritorio {
     return aPantalla(nx, ny, this.vista!);
   }
 
+  // Movimiento suave desde donde quedó el ratón. La app recuerda dónde lo dejó (no lo pregunta: una llamada menos
+  // por acción); si el usuario lo movió al tomar el control, solo cambia de dónde sale el trayecto, no adónde llega.
   private async moverA(p: { x: number; y: number }): Promise<string[]> {
-    const donde = (await this.xdotool(["getmouselocation", "--shell"])).match(/X=(\d+)\s+Y=(\d+)/);
-    const desde = donde ? { x: Number(donde[1]), y: Number(donde[2]) } : p;
-    return trayecto(desde, p).flatMap((q, i) => [...(i ? ["sleep", String(ENTRE_PASOS)] : []), "mousemove", String(q.x), String(q.y)]);
+    if (!this.raton) {
+      const donde = (await this.xdotool(["getmouselocation", "--shell"])).match(/X=(\d+)\s+Y=(\d+)/);
+      this.raton = donde ? { x: Number(donde[1]), y: Number(donde[2]) } : p;
+    }
+    const camino = trayecto(this.raton, p).flatMap((q, i) => [...(i ? ["sleep", String(ENTRE_PASOS)] : []), "mousemove", String(q.x), String(q.y)]);
+    this.raton = p;
+    return camino;
   }
 
   // Cada acción devuelve una captura nueva para que el modelo vea el resultado.
@@ -182,6 +189,7 @@ export class Escritorio {
     const a = await this.punto(x1, y1), b = await this.punto(x2, y2);
     const ida = trayecto(a, b).flatMap((q) => ["sleep", String(ENTRE_PASOS), "mousemove", String(q.x), String(q.y)]);
     const captura = await this.actuar([...(await this.moverA(a)), "mousedown", "1", ...ida, "mouseup", "1"]);
+    this.raton = b;
     return { punto: a, hasta: b, captura };
   }
 
