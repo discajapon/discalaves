@@ -99,7 +99,7 @@ export const ESCRITORIO = [
   herramienta("clic", "Hace clic en un punto de la última captura. Di siempre qué pretendes pulsar.", {
     ...XY,
     objetivo: { type: "string", description: "qué pulsas, por ejemplo: botón Guardar" },
-    boton: { type: "string", enum: ["izquierdo", "derecho", "doble"], description: "izquierdo por defecto; doble para abrir" },
+    boton: { type: "string", enum: ["izquierdo", "derecho", "doble", "triple", "central"], description: "izquierdo por defecto; doble para abrir; triple selecciona una línea" },
   }, ["boton"]),
   herramienta("mover_raton", "Mueve el ratón a un punto de la última captura sin hacer clic (por ejemplo para ver un menú).", XY),
   herramienta("arrastrar", "Arrastra con el botón izquierdo de un punto a otro de la última captura.", {
@@ -308,7 +308,7 @@ async function ejecutarEscritorio(ctx: Contexto, nombre: string, args: Record<st
   if (faltan("x", "y").length) return { salida: "faltan x e y (0 a 1000 sobre la última captura)", codigo: -1 };
   const [x, y] = [n("x")!, n("y")!];
   if (nombre === "clic") {
-    const boton = ["derecho", "doble"].includes(t("boton")) ? (t("boton") as "derecho" | "doble") : "izquierdo";
+    const boton = (["derecho", "doble", "triple", "central"] as const).find((b) => b === t("boton")) ?? "izquierdo";
     const r = await e.clic(x, y, boton);
     return conCaptura(`clic ${boton === "izquierdo" ? "" : boton + " "}en ${t("objetivo") || "el punto"} (${r.punto.x}, ${r.punto.y} de la pantalla)`, r.captura);
   }
