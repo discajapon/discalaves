@@ -42,7 +42,7 @@ Grok Bot.
   páginas y rellenar formularios. En el navegador apunta a cada enlace, botón o
   campo por una referencia corta de la estructura de la página. Ya investiga un
   tema y deja un informe en un archivo.
-- **Ve su escritorio (este fork, en pruebas).** Con la visión de Qwen 3.5
+- **Ve su escritorio (en pruebas).** Con la visión de Qwen 3.5
   (Configuración → Visión de Qwen), el empleado mira capturas de su pantalla y
   usa el ratón y el teclado en cualquier programa, como hace Claude con
   computer use. Si tomas el control, se pone en pausa; los clics delicados te
