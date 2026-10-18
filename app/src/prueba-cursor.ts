@@ -127,6 +127,12 @@ async function main() {
     console.log(`  animado: ${vistos === 3 ? "se ven los dos fotogramas" : vistos === 1 || vistos === 2 ? "solo se ve un fotograma" : "no se ve"}`);
     assert.ok(vistos, "el cursor animado no se ve");
 
+    // 4) De vuelta al de Discalaves.
+    usarCursor(escribirXcursor([cursorNeon()]));
+    await esperar(3000);
+    v = await mirar(panel.x, panel.y, tinta);
+    assert.ok(v.n > 150 && v.alto > 28, `neón otra vez: ${JSON.stringify(v)}`);
+    assert.equal((await mirar(panel.x, panel.y, rojo)).n, 0, "quedó algo del cursor propio");
     console.log("cursor: ok");
   } finally {
     await borrar(pc).catch(() => {});
