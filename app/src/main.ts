@@ -389,7 +389,11 @@ function iniciarServidor(): Promise<boolean> {
     "-fitt", "128",
     // Caché de prompts en RAM: por defecto hasta 8 GB. Con varios empleados, cada conversación deja ahí su
     // estado y, junto a sus computadoras, en 16 GB el sistema mató a llama-server por falta de memoria.
-    "-cram", "1024",
+    // Con visión, apagada: al empezar una petición en otra ranura, llama-server guarda ahí las ranuras libres y las
+    // VACÍA; el estado del empleado (con sus puntos de control, ~50 MB cada uno) no cabía en 1 GB y tras cada pregunta
+    // del localizador reprocesaba el prompt entero (medido: 7300 tokens, 9–10 s por paso). Sin ella, cada ranura
+    // conserva lo suyo. 8 puntos de control por ranura (no 32): solo hacen falta los últimos, y cada uno es RAM.
+    ...(vision ? ["-cram", "0", "-ctxcp", "8"] : ["-cram", "1024"]),
     "--reasoning", "off", "--no-webui",
   ], { stdio: ["ignore", log, log], windowsHide: true }); // en Windows, sin ventana de consola
   const este = servidor;
