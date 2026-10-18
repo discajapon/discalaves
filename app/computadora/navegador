@@ -1,0 +1,8 @@
+#!/bin/sh
+# Navegador del empleado: siempre el mismo Chromium, lo abra la app (computadora.ts, para controlarlo por CDP) o él
+# desde el panel del escritorio. Con otro perfil o sin el puerto de depuración, el que abriera primero se quedaba el
+# perfil y la app ya no podía conectarse.
+exec chromium --no-sandbox `# el aislamiento lo da el contenedor` \
+  --test-type `# sin la barra de aviso de --no-sandbox` \
+  --hide-crash-restore-bubble --no-first-run --no-default-browser-check --start-maximized --lang=es-ES \
+  --remote-debugging-port=9222 --user-data-dir="$HOME/.navegador" "$@"
