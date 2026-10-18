@@ -497,7 +497,10 @@ imagen, ~2 min).
     prompt) si hace falta más velocidad.
   - **Detección de visión, no supuesta:** qwen si existe el mmproj y el servidor anuncia `vision` en `/props`;
     Ollama si `/api/show` dice `vision`. Nube, servidor remoto y Codex no reciben capturas (el remoto nunca recibe
-    imágenes, decisión del 2026-10-02): no se les ofrecen las herramientas y siguen con las de texto.
+    imágenes, decisión del 2026-10-02): no se les ofrecen las herramientas y siguen con las de texto. El diálogo del empleado avisa junto
+    a la casilla del escritorio si el modelo elegido no ve imágenes (campo `vision` de la lista de modelos; con qwen
+    sin mmproj, que baje la visión en Configuración) en vez de dejarla marcar sin efecto (2026-10-18: el Asistente
+    del usuario estaba en el servidor remoto y respondía que no tenía escritorio).
   - **Toma de control:** si el usuario toma el control de su escritorio, el empleado se pausa (fase `pausa`, "en
     pausa" en la cabecera) y no envía acciones; al soltarlo no hace la acción pendiente y sigue con una captura
     nueva. Detener corta la pausa.
