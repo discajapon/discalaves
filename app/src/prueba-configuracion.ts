@@ -61,6 +61,15 @@ async function main() {
     assert.match(await estado(), /propio cursor/);
     assert.ok(fs.existsSync(guardado));
 
+    // Un archivo roto y uno que no es un cursor: mensaje claro y se conserva el anterior.
+    for (const [ruta, mensaje] of [[archivos.roto, /dañado o cortado|cortado/], [archivos.texto, /formato no reconocido/]] as const) {
+      await elegir(ruta);
+      await w.click("#config-cursor-cargar");
+      await w.waitForFunction(() => /No se pudo/.test(document.getElementById("config-cursor-estado")!.textContent ?? ""));
+      assert.match(await estado(), mensaje);
+      assert.equal(leerXcursor(fs.readFileSync(guardado))[0].xhot, 8, "un error no debe tocar el cursor guardado");
+    }
+
     console.log("configuración (cursor): ok");
   } finally {
     await app.close().catch(() => {});
