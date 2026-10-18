@@ -38,5 +38,15 @@ export function recortar(piezas: Pieza[], limite: number, previo?: Recorte): Rec
     if (total() <= objetivo) break;
     if (!r.fuera.has(i)) r.cortas.add(i);
   }
+  // 3. Aun así no cabe (tareas de cientos de pasos): omitir los pasos más antiguos, cada uno con sus resultados.
+  // Quedan siempre el mensaje del usuario y los 4 últimos mensajes; un paso sale entero (una llamada sin su
+  // resultado, o al revés, la rechaza el servidor).
+  for (let i = r.inicio + 1; total() > objetivo; ) {
+    let fin = i;
+    while (piezas[fin + 1]?.rol === "tool") fin++;
+    if (fin >= piezas.length - 4) break;
+    for (let k = i; k <= fin; k++) r.fuera.add(k);
+    i = fin + 1;
+  }
   return r;
 }
