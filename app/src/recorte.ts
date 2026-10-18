@@ -11,3 +11,18 @@ export interface Pieza { rol: "user" | "assistant" | "tool"; largo: number; cort
 // inicio: primer mensaje (siempre del usuario) que viaja; cortas: salidas recortadas; fuera: pasos omitidos.
 export interface Recorte { inicio: number; cortas: Set<number>; fuera: Set<number> }
 
+export const OBJETIVO = 0.6; // al recortar se baja al 60 % del límite: el 40 % restante son turnos sin tocar el principio
+
+export function recortar(piezas: Pieza[], limite: number, previo?: Recorte): Recorte {
+  // Lo recordado vale si sigue apuntando a un mensaje del usuario (el historial puede haberse vaciado o cambiado).
+  const valido = previo && previo.inicio < piezas.length && piezas[previo.inicio].rol === "user";
+  const r: Recorte = valido
+    ? { inicio: previo.inicio, cortas: new Set([...previo.cortas].filter((i) => i < piezas.length)), fuera: new Set([...previo.fuera].filter((i) => i < piezas.length)) }
+    : { inicio: Math.max(0, piezas.findIndex((p) => p.rol === "user")), cortas: new Set(), fuera: new Set() };
+  const tam = (i: number) => (r.fuera.has(i) ? 0 : r.cortas.has(i) ? piezas[i].corto : piezas[i].largo);
+  const total = () => piezas.reduce((s, _, i) => (i < r.inicio ? s : s + tam(i)), 0);
+  if (total() <= limite) return r;
+  const objetivo = limite * OBJETIVO;
+
+  return r;
+}
