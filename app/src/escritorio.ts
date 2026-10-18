@@ -7,7 +7,6 @@
 import type { Computadora } from "./computadora";
 
 export const ANCHO_IMAGEN = 1024; // ancho de las capturas que ve el modelo (~1120 tokens con Qwen 3.5 y --image-min-tokens 1024)
-const ESPERA = 600; // ms para que la pantalla se asiente tras una acción, antes de la captura nueva
 // Tras una acción, la captura nueva se toma en cuanto la pantalla está quieta (dos capturas seguidas iguales, cada
 // ~0,1 s): si cambió, enseguida; si no cambió nada, a los ~0,4 s; si sigue moviéndose, como mucho ~1,2 s (una app
 // que tarda en abrir: para eso está esperar). Antes era una espera fija de 600 ms y tres llamadas a la computadora.
@@ -24,7 +23,7 @@ const ACTUAR = [
   'base64 -w0 "$f"; rm -f "$f" "$f.err"',
 ].join("\n");
 const PASOS = 8; // pasos del movimiento suave del ratón (se ve en vivo, no salta)
-const ENTRE_PASOS = 0.015; // s entre pasos: ~120 ms, que se descuentan de ESPERA (no retrasa al empleado)
+const ENTRE_PASOS = 0.015; // s entre pasos: ~100 ms en total
 
 // Región de la pantalla real que muestra la última imagen: la pantalla entera o la zona ampliada.
 export interface Vista { x: number; y: number; ancho: number; alto: number }
@@ -168,11 +167,6 @@ export class Escritorio {
   }
 
   // Cada acción devuelve una captura nueva para que el modelo vea el resultado.
-  private async despues(): Promise<Captura> {
-    await esperar(ESPERA - PASOS * ENTRE_PASOS * 1000);
-    return this.capturar();
-  }
-
   async clic(nx: number, ny: number, boton: "izquierdo" | "derecho" | "doble" = "izquierdo") {
     const p = await this.punto(nx, ny);
     const clic = boton === "derecho" ? ["click", "3"] : boton === "doble" ? ["click", "--repeat", "2", "--delay", "80", "1"] : ["click", "1"];
