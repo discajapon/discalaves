@@ -7,17 +7,19 @@
 import type { Computadora } from "./computadora";
 
 export const ANCHO_IMAGEN = 1024; // ancho de las capturas que ve el modelo (~1120 tokens con Qwen 3.5 y --image-min-tokens 1024)
-// Tras una acción, la captura nueva se toma en cuanto la pantalla está quieta (dos capturas seguidas iguales, cada
-// ~0,1 s): si cambió, enseguida; si no cambió nada, a los ~0,4 s; si sigue moviéndose, como mucho ~1,2 s (una app
-// que tarda en abrir: para eso está esperar). Antes era una espera fija de 600 ms y tres llamadas a la computadora.
+// Tras una acción, la captura nueva se toma cuando pasaron al menos 0,6 s y la pantalla está quieta (dos capturas
+// seguidas iguales, cada ~0,1 s), como mucho ~1,5 s (una app que tarda en abrir: para eso está esperar). El mínimo
+// hace falta: al pulsar "Guardar como…" el menú se cierra enseguida y la pantalla se queda quieta, pero el diálogo
+// tarda más en salir; sin él, el modelo vio la pantalla sin diálogo, se inventó que estaba y se perdió (visto
+// 2026-10-18). Antes era una espera fija de 600 ms y tres llamadas a la computadora; ahora, una.
 const ACTUAR = [
   'f=/tmp/.discalaves-captura.$$',
-  'xwd -root -silent > "$f" 2>/dev/null; antes=$(cksum < "$f")',
   'xdotool "$@" 2> "$f.err" || { cat "$f.err"; rm -f "$f" "$f.err"; exit 3; }',
-  'previa=$antes; i=0',
-  'while [ $i -lt 8 ]; do',
+  'previa=; i=0',
+  'sleep 0.45',
+  'while [ $i -lt 10 ]; do',
   '  sleep 0.1; xwd -root -silent > "$f" 2>/dev/null; ahora=$(cksum < "$f"); i=$((i+1))',
-  '  [ "$ahora" = "$previa" ] && { [ "$ahora" != "$antes" ] || [ $i -ge 3 ]; } && break',
+  '  [ "$ahora" = "$previa" ] && break',
   '  previa=$ahora',
   'done',
   'base64 -w0 "$f"; rm -f "$f" "$f.err"',
@@ -118,6 +120,18 @@ export class Escritorio {
 
   constructor(readonly computadora: Computadora) {}
 
+  // Al encender la computadora, la sesión XFCE tarda unos segundos: la primera captura salía negra y el modelo
+  // gastaba pasos en averiguar qué pasaba. La primera vez se espera a que esté su panel (hasta ~15 s).
+  private sesion: Promise<void> | undefined;
+  private esperarSesion(): Promise<void> {
+    return (this.sesion ??= (async () => {
+      for (let i = 0; i < 60; i++) {
+        if ((await this.computadora.ejecutar(["pgrep", "-x", "xfce4-panel"], { tiempo: 5000 })).salida.trim()) return void (await esperar(1500)); // que termine de dibujarse
+        await esperar(250);
+      }
+    })());
+  }
+
   private async xdotool(args: string[]): Promise<string> {
     const r = await this.computadora.ejecutar(["xdotool", ...args], { tiempo: 20_000 });
     if (r.codigo !== 0) throw new Error(`no pude actuar en su escritorio: ${r.salida.trim().slice(0, 200)}`);
@@ -126,6 +140,7 @@ export class Escritorio {
 
   // Captura de la pantalla entera o de una región (para ampliar), reescalada a ANCHO_IMAGEN y en JPEG.
   async capturar(zona?: Vista): Promise<Captura> {
+    await this.esperarSesion();
     const r = await this.computadora.ejecutar(["sh", "-c", "xwd -root -silent 2>/dev/null | base64 -w0"], { tiempo: 20_000 });
     if (r.codigo !== 0) throw new Error(`no pude capturar su pantalla: ${r.salida.trim().slice(0, 200)}`);
     return this.procesar(r.salida, zona);
@@ -133,6 +148,7 @@ export class Escritorio {
 
   // Acción de xdotool, espera a que la pantalla se asiente y captura nueva, en una sola llamada (ACTUAR).
   private async actuar(args: string[]): Promise<Captura> {
+    await this.esperarSesion();
     const r = await this.computadora.ejecutar(["sh", "-c", ACTUAR, "sh", ...args], { tiempo: 20_000 });
     if (r.codigo !== 0) throw new Error(`no pude actuar en su escritorio: ${r.salida.trim().slice(0, 200)}`);
     return this.procesar(r.salida);
