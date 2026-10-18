@@ -94,6 +94,13 @@ async function main() {
     r = await correr("clic", { ...centro, objetivo: "texto del editor", boton: "triple" });
     assert.equal(r.codigo, 0, r.salida);
     r = await correr("escribir_texto", { texto: "Hola desde Discalaves, con ñ y tildes: canción." });
+    // Clic con ctrl mantenido: al soltarlo, ctrl no queda pulsado (si quedara, "x" sería cortar).
+    r = await correr("clic", { ...centro, objetivo: "texto del editor", mantener: "ctrl" });
+    assert.match(r.salida, /con ctrl/);
+    // esperar: tarda lo pedido y devuelve una captura nueva.
+    const t0 = Date.now();
+    r = await correr("esperar", { segundos: 1 });
+    assert.ok(r.imagen && Date.now() - t0 >= 1000, r.salida);
     r = await correr("pulsar_teclas", { teclas: "ctrl+s" });
     await esperar(800);
     r = await correr("escribir_texto", { texto: `/home/escritorio-prueba/nota.txt` });
