@@ -573,6 +573,7 @@ function dibujarHerramientas(motor: string, marcadas: string[]) {
   const oc = motor === "openclaw";
   campo<HTMLElement>("herramientas").replaceChildren(
     ...casillas(oc ? NOMBRES_OC : NOMBRES_HERRAMIENTAS),
+    ...(oc ? [] : [Object.assign(crear("span", "aviso-vision"), { id: "empleado-sin-vision", hidden: true })]),
     crear("span", "subtitulo", "adicionales: actívalas solo si el puesto las necesita"),
     ...casillas(oc ? NOMBRES_OC_ADICIONALES : NOMBRES_ADICIONALES),
   );
