@@ -158,15 +158,18 @@ function leerDib(b: Buffer, xhot: number, yhot: number): Imagen {
 
 export type DecodificarPng = (png: Buffer) => { ancho: number; alto: number; bgra: Buffer }; // premultiplicado
 
-// .cur (o .ico): la imagen más grande; el punto activo viene en su entrada del directorio.
+// .cur (o .ico): la imagen de TAMANO, o la menor que lo supere (si no hay, la mayor), así se escala lo mínimo y el
+// punto activo es el que dibujó su autor para ese tamaño. En un .ico esos campos son planos y bits: punto (0, 0).
 function leerCur(b: Buffer, png: DecodificarPng): Imagen {
-  const n = b.readUInt16LE(4);
-  if (b.readUInt16LE(0) !== 0 || ![1, 2].includes(b.readUInt16LE(2)) || !n) throw new Error("no es un archivo .cur válido");
+  if (b.length < 22) throw new Error("no es un archivo .cur válido");
+  const n = b.readUInt16LE(4), icono = b.readUInt16LE(2) === 1;
+  if (b.readUInt16LE(0) !== 0 || ![1, 2].includes(b.readUInt16LE(2)) || !n || b.length < 6 + n * 16) throw new Error("no es un archivo .cur válido");
   const entradas = Array.from({ length: n }, (_, i) => {
     const e = 6 + i * 16;
-    return { lado: b[e] || 256, xhot: b.readUInt16LE(e + 4), yhot: b.readUInt16LE(e + 6), tam: b.readUInt32LE(e + 8), pos: b.readUInt32LE(e + 12) };
-  }).sort((a, c) => c.lado - a.lado);
-  const e = entradas[0];
+    return { lado: b[e] || 256, xhot: icono ? 0 : b.readUInt16LE(e + 4), yhot: icono ? 0 : b.readUInt16LE(e + 6), tam: b.readUInt32LE(e + 8), pos: b.readUInt32LE(e + 12) };
+  }).sort((a, c) => a.lado - c.lado);
+  const e = entradas.find((x) => x.lado >= TAMANO) ?? entradas.at(-1)!;
+  if (e.pos + e.tam > b.length) throw new Error("el .cur está cortado");
   const datos = b.subarray(e.pos, e.pos + e.tam);
   if (datos.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return deBgra(png(datos), e.xhot, e.yhot);
   return leerDib(datos, e.xhot, e.yhot);
