@@ -187,6 +187,8 @@ d="$HOME/.icons/discalaves"; mkdir -p "$d/cursors"
 printf '[Icon Theme]\\nName=Discalaves\\nInherits=Adwaita\\n' > "$d/index.theme"
 cat > "$d/cursors/left_ptr.nuevo" && mv -f "$d/cursors/left_ptr.nuevo" "$d/cursors/left_ptr"
 for n in default arrow top_left_arrow; do ln -sfn left_ptr "$d/cursors/$n"; done
+# Al encender, la sesión XFCE puede no haber arrancado aún: se la espera (hasta ~15 s) para avisarle.
+for i in $(seq 75); do pgrep -u "$(id -u)" -x xfsettingsd >/dev/null && break; sleep 0.2; done
 s=$(pgrep -u "$(id -u)" -x xfce4-session | head -n1) || true
 if [ -n "$s" ]; then
   export $(tr '\\0' '\\n' < /proc/$s/environ | grep '^DBUS_SESSION_BUS_ADDRESS=')
