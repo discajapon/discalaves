@@ -24,5 +24,12 @@ export function recortar(piezas: Pieza[], limite: number, previo?: Recorte): Rec
   if (total() <= limite) return r;
   const objetivo = limite * OBJETIVO;
 
+  // 1. Mover el inicio a un mensaje del usuario más reciente (nunca más allá del último).
+  const usuarios = piezas.flatMap((p, i) => (p.rol === "user" && i > r.inicio ? [i] : []));
+  for (const u of usuarios) {
+    if (total() <= objetivo) break;
+    r.inicio = u;
+    for (const i of [...r.cortas, ...r.fuera]) if (i < u) (r.cortas.delete(i), r.fuera.delete(i));
+  }
   return r;
 }
