@@ -746,7 +746,7 @@ ipcMain.handle("estado", (_e, id: unknown) => {
 });
 ipcMain.handle("modelos", async () => {
   const ollama = await modelosOllama();
-  const qwen: Modelo[] = !hayQwen() ? [] : [{ proveedor: "qwen", modelo: QWEN_MODELO, valor: "qwen", detalle: "incluido · 9B · Q4_K_M", herramientas: true, origen: "local", donde: "este equipo" }];
+  const qwen: Modelo[] = !hayQwen() ? [] : [{ proveedor: "qwen", modelo: QWEN_MODELO, valor: "qwen", detalle: "incluido · 9B · Q4_K_M", herramientas: true, vision: visionQwen(), origen: "local", donde: "este equipo" }];
   const nube: Modelo[] = [];
   for (const p of proveedores()) {
     const origen: Origen = esRemoto(p.tipo) ? "remoto" : "nube";
