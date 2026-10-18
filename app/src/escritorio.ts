@@ -108,6 +108,7 @@ export function trayecto(desde: { x: number; y: number }, hasta: { x: number; y:
 }
 
 const esperar = (ms: number) => new Promise((r) => setTimeout(r, ms));
+export type Boton = "izquierdo" | "derecho" | "doble" | "triple" | "central";
 
 // Escritorio de una computadora: captura y acciones. Recuerda la última vista para mapear las coordenadas.
 export class Escritorio {
@@ -174,9 +175,12 @@ export class Escritorio {
   }
 
   // Cada acción devuelve una captura nueva para que el modelo vea el resultado.
-  async clic(nx: number, ny: number, boton: "izquierdo" | "derecho" | "doble" = "izquierdo") {
+  async clic(nx: number, ny: number, boton: Boton = "izquierdo") {
     const p = await this.punto(nx, ny);
-    const clic = boton === "derecho" ? ["click", "3"] : boton === "doble" ? ["click", "--repeat", "2", "--delay", "80", "1"] : ["click", "1"];
+    const clic = {
+      izquierdo: ["click", "1"], derecho: ["click", "3"], central: ["click", "2"],
+      doble: ["click", "--repeat", "2", "--delay", "80", "1"], triple: ["click", "--repeat", "3", "--delay", "80", "1"],
+    }[boton] ?? ["click", "1"];
     return { punto: p, captura: await this.actuar([...(await this.moverA(p)), ...clic]) };
   }
 
