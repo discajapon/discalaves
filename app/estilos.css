@@ -665,6 +665,7 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 .casilla { display: flex; align-items: center; gap: var(--e2); color: var(--tinta); font-size: var(--texto); }
 .casilla input { accent-color: var(--burbuja-mia); }
 #empleado-herramientas .aviso-vision { grid-column: 1 / -1; font-size: var(--texto-chico); color: var(--notificacion-texto); }
+#empleado-herramientas .aviso-vision[hidden] { display: none; }
 .aviso-dialogo { min-height: 1em; font-size: var(--texto-chico); color: var(--notificacion-texto); }
 
 /* Proveedores fuera de este equipo (diálogos sólidos como el de empleado). */
