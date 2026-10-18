@@ -12,6 +12,7 @@ export interface Pieza { rol: "user" | "assistant" | "tool"; largo: number; cort
 export interface Recorte { inicio: number; cortas: Set<number>; fuera: Set<number> }
 
 export const OBJETIVO = 0.6; // al recortar se baja al 60 % del límite: el 40 % restante son turnos sin tocar el principio
+const ENTERAS = 3; // las últimas salidas de herramientas no se recortan nunca
 
 export function recortar(piezas: Pieza[], limite: number, previo?: Recorte): Recorte {
   // Lo recordado vale si sigue apuntando a un mensaje del usuario (el historial puede haberse vaciado o cambiado).
@@ -30,6 +31,12 @@ export function recortar(piezas: Pieza[], limite: number, previo?: Recorte): Rec
     if (total() <= objetivo) break;
     r.inicio = u;
     for (const i of [...r.cortas, ...r.fuera]) if (i < u) (r.cortas.delete(i), r.fuera.delete(i));
+  }
+  // 2. Una sola tarea larga: recortar las salidas de herramientas más antiguas (las últimas quedan enteras).
+  const herramientas = piezas.flatMap((p, i) => (p.rol === "tool" && i > r.inicio ? [i] : []));
+  for (const i of herramientas.slice(0, -ENTERAS)) {
+    if (total() <= objetivo) break;
+    if (!r.fuera.has(i)) r.cortas.add(i);
   }
   return r;
 }
