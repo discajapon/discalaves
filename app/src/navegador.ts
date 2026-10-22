@@ -31,8 +31,9 @@ async function estructura(p: Page): Promise<string> {
 
 // "e7", "ref=e7", "[ref=e7]", "ref_7" o "7" → "e7".
 export function normalizarRef(ref: string): string | null {
-  const m = ref.trim().match(/^\[?(?:ref[=_:\s]*)?e?(\d+)\]?$/i);
-  return m ? `e${m[1]}` : null;
+  // Tras navegar, Playwright antepone el frame: "f4e34" (sin él, la ref no existe en la página nueva).
+  const m = ref.trim().match(/^\[?(?:ref[=_:\s]*)?(f\d+)?e?(\d+)\]?$/i);
+  return m ? `${m[1]?.toLowerCase() ?? ""}e${m[2]}` : null;
 }
 
 async function esperarCarga(p: Page) {
