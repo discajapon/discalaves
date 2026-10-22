@@ -107,6 +107,7 @@ const informeNuevo = fs.readFileSync(path.join(plantillas, "investigador", "proc
 const informeViejo = informeNuevo.split("\n").filter((l) => !/escribir_en|captura_pantalla/.test(l)).join("\n");
 assert.notEqual(informeViejo, informeNuevo);
 fs.writeFileSync(path.join(viejoEquipo.dir("investigador"), "procedimientos", "informe-web.md"), informeViejo);
+fs.writeFileSync(path.join(viejoEquipo.dir("editado"), "procedimientos", "informe-web.md"), informeViejo + "\nMi paso propio.\n");
 
 // ---- Verificación de honestidad al terminar una tarea ----
 const pedido = { de: "yo", texto: "investiga y deja un informe" };
