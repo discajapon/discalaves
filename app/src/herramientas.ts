@@ -282,10 +282,10 @@ async function delicado(navegador: Navegador, nombre: string, args: Record<strin
 
 const NAVEGADOR = { buscar_web: 1, abrir_pagina: 1, ver_pagina: 1, hacer_clic: 1, escribir_en: 1 };
 
-async function ejecutarNavegador(navegador: Navegador, nombre: string, t: (k: string) => string, enviar: boolean): Promise<string | null> {
+async function ejecutarNavegador(navegador: Navegador, nombre: string, t: (k: string) => string, enviar: boolean, parte: unknown): Promise<string | null> {
   if (nombre === "buscar_web" && t("consulta")) return navegador.buscarWeb(t("consulta"));
   if (nombre === "abrir_pagina" && t("url")) return navegador.abrirPagina(t("url"));
-  if (nombre === "ver_pagina") return navegador.verPagina();
+  if (nombre === "ver_pagina") return navegador.verPagina(Number(parte) || 1); // número o texto: "2"
   if (nombre === "hacer_clic" && (t("ref") || t("texto"))) return navegador.hacerClic(t("ref"), t("texto"));
   if (nombre === "escribir_en" && (t("ref") || t("campo"))) return navegador.escribirEn(t("ref"), t("campo"), t("texto"), enviar);
   return null;
@@ -431,7 +431,7 @@ export async function ejecutarHerramienta(ctx: Contexto, nombre: string, argumen
   try {
     if (nombre in NAVEGADOR) await computadora.encender((d) => avisar("ejecutando", d));
     avisar("ejecutando", `${nombre.replace("_", " ")} ${texto("consulta") || texto("url") || texto("texto") || texto("campo") || texto("ref")}`.trim());
-    const salida = await ejecutarNavegador(navegador, nombre, texto, args.enviar === true);
+    const salida = await ejecutarNavegador(navegador, nombre, texto, args.enviar === true, args.parte);
     if (salida !== null) return { salida, codigo: 0 };
   } catch (e) {
     return { salida: `error del navegador: ${(e as Error).message.split("\n")[0]}`, codigo: 1 };
