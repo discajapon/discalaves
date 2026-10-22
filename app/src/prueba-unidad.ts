@@ -2,7 +2,7 @@
 // runner de Windows de GitHub Actions: npm run prueba:unidad
 import assert from "node:assert/strict";
 import { contiene, Empleados, leerIdentidad, promptEmpleado, textoIdentidad } from "./empleados";
-import { leerPunto, textoDeHtml, verificar } from "./herramientas";
+import { leerPunto, Repeticiones, textoDeHtml, verificar } from "./herramientas";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
