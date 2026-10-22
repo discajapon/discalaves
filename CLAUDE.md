@@ -291,7 +291,10 @@ imagen, ~2 min).
   trabaja; aborta la respuesta en curso, cuenta como "no" las aprobaciones
   pendientes y deja "me detuviste" en el hilo; un comando que ya corre
   termina antes de parar) y la detección de repeticiones (misma herramienta
-  con los mismos argumentos: a la 3.ª no se ejecuta y se le pide otro camino,
+  con los mismos argumentos **y el mismo resultado que la vez anterior** —`Repeticiones` en `herramientas.ts`,
+  también en el puente de OpenClaw; si el resultado cambia, la cuenta vuelve a empezar: antes, `ver_pagina` y
+  `captura_pantalla`, que no llevan argumentos, se bloqueaban a la 3.ª lectura de una tarea aunque la página
+  hubiera cambiado—: a la 3.ª no se ejecuta y se le pide otro camino,
   a la 5.ª se detiene y lo explica). **Locales (qwen, Ollama y OpenClaw) nunca
   se detienen solos** (decisión del usuario, 2026-10-01): a la 3.ª se les
   bloquea esa llamada y se les pide otra herramienta, cuantas veces haga falta,
