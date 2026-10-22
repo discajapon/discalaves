@@ -194,6 +194,18 @@ export class Empleados {
   private procedimientosAlDia(id: string) {
     const dir = path.join(this.dir(id), "procedimientos");
     if (!fs.existsSync(dir)) return;
+    for (const f of fs.readdirSync(dir).filter((f) => f.endsWith(".md"))) {
+      const actual = fs.readFileSync(path.join(dir, f), "utf8");
+      for (const p of fs.readdirSync(this.plantillas)) {
+        const nuevo = path.join(this.plantillas, p, "procedimientos", f);
+        if (!fs.existsSync(nuevo)) continue;
+        const texto = fs.readFileSync(nuevo, "utf8");
+        if (texto !== actual && contiene(texto, actual)) {
+          fs.writeFileSync(path.join(dir, f), texto);
+          break;
+        }
+      }
+    }
   }
 
   // ---- Procedimientos y memoria ----
