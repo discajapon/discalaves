@@ -192,6 +192,7 @@ export class Empleados {
   // Un procedimiento copiado de una plantilla pasa a su versión nueva solo si el usuario no lo tocó: todas sus líneas
   // siguen, en orden, en la de la plantilla (la plantilla solo añadió). Uno editado a mano se queda como está.
   private procedimientosAlDia(id: string) {
+    const dir = path.join(this.dir(id), "procedimientos");
   }
 
   // ---- Procedimientos y memoria ----
