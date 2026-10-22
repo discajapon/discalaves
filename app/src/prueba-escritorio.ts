@@ -167,6 +167,7 @@ async function main() {
     assert.match(r.salida, /url: https:\/\/www\.iana\.org/);
     r = await correr("hacer_clic", { ref: "e99999" });
     assert.match(r.salida, /no encontré la referencia/);
+
     console.log("escritorio: ok");
   } finally {
     await navegadorDe(computadora).cerrar();
