@@ -22,6 +22,7 @@ const MAX_MEMORIA = 1500; // caracteres de memoria que van al prompt (las notas 
 const MAX_PROCEDIMIENTO = 6000;
 const VERSION_PERFILES = 1; // súbela cuando una plantilla gane algo que los empleados ya creados también deban tener
 
+
 export interface Identidad {
   nombre: string;
   rol: string;
