@@ -123,6 +123,9 @@ assert.ok(!viejoEquipo.buscar("investigador")!.herramientas.includes("escribir_e
 fs.rmSync(datosV, { recursive: true, force: true });
 
 // Referencias de ver_pagina como las escribe el modelo; tras navegar llevan el frame delante (f4e34).
+for (const [dada, esperada] of [["e34", "e34"], ["34", "e34"], ["[ref=e7]", "e7"], ["ref=e7", "e7"], ["f4e34", "f4e34"], ["[ref=F12e3]", "f12e3"], ["boton", null], ["e", null]] as const) {
+  assert.equal(normalizarRef(dada), esperada, `ref ${dada}`);
+}
 
 // ---- Verificación de honestidad al terminar una tarea ----
 const pedido = { de: "yo", texto: "investiga y deja un informe" };
