@@ -114,6 +114,7 @@ assert.ok(aldia.herramientas.includes("escribir_en"), "recibe escribir_en");
 assert.equal(aldia.herramientas.indexOf("escribir_en"), aldia.herramientas.indexOf("hacer_clic") + 1, "junto a hacer_clic");
 assert.equal(aldia.instrucciones, inv.instrucciones, "el resto del perfil no cambia");
 assert.equal(fs.readFileSync(path.join(viejoEquipo.dir("investigador"), "procedimientos", "informe-web.md"), "utf8"), informeNuevo, "procedimiento sin tocar: a su versión nueva");
+assert.match(fs.readFileSync(path.join(viejoEquipo.dir("editado"), "procedimientos", "informe-web.md"), "utf8"), /Mi paso propio/, "uno editado a mano no se toca");
 
 // ---- Verificación de honestidad al terminar una tarea ----
 const pedido = { de: "yo", texto: "investiga y deja un informe" };
