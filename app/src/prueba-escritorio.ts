@@ -171,6 +171,7 @@ async function main() {
     // Un buscador como el de YouTube: las sugerencias se despliegan bajo el puntero (el centro de la pantalla) y la
     // que queda bajo él se marca; al enviar, la URL cambia sin recargar y los resultados se pintan 0,7 s después, sin que nada se mueva mientras.
     await correr("abrir_pagina", { url: "https://example.com" }); // con origen propio, para que pushState valga
+    await computadora.ejecutar(["xdotool", "mousemove", "640", "400"], { tiempo: 10_000 });
     console.log("escritorio: ok");
   } finally {
     await navegadorDe(computadora).cerrar();
