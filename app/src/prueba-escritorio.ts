@@ -168,6 +168,8 @@ async function main() {
     r = await correr("hacer_clic", { ref: "e99999" });
     assert.match(r.salida, /no encontré la referencia/);
 
+    // Un buscador como el de YouTube: las sugerencias se despliegan bajo el puntero (el centro de la pantalla) y la
+    // que queda bajo él se marca; al enviar, la URL cambia sin recargar y los resultados se pintan 0,7 s después, sin que nada se mueva mientras.
     console.log("escritorio: ok");
   } finally {
     await navegadorDe(computadora).cerrar();
