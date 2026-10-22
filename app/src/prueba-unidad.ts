@@ -111,6 +111,7 @@ fs.writeFileSync(path.join(viejoEquipo.dir("editado"), "procedimientos", "inform
 viejoEquipo.ponerAlDia();
 const aldia = viejoEquipo.buscar("investigador")!;
 assert.ok(aldia.herramientas.includes("escribir_en"), "recibe escribir_en");
+assert.equal(aldia.herramientas.indexOf("escribir_en"), aldia.herramientas.indexOf("hacer_clic") + 1, "junto a hacer_clic");
 
 // ---- Verificación de honestidad al terminar una tarea ----
 const pedido = { de: "yo", texto: "investiga y deja un informe" };
