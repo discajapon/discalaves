@@ -191,6 +191,7 @@ async function main() {
     }
     assert.deepEqual(await raton(), { x: 640, y: 400 }, "el puntero que se ve en vivo no se movió");
 
+    // Una página larga llega por partes y se puede pedir la siguiente (número o texto, como lo mande el modelo).
     console.log("escritorio: ok");
   } finally {
     await navegadorDe(computadora).cerrar();
