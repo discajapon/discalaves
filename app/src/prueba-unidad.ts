@@ -1,7 +1,7 @@
 // Pruebas que no necesitan GPU, Docker ni WSL: rutas y adaptadores por sistema. Corren en Linux y en el
 // runner de Windows de GitHub Actions: npm run prueba:unidad
 import assert from "node:assert/strict";
-import { Empleados, leerIdentidad, promptEmpleado, textoIdentidad } from "./empleados";
+import { contiene, Empleados, leerIdentidad, promptEmpleado, textoIdentidad } from "./empleados";
 import { leerPunto, textoDeHtml, verificar } from "./herramientas";
 import fs from "node:fs";
 import os from "node:os";
