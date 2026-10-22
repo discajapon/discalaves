@@ -130,6 +130,7 @@ for (const [dada, esperada] of [["e34", "e34"], ["34", "e34"], ["[ref=e7]", "e7"
 // Freno de repeticiones: solo cuenta lo que da el mismo resultado otra vez.
 {
   const r = new Repeticiones();
+  const leer = (salida: string) => { const n = r.contar("ver_pagina {}"); r.resultado("ver_pagina {}", salida); return n; };
 }
 
 // ---- Verificación de honestidad al terminar una tarea ----
