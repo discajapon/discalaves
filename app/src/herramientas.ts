@@ -48,7 +48,9 @@ export const DEFINICIONES = [
   herramienta("abrir_pagina", "Abre una dirección en tu navegador y devuelve el texto principal de la página.", {
     url: { type: "string", description: "por ejemplo: https://es.wikipedia.org/wiki/Linux" },
   }),
-  herramienta("ver_pagina", "Muestra la estructura de la página abierta: enlaces, botones y campos, cada uno con su referencia [ref=e7] para hacer_clic o escribir_en.", {}),
+  herramienta("ver_pagina", "Muestra la estructura de la página abierta: enlaces, botones y campos, cada uno con su referencia [ref=e7] para hacer_clic o escribir_en. Una página larga llega por partes.", {
+    parte: { type: "integer", description: "qué parte de una página larga ver: 1 (la de arriba, por defecto), 2, 3…" },
+  }, ["parte"]),
   herramienta("hacer_clic", "Hace clic en un enlace o botón de la página abierta. Mejor por su referencia de ver_pagina (ref); si no, por su texto visible.", {
     ref: { type: "string", description: "referencia de ver_pagina, por ejemplo: e7" },
     texto: { type: "string", description: "texto del enlace o botón, si no tienes la referencia" },
