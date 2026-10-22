@@ -99,6 +99,7 @@ assert.ok(contiene("a\nnueva\nb\nc", "a\nb\nc") && !contiene("a\nc\nb", "a\nb\nc
 const datosV = fs.mkdtempSync(path.join(os.tmpdir(), "discalaves-aldia-"));
 const plantillas = path.join(__dirname, "..", "plantillas");
 const viejoEquipo = new Empleados(datosV, plantillas);
+const inv = viejoEquipo.plantilla("investigador")!;
 
 // ---- Verificación de honestidad al terminar una tarea ----
 const pedido = { de: "yo", texto: "investiga y deja un informe" };
