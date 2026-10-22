@@ -67,7 +67,7 @@ export class OpenClaw {
   // Un puerto fijo por empleado en 127.0.0.1 que reenvía al CDP de su Chromium: el puerto del contenedor cambia en
   // cada arranque y OpenClaw solo lee los perfiles del navegador al arrancar.
   private reenvios: Record<string, number> = {};
-  private repetidas = new Map<string, number>(); // freno de repeticiones de la tarea en curso
+  private repetidas = new Repeticiones(); // freno de repeticiones de la tarea en curso
   private listo: Promise<void> | undefined;
 
   constructor(private readonly dir: string, private readonly llama: { url: string; clave: string; modelo: string; contexto: number }, private readonly puente: Puente) {}
@@ -214,9 +214,8 @@ export class OpenClaw {
           if (NUNCA_OC.includes(d.herramienta)) return responder(200, { bloquear: true, motivo: `${d.herramienta} no está permitida en Discalaves` });
           // Mismo freno que el bucle propio con un local: a la 3.ª llamada idéntica no se ejecuta y se le pide otra
           // herramienta; nunca se corta la tarea (decisión del usuario, 2026-10-01). Detener sigue cortándola.
-          const firma = `${d.agente} ${d.herramienta} ${JSON.stringify(parametros)}`;
-          const n = (this.repetidas.get(firma) ?? 0) + 1;
-          this.repetidas.set(firma, n);
+          const firma = firmaOC(d.agente, d.herramienta, parametros);
+          const n = this.repetidas.contar(firma);
           if (n >= 3) return responder(200, { bloquear: true, motivo: `ya hiciste exactamente esto ${n - 1} veces sin resultado; no lo repito. Prueba otra herramienta u otro camino (otra búsqueda, otra página, otra fuente) y sigue hasta tener el resultado.` });
           // El navegador siempre es el del propio empleado: nunca el del usuario ni el de otro empleado.
           if (d.herramienta === "browser") parametros.profile = `discalaves-${d.agente}`;
@@ -224,6 +223,7 @@ export class OpenClaw {
           return responder(200, r.bloquear || r.parametros ? r : { ...r, parametros: d.herramienta === "browser" ? parametros : undefined });
         }
         if (req.url === "/despues") {
+          this.repetidas.resultado(firmaOC(d.agente, d.herramienta, parametros), JSON.stringify(d.resultado ?? d.error ?? null));
           this.puente.despues(d.agente, d.herramienta, parametros, d.resultado, d.error);
           return responder(200, {});
         }
@@ -239,7 +239,7 @@ export class OpenClaw {
   // llegan mientras escribe. Cortar la señal cierra la petición (Detener).
   async enviar(agente: string, texto: string, alTrozo: (t: string) => void, senal: AbortSignal): Promise<string> {
     await this.iniciar();
-    this.repetidas.clear();
+    this.repetidas = new Repeticiones();
     const r = await fetch(`http://127.0.0.1:${this.puerto}/v1/chat/completions`, {
       method: "POST",
       signal: senal,
