@@ -100,6 +100,7 @@ const datosV = fs.mkdtempSync(path.join(os.tmpdir(), "discalaves-aldia-"));
 const plantillas = path.join(__dirname, "..", "plantillas");
 const viejoEquipo = new Empleados(datosV, plantillas);
 const inv = viejoEquipo.plantilla("investigador")!;
+const sinEscribir = inv.herramientas.filter((h) => h !== "escribir_en" && h !== "escritorio");
 
 // ---- Verificación de honestidad al terminar una tarea ----
 const pedido = { de: "yo", texto: "investiga y deja un informe" };
