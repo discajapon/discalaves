@@ -165,6 +165,8 @@ export class Empleados {
     this.guardarIndice(this.leerIndice().map((e) => (e.id === id ? { ...e, tope } : e)));
   }
 
+  // ---- Puesta al día de perfiles creados con plantillas anteriores ----
+  // Una vez por versión (<datos>/empleados/version): después, lo que el usuario cambie en el perfil se respeta.
   // ---- Procedimientos y memoria ----
 
   procedimientos(id: string): Procedimiento[] {
