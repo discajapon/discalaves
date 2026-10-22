@@ -131,6 +131,7 @@ for (const [dada, esperada] of [["e34", "e34"], ["34", "e34"], ["[ref=e7]", "e7"
 {
   const lineas = Array.from({ length: 900 }, (_, i) => `- link "resultado ${i}" [ref=e${i}]`);
   const arbol = lineas.join("\n");
+  const total = Number(parteDe(arbol, 1).match(/\[parte 1 de (\d+): .*parte: 2\]$/)?.[1]);
 }
 
 // Freno de repeticiones: solo cuenta lo que da el mismo resultado otra vez.
