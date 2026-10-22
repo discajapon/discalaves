@@ -133,7 +133,7 @@ export class Navegador {
     return resumen(p, await textoPrincipal(p));
   }
 
-  async verPagina(): Promise<string> {
+  async verPagina(parte = 1): Promise<string> {
     const p = await this.paginaActual();
     return resumen(p, await estructura(p), false);
   }
