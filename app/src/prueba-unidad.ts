@@ -106,6 +106,7 @@ viejoEquipo.crear({ ...inv, nombre: "Editado", herramientas: sinEscribir }, true
 const informeNuevo = fs.readFileSync(path.join(plantillas, "investigador", "procedimientos", "informe-web.md"), "utf8");
 const informeViejo = informeNuevo.split("\n").filter((l) => !/escribir_en|captura_pantalla/.test(l)).join("\n");
 assert.notEqual(informeViejo, informeNuevo);
+fs.writeFileSync(path.join(viejoEquipo.dir("investigador"), "procedimientos", "informe-web.md"), informeViejo);
 
 // ---- Verificación de honestidad al terminar una tarea ----
 const pedido = { de: "yo", texto: "investiga y deja un informe" };
