@@ -98,6 +98,7 @@ fs.rmSync(datos, { recursive: true, force: true });
 assert.ok(contiene("a\nnueva\nb\nc", "a\nb\nc") && !contiene("a\nc\nb", "a\nb\nc") && !contiene("a\nb", "a\nb\nx"), "contiene: líneas en orden");
 const datosV = fs.mkdtempSync(path.join(os.tmpdir(), "discalaves-aldia-"));
 const plantillas = path.join(__dirname, "..", "plantillas");
+const viejoEquipo = new Empleados(datosV, plantillas);
 
 // ---- Verificación de honestidad al terminar una tarea ----
 const pedido = { de: "yo", texto: "investiga y deja un informe" };
