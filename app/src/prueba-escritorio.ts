@@ -181,6 +181,14 @@ async function main() {
         q.oninput = () => { s.innerHTML = '<li style="height:100%">' + q.value + ' tejida a crochet</li>'; s.firstChild.onmouseenter = () => (marcada = s.firstChild.textContent); };
         q.onkeydown = (e) => { if (e.key !== "Enter") return; const t = marcada ?? q.value; s.innerHTML = ""; history.pushState(0, "", "?q=" + encodeURIComponent(t)); setTimeout(() => (m.textContent = "Resultados de " + t), 700); };
       </script>`));
+    for (let vez = 0; vez < 2; vez++) {
+      const buscador = (await correr("ver_pagina", {})).salida.match(/combobox "Buscar"[^\n]*?\[ref=((?:f\d+)?e\d+)\]/)?.[1];
+      assert.ok(buscador, "sin referencia del buscador");
+      r = await correr("escribir_en", { ref: buscador, texto: "mariposa monarca", enviar: true });
+      assert.match(r.salida, /url: https:\/\/example\.com\/\?q=mariposa%20monarca\n/, `Enter eligió la sugerencia bajo el puntero:\n${r.salida}`);
+      assert.match(r.salida, /Resultados de mariposa monarca/, `vuelta ${vez}: devolvió la página de antes de pintarse:\n${r.salida}`);
+      await (navegadorDe(computadora) as any).paginaActual().then((p: import("playwright-core").Page) => p.evaluate(() => { (document.getElementById("m") as HTMLElement).textContent = "Portada"; (document.getElementById("q") as HTMLInputElement).value = ""; history.replaceState(0, "", "/"); }));
+    }
     console.log("escritorio: ok");
   } finally {
     await navegadorDe(computadora).cerrar();
