@@ -133,6 +133,7 @@ for (const [dada, esperada] of [["e34", "e34"], ["34", "e34"], ["[ref=e7]", "e7"
   const arbol = lineas.join("\n");
   const total = Number(parteDe(arbol, 1).match(/\[parte 1 de (\d+): .*parte: 2\]$/)?.[1]);
   assert.ok(total >= 5, "una página grande llega por partes");
+  const juntas = Array.from({ length: total }, (_, i) => parteDe(arbol, i + 1).replace(/\n\[parte \d+ de \d+[^\]]*\]$/, "")).join("\n");
 }
 
 // Freno de repeticiones: solo cuenta lo que da el mismo resultado otra vez.
