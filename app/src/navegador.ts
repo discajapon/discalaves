@@ -184,6 +184,7 @@ export class Navegador {
     // Chromium cree que el ratón está donde lo dejó el escritorio (el centro, al encender): si las sugerencias de un
     // buscador se despliegan bajo él, una queda resaltada y Enter busca esa en vez del texto (visto en YouTube).
     // Se lleva el ratón de la página a la esquina por CDP; el puntero que se ve en vivo no se mueve.
+    await p.mouse.move(0, 0).catch(() => {});
     for (const c of candidatos) {
       if (!(await c.count())) continue;
       await c.first().fill(texto, { timeout: 8000 });
