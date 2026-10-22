@@ -18,6 +18,7 @@ import http from "node:http";
 import net from "node:net";
 import path from "node:path";
 import { scriptEntrar } from "./computadora";
+import { Repeticiones } from "./herramientas";
 
 // Principales: las que trae un empleado nuevo. Adicionales: el usuario las activa. Nunca: salen de su computadora
 // (mensajería, dispositivos emparejados, el propio Gateway…) y se bloquean aunque alguien las ponga en el perfil.
