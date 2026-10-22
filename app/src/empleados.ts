@@ -193,6 +193,7 @@ export class Empleados {
   // siguen, en orden, en la de la plantilla (la plantilla solo añadió). Uno editado a mano se queda como está.
   private procedimientosAlDia(id: string) {
     const dir = path.join(this.dir(id), "procedimientos");
+    if (!fs.existsSync(dir)) return;
   }
 
   // ---- Procedimientos y memoria ----
