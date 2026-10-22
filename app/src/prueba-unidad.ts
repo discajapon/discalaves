@@ -109,6 +109,7 @@ assert.notEqual(informeViejo, informeNuevo);
 fs.writeFileSync(path.join(viejoEquipo.dir("investigador"), "procedimientos", "informe-web.md"), informeViejo);
 fs.writeFileSync(path.join(viejoEquipo.dir("editado"), "procedimientos", "informe-web.md"), informeViejo + "\nMi paso propio.\n");
 viejoEquipo.ponerAlDia();
+const aldia = viejoEquipo.buscar("investigador")!;
 
 // ---- Verificación de honestidad al terminar una tarea ----
 const pedido = { de: "yo", texto: "investiga y deja un informe" };
