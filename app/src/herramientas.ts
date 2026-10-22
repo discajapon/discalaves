@@ -440,6 +440,9 @@ export async function ejecutarHerramienta(ctx: Contexto, nombre: string, argumen
 // Un paso de la tarea tal como queda en el historial (solo los campos que mira verificar).
 export interface PasoTarea { de: string; texto?: string; nombre?: string; argumentos?: string; salida?: string; codigo?: number }
 
+// Freno de repeticiones: cuántas veces seguidas dio lo mismo cada llamada exacta (nombre + argumentos) en una tarea.
+// Si da algo distinto, la cuenta vuelve a empezar: ver_pagina o captura_pantalla no llevan argumentos y volver a
+// mirar tras navegar no es repetirse (antes, a la 3.ª lectura de la tarea se bloqueaban aunque la página cambiara).
 // Verificación de honestidad al terminar una tarea (un modelo de 9B a veces lo necesita): si dice que guardó
 // un archivo sin haberlo guardado, o cita una dirección que no salió de ninguna herramienta en esta tarea,
 // se retira esa respuesta y se le pide que lo haga de verdad o que diga que no pudo. Una vez por tipo y tarea.
