@@ -129,6 +129,7 @@ for (const [dada, esperada] of [["e34", "e34"], ["34", "e34"], ["[ref=e7]", "e7"
 
 // ver_pagina por partes: cortes entre líneas, sin perder ninguna, y la parte que se pide.
 {
+  const lineas = Array.from({ length: 900 }, (_, i) => `- link "resultado ${i}" [ref=e${i}]`);
 }
 
 // Freno de repeticiones: solo cuenta lo que da el mismo resultado otra vez.
