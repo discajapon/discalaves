@@ -1410,7 +1410,10 @@ async function tareaCodex(c: Conversacion, texto: string, interfaz: Electron.Web
     let r: { salida: string; codigo: number };
     if (n >= AVISO_REPETICION) r = { salida: yaHiciste(c, n), codigo: 1 };
     else if (nombre === "preguntar" && c.permitidas.includes("preguntar")) r = { salida: "escribe esa pregunta como tu respuesta final y termina; la tarea sigue cuando el usuario responda", codigo: 0 };
-    else r = await usarHerramienta(c, l, interfaz, parar, cadena);
+    else {
+      r = await usarHerramienta(c, l, interfaz, parar, cadena);
+      veces.resultado(firma, r.salida);
+    }
     guardar({ de: "ia", texto: "", t: Date.now(), llamadas: [l] }); // mismo formato que el bucle propio
     guardar({ de: "herramienta", ...l, ...r, t: Date.now() });
     interfaz.send("paso", c.id);
