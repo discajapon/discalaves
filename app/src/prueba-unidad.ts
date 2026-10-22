@@ -96,6 +96,7 @@ fs.rmSync(datos, { recursive: true, force: true });
 
 // Puesta al día: un Investigador creado antes del 2026-10-17 (sin escribir_en y con el informe-web viejo) la recibe una vez.
 assert.ok(contiene("a\nnueva\nb\nc", "a\nb\nc") && !contiene("a\nc\nb", "a\nb\nc") && !contiene("a\nb", "a\nb\nx"), "contiene: líneas en orden");
+const datosV = fs.mkdtempSync(path.join(os.tmpdir(), "discalaves-aldia-"));
 
 // ---- Verificación de honestidad al terminar una tarea ----
 const pedido = { de: "yo", texto: "investiga y deja un informe" };
