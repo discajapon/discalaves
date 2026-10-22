@@ -127,6 +127,10 @@ for (const [dada, esperada] of [["e34", "e34"], ["34", "e34"], ["[ref=e7]", "e7"
   assert.equal(normalizarRef(dada), esperada, `ref ${dada}`);
 }
 
+// Freno de repeticiones: solo cuenta lo que da el mismo resultado otra vez.
+{
+}
+
 // ---- Verificación de honestidad al terminar una tarea ----
 const pedido = { de: "yo", texto: "investiga y deja un informe" };
 assert.equal(verificar("Listo, he guardado el informe en informes/a.md", [pedido], new Set())?.tipo, "archivo", "dice que guardó sin guardar");
