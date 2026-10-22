@@ -101,6 +101,7 @@ const plantillas = path.join(__dirname, "..", "plantillas");
 const viejoEquipo = new Empleados(datosV, plantillas);
 const inv = viejoEquipo.plantilla("investigador")!;
 const sinEscribir = inv.herramientas.filter((h) => h !== "escribir_en" && h !== "escritorio");
+viejoEquipo.crear({ ...inv, herramientas: sinEscribir }, true, "investigador");
 
 // ---- Verificación de honestidad al terminar una tarea ----
 const pedido = { de: "yo", texto: "investiga y deja un informe" };
