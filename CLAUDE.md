@@ -479,6 +479,8 @@ imagen, ~2 min).
     página a la esquina por CDP (el puntero en vivo no se mueve); (4) en páginas que cambian sin recargar, la
     respuesta traía la URL nueva con el árbol viejo: tras una acción se espera a que el árbol quede quieto (1 s si
     cambió la URL, 0,5 s si no; máximo ~3 s). Probado con el Investigador real del usuario en el servidor CEDIA:
+    busca en YouTube en 18 s y 4 pasos. `prueba-escritorio.ts` lo vigila con una página propia (sugerencias bajo el
+    puntero, resultados que llegan 0,7 s tarde y una página de 600 enlaces).
   - **Visión de qwen** (`--mmproj`, `rutas.mmproj` = `modelos/Qwen3.5-9B-mmproj-F16.gguf`, el `mmproj-F16.gguf`
     del mismo repositorio unsloth/Qwen3.5-9B-GGUF, 876 MB, sha256 `f70dc350…`; lo baja `instalar.ts` con qwen o
     desde Configuración → Visión de Qwen). Mediciones en la 3060 Ti (generación; "captura" = procesar una imagen
