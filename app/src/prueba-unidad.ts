@@ -127,6 +127,10 @@ for (const [dada, esperada] of [["e34", "e34"], ["34", "e34"], ["[ref=e7]", "e7"
   assert.equal(normalizarRef(dada), esperada, `ref ${dada}`);
 }
 
+// ver_pagina por partes: cortes entre líneas, sin perder ninguna, y la parte que se pide.
+{
+}
+
 // Freno de repeticiones: solo cuenta lo que da el mismo resultado otra vez.
 {
   const r = new Repeticiones();
