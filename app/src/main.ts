@@ -1394,14 +1394,14 @@ async function tareaCodex(c: Conversacion, texto: string, interfaz: Electron.Web
   const corte = new AbortController(); // Detener o demasiadas repeticiones
   const alDetener = () => corte.abort();
   parar.signal.addEventListener("abort", alDetener);
-  const veces = new Map<string, number>();
+  const veces = new Repeticiones();
+  let pasos = 0;
   let repeticion = "";
   const companeros = conversaciones.filter((o) => o.id !== c.id).map((o) => ({ nombre: o.nombre, rol: o.rol }));
   const llamar = async (nombre: string, argumentos: string) => {
-    const l: Llamada = { id: `codex-${Date.now()}-${veces.size}`, nombre, argumentos };
+    const l: Llamada = { id: `codex-${Date.now()}-${pasos++}`, nombre, argumentos };
     const firma = `${nombre} ${argumentos}`;
-    const n = (veces.get(firma) ?? 0) + 1;
-    veces.set(firma, n);
+    const n = veces.contar(firma);
     if (n >= MAX_REPETICIONES) {
       repeticion = `me detuve: intenté ${n} veces lo mismo (${nombre}) sin avanzar. ¿Me das otra pista?`;
       corte.abort();
