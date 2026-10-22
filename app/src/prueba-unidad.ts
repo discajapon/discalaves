@@ -122,6 +122,7 @@ viejoEquipo.ponerAlDia();
 assert.ok(!viejoEquipo.buscar("investigador")!.herramientas.includes("escribir_en"), "solo una vez por versión");
 fs.rmSync(datosV, { recursive: true, force: true });
 
+
 // ---- Verificación de honestidad al terminar una tarea ----
 const pedido = { de: "yo", texto: "investiga y deja un informe" };
 assert.equal(verificar("Listo, he guardado el informe en informes/a.md", [pedido], new Set())?.tipo, "archivo", "dice que guardó sin guardar");
