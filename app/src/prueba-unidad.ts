@@ -117,6 +117,7 @@ assert.equal(fs.readFileSync(path.join(viejoEquipo.dir("investigador"), "procedi
 assert.match(fs.readFileSync(path.join(viejoEquipo.dir("editado"), "procedimientos", "informe-web.md"), "utf8"), /Mi paso propio/, "uno editado a mano no se toca");
 // Una sola vez: si el usuario quita escribir_en después, se respeta.
 viejoEquipo.actualizar("investigador", { ...aldia, herramientas: sinEscribir }, true);
+viejoEquipo.ponerAlDia();
 
 // ---- Verificación de honestidad al terminar una tarea ----
 const pedido = { de: "yo", texto: "investiga y deja un informe" };
