@@ -198,6 +198,11 @@ async function main() {
     assert.match(r.salida, /resultado 0"/);
     assert.match(r.salida, /\[parte 1 de \d+: .*parte: 2\]$/, "sin aviso de que sigue");
     const ultimo = Number([...r.salida.matchAll(/resultado (\d+)"/g)].pop()![1]);
+    for (const parte of [2, "2"]) {
+      const r2 = await correr("ver_pagina", { parte });
+      assert.match(r2.salida, new RegExp(`resultado ${ultimo + 1}"`), `la parte 2 (${typeof parte}) no sigue donde acabó la 1`);
+      assert.match(r2.salida, /\[parte 2 de /);
+    }
     console.log("escritorio: ok");
   } finally {
     await navegadorDe(computadora).cerrar();
