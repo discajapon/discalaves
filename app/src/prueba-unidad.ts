@@ -132,6 +132,7 @@ for (const [dada, esperada] of [["e34", "e34"], ["34", "e34"], ["[ref=e7]", "e7"
   const r = new Repeticiones();
   const leer = (salida: string) => { const n = r.contar("ver_pagina {}"); r.resultado("ver_pagina {}", salida); return n; };
   assert.deepEqual(["portada", "resultados", "video", "otra"].map(leer), [1, 2, 2, 2], "mirar tras navegar no es repetirse: nunca llega a la 3.ª");
+  assert.deepEqual([leer("otra"), r.contar("ver_pagina {}")], [2, 3], "la misma página dos veces y la 3.ª se bloquea");
 }
 
 // ---- Verificación de honestidad al terminar una tarea ----
