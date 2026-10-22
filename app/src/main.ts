@@ -1591,6 +1591,7 @@ app.whenReady().then(() => {
   openclaw = new OpenClaw(path.join(datos, "openclaw"), { url: `http://127.0.0.1:${PUERTO}`, clave: CLAVE, modelo: QWEN_MODELO, contexto: 16384 }, puenteOpenClaw());
   usarCursor(cursorActual()); // antes de encender ninguna computadora
   migrarConversaciones();
+  equipo.ponerAlDia();
   leerConversaciones();
   void asegurarOllama(path.join(datos, "ollama.log")); // el del usuario si ya corre; si no, el instalado
   iniciarServidor();
