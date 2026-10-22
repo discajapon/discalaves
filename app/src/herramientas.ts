@@ -460,6 +460,7 @@ export class Repeticiones {
     v.salida = salida;
   }
 }
+
 // Verificación de honestidad al terminar una tarea (un modelo de 9B a veces lo necesita): si dice que guardó
 // un archivo sin haberlo guardado, o cita una dirección que no salió de ninguna herramienta en esta tarea,
 // se retira esa respuesta y se le pide que lo haga de verdad o que diga que no pudo. Una vez por tipo y tarea.
