@@ -118,6 +118,7 @@ assert.match(fs.readFileSync(path.join(viejoEquipo.dir("editado"), "procedimient
 // Una sola vez: si el usuario quita escribir_en después, se respeta.
 viejoEquipo.actualizar("investigador", { ...aldia, herramientas: sinEscribir }, true);
 viejoEquipo.ponerAlDia();
+assert.ok(!viejoEquipo.buscar("investigador")!.herramientas.includes("escribir_en"), "solo una vez por versión");
 
 // ---- Verificación de honestidad al terminar una tarea ----
 const pedido = { de: "yo", texto: "investiga y deja un informe" };
