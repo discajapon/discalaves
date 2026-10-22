@@ -153,10 +153,22 @@ export class Navegador {
     return (await l.evaluate((e) => [e.getAttribute("aria-label"), (e as HTMLElement).innerText, (e as HTMLInputElement).value, e.getAttribute("name"), e.getAttribute("placeholder")].filter(Boolean).join(" ")).catch(() => "")).slice(0, 200);
   }
 
-  private async despues(p: Page, hecho: string) {
+  private async despues(p: Page, hecho: string, urlAntes: string) {
     await esperarCarga(p);
     const q = await this.paginaActual();
-    return `${hecho}\n` + (await resumen(q, parteDe(await estructura(q), 1), false));
+    // Las páginas que cambian sin recargar (YouTube) ya tienen la URL nueva y aún muestran la anterior: se lee el
+    // árbol cuando deja de cambiar (hasta ~3 s), si no el modelo ve la página vieja y repite ver_pagina. Si cambió
+    // la URL, quieto durante 1 s; si no, 0,5 s.
+    // ponytail: resultados que tarden más de 1 s sin que nada se mueva en la página llegan tarde; vigilar la red si pasa
+    const quieto = q.url() !== urlAntes ? 2 : 1;
+    let arbol = await estructura(q);
+    for (let i = 0, iguales = 0; i < 6 && iguales < quieto; i++) {
+      await q.waitForTimeout(500);
+      const nuevo = await estructura(q);
+      iguales = nuevo === arbol ? iguales + 1 : 0;
+      arbol = nuevo;
+    }
+    return `${hecho}\n` + (await resumen(q, parteDe(arbol, 1), false));
   }
 
   async hacerClic(ref: string, texto: string): Promise<string> {
@@ -164,8 +176,9 @@ export class Navegador {
     if (ref) {
       const l = await this.porRef(ref);
       if (l) {
+        const url = p.url();
         await l.click({ timeout: 8000 });
-        return this.despues(p, `hice clic en [ref=${normalizarRef(ref)}].`);
+        return this.despues(p, `hice clic en [ref=${normalizarRef(ref)}].`, url);
       }
       if (!texto) return `no encontré la referencia "${ref}" en la página (cambia al recargar o navegar). Usa ver_pagina para ver las actuales.`;
     }
@@ -178,8 +191,9 @@ export class Navegador {
     ];
     for (const c of candidatos) {
       if (!(await c.count())) continue;
+      const url = p.url();
       await c.first().click({ timeout: 8000 });
-      return this.despues(p, `hice clic en "${texto}".`);
+      return this.despues(p, `hice clic en "${texto}".`, url);
     }
     return `no encontré ningún enlace, botón o texto "${texto}" en la página. Usa ver_pagina para ver qué hay.`;
   }
@@ -201,9 +215,10 @@ export class Navegador {
     await p.mouse.move(0, 0).catch(() => {});
     for (const c of candidatos) {
       if (!(await c.count())) continue;
+      const url = p.url();
       await c.first().fill(texto, { timeout: 8000 });
       if (enviar) await c.first().press("Enter");
-      return this.despues(p, `escribí en ${porRef ? `[ref=${normalizarRef(ref)}]` : `"${campo}"`}${enviar ? " y lo envié" : ""}.`);
+      return this.despues(p, `escribí en ${porRef ? `[ref=${normalizarRef(ref)}]` : `"${campo}"`}${enviar ? " y lo envié" : ""}.`, url);
     }
     return `no encontré el campo "${campo}". Usa ver_pagina para ver los campos disponibles.`;
   }
