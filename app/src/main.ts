@@ -1320,7 +1320,7 @@ async function tarea(c: Conversacion, texto: string, interfaz: Electron.WebConte
   if (cuenta?.tipo === "tunel") await baseDe(cuenta); // abre el túnel antes de empezar (ssh puede preguntar)
   const olvidarTunel = c.cuenta ? tuneles.get(c.cuenta)?.alCaer((m) => ((caida = m), parar.abort())) : undefined;
   try {
-    const veces = new Map<string, number>(); // cuántas veces pidió cada llamada exacta en esta tarea
+    const veces = new Repeticiones(); // cuántas veces seguidas dio lo mismo cada llamada exacta en esta tarea
     const verificadas = new Set<string>();
     let avisos: string[] = [];
     for (;;) {
@@ -1346,8 +1346,7 @@ async function tarea(c: Conversacion, texto: string, interfaz: Electron.WebConte
       let pregunta = ""; // preguntar: la tarea se para hasta que el usuario responda
       for (const l of llamadas) {
         const firma = `${l.nombre} ${l.argumentos}`;
-        const n = (veces.get(firma) ?? 0) + 1;
-        veces.set(firma, n);
+        const n = veces.contar(firma);
         if (n >= MAX_REPETICIONES && c.origen !== "local") return decir(`me detuve: intenté ${n} veces lo mismo (${l.nombre}) sin avanzar. ¿Me das otra pista?`);
         let r: { salida: string; codigo: number; imagen?: Buffer };
         if (pregunta) r = { salida: "no se hizo: esperas la respuesta del usuario", codigo: 1 };
