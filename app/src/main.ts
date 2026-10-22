@@ -1354,7 +1354,10 @@ async function tarea(c: Conversacion, texto: string, interfaz: Electron.WebConte
         else if (l.nombre === "preguntar" && c.permitidas.includes("preguntar")) {
           pregunta = argumento(l, "pregunta");
           r = pregunta ? { salida: "pregunta hecha; su respuesta llega en el próximo mensaje", codigo: 0 } : { salida: "falta la pregunta", codigo: -1 };
-        } else r = await usarHerramienta(c, l, interfaz, parar, cadena);
+        } else {
+          r = await usarHerramienta(c, l, interfaz, parar, cadena);
+          veces.resultado(firma, r.salida);
+        }
         const { imagen, ...resto } = r;
         historial.push({ de: "herramienta", ...l, ...resto, t: Date.now(), ...(imagen && { imagen: guardarCaptura(c.id, imagen) }) });
         guardarHistorial(c.id);
