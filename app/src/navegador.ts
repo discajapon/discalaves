@@ -156,7 +156,7 @@ export class Navegador {
   private async despues(p: Page, hecho: string) {
     await esperarCarga(p);
     const q = await this.paginaActual();
-    return `${hecho}\n` + (await resumen(q, await estructura(q), false));
+    return `${hecho}\n` + (await resumen(q, parteDe(await estructura(q), 1), false));
   }
 
   async hacerClic(ref: string, texto: string): Promise<string> {
