@@ -23,6 +23,14 @@ const MAX_PROCEDIMIENTO = 6000;
 const VERSION_PERFILES = 1; // súbela cuando una plantilla gane algo que los empleados ya creados también deban tener
 
 // ¿Están todas las líneas de "viejo", en el mismo orden, dentro de "nuevo"?
+export function contiene(nuevo: string, viejo: string): boolean {
+  const lineas = nuevo.replace(/\r\n/g, "\n").split("\n");
+  let i = 0;
+  return viejo.replace(/\r\n/g, "\n").split("\n").every((l) => {
+    while (i < lineas.length && lineas[i] !== l) i++;
+    return i++ < lineas.length;
+  });
+}
 
 export interface Identidad {
   nombre: string;
