@@ -94,6 +94,7 @@ assert.match(prompt, /consulta-tributaria: /);
 assert.ok(!/## Procedimientos/.test(promptEmpleado(e, equipo.procedimientos("contador"), "", false)), "solo chat: sin procedimientos");
 fs.rmSync(datos, { recursive: true, force: true });
 
+// Puesta al día: un Investigador creado antes del 2026-10-17 (sin escribir_en y con el informe-web viejo) la recibe una vez.
 
 // ---- Verificación de honestidad al terminar una tarea ----
 const pedido = { de: "yo", texto: "investiga y deja un informe" };
