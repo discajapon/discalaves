@@ -135,7 +135,7 @@ export class Navegador {
 
   async verPagina(parte = 1): Promise<string> {
     const p = await this.paginaActual();
-    return resumen(p, await estructura(p), false);
+    return resumen(p, parteDe(await estructura(p), parte), false);
   }
 
   // Elemento por su referencia de ver_pagina; null si la referencia no es válida o ya no está en la página.
