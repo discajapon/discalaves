@@ -187,6 +187,7 @@ export class Empleados {
     fs.mkdirSync(this.carpeta, { recursive: true });
     fs.writeFileSync(archivo, String(VERSION_PERFILES));
   }
+
   // ---- Procedimientos y memoria ----
 
   procedimientos(id: string): Procedimiento[] {
