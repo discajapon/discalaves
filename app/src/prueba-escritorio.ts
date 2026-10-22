@@ -172,6 +172,15 @@ async function main() {
     // que queda bajo él se marca; al enviar, la URL cambia sin recargar y los resultados se pintan 0,7 s después, sin que nada se mueva mientras.
     await correr("abrir_pagina", { url: "https://example.com" }); // con origen propio, para que pushState valga
     await computadora.ejecutar(["xdotool", "mousemove", "640", "400"], { tiempo: 10_000 });
+    await (navegadorDe(computadora) as any).paginaActual().then((p: import("playwright-core").Page) => p.setContent(`
+      <input role="combobox" aria-label="Buscar" id="q" style="position:absolute;top:0;left:0;width:100%">
+      <ul id="s" style="position:absolute;top:30px;left:0;width:100%;height:100%;margin:0;padding:0"></ul>
+      <main id="m">Portada</main>
+      <script>
+        let marcada = null;
+        q.oninput = () => { s.innerHTML = '<li style="height:100%">' + q.value + ' tejida a crochet</li>'; s.firstChild.onmouseenter = () => (marcada = s.firstChild.textContent); };
+        q.onkeydown = (e) => { if (e.key !== "Enter") return; const t = marcada ?? q.value; s.innerHTML = ""; history.pushState(0, "", "?q=" + encodeURIComponent(t)); setTimeout(() => (m.textContent = "Resultados de " + t), 700); };
+      </script>`));
     console.log("escritorio: ok");
   } finally {
     await navegadorDe(computadora).cerrar();
