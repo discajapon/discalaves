@@ -115,6 +115,7 @@ assert.equal(aldia.herramientas.indexOf("escribir_en"), aldia.herramientas.index
 assert.equal(aldia.instrucciones, inv.instrucciones, "el resto del perfil no cambia");
 assert.equal(fs.readFileSync(path.join(viejoEquipo.dir("investigador"), "procedimientos", "informe-web.md"), "utf8"), informeNuevo, "procedimiento sin tocar: a su versión nueva");
 assert.match(fs.readFileSync(path.join(viejoEquipo.dir("editado"), "procedimientos", "informe-web.md"), "utf8"), /Mi paso propio/, "uno editado a mano no se toca");
+// Una sola vez: si el usuario quita escribir_en después, se respeta.
 
 // ---- Verificación de honestidad al terminar una tarea ----
 const pedido = { de: "yo", texto: "investiga y deja un informe" };
