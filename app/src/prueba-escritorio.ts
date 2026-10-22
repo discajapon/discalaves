@@ -189,6 +189,7 @@ async function main() {
       assert.match(r.salida, /Resultados de mariposa monarca/, `vuelta ${vez}: devolvió la página de antes de pintarse:\n${r.salida}`);
       await (navegadorDe(computadora) as any).paginaActual().then((p: import("playwright-core").Page) => p.evaluate(() => { (document.getElementById("m") as HTMLElement).textContent = "Portada"; (document.getElementById("q") as HTMLInputElement).value = ""; history.replaceState(0, "", "/"); }));
     }
+    assert.deepEqual(await raton(), { x: 640, y: 400 }, "el puntero que se ve en vivo no se movió");
     console.log("escritorio: ok");
   } finally {
     await navegadorDe(computadora).cerrar();
