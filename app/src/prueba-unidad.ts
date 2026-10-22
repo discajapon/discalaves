@@ -10,6 +10,7 @@ import { createHash } from "node:crypto";
 import http from "node:http";
 import { execFileSync } from "node:child_process";
 import { ordenMotor } from "./computadora";
+import { normalizarRef } from "./navegador";
 import { bajar, extraer } from "./instalar";
 import { turnoOpenAI } from "./proveedores";
 import { rutasPara } from "./rutas";
