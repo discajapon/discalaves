@@ -21,6 +21,8 @@ import { scriptEntrar } from "./computadora";
 import { Repeticiones } from "./herramientas";
 
 // Firma de una llamada para el freno; sin el perfil del navegador, que la app añade antes de ejecutarla.
+const firmaOC = (agente: string, herramienta: string, parametros: Record<string, unknown>) =>
+  `${agente} ${herramienta} ${JSON.stringify({ ...parametros, profile: undefined })}`;
 
 // Principales: las que trae un empleado nuevo. Adicionales: el usuario las activa. Nunca: salen de su computadora
 // (mensajería, dispositivos emparejados, el propio Gateway…) y se bloquean aunque alguien las ponga en el perfil.
