@@ -25,8 +25,22 @@ async function textoPrincipal(p: Page): Promise<string> {
 // que hacer_clic y escribir_en aceptan (selector aria-ref). Fuera las direcciones y las marcas de cursor.
 async function estructura(p: Page): Promise<string> {
   const arbol = await p.locator("body").ariaSnapshot({ mode: "ai", timeout: 5000 });
-  const t = arbol.split("\n").filter((l) => !l.trim().startsWith("- /url:")).map((l) => l.replace(/ \[cursor=pointer\]/g, "")).join("\n");
-  return t.length > MAX_ESTRUCTURA ? t.slice(0, MAX_ESTRUCTURA) + "\n[… recortado: usa captura_pantalla o desplázate si buscas algo más abajo …]" : t;
+  return arbol.split("\n").filter((l) => !l.trim().startsWith("- /url:")).map((l) => l.replace(/ \[cursor=pointer\]/g, "")).join("\n");
+}
+
+// Un trozo del árbol (desde 1), cortado entre líneas. Una página grande no cabe entera (resultados de YouTube:
+// ~31 000 caracteres; un artículo de Wikipedia: ~96 000): el modelo pide la parte siguiente con ver_pagina.
+export function parteDe(arbol: string, parte: number): string {
+  const partes: string[] = [];
+  let actual = "";
+  for (const l of arbol.split("\n")) {
+    if (actual && actual.length + l.length + 1 > MAX_ESTRUCTURA) (partes.push(actual), (actual = ""));
+    actual += (actual ? "\n" : "") + l.slice(0, MAX_ESTRUCTURA);
+  }
+  partes.push(actual);
+  if (partes.length === 1) return partes[0];
+  const n = Math.min(Math.max(1, Math.floor(parte) || 1), partes.length);
+  return `${partes[n - 1]}\n[parte ${n} de ${partes.length}${n < partes.length ? `: lo que sigue más abajo, con ver_pagina y parte: ${n + 1}` : ""}]`;
 }
 
 // "e7", "ref=e7", "[ref=e7]", "ref_7" o "7" → "e7".
