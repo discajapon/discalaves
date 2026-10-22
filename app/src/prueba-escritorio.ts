@@ -195,6 +195,7 @@ async function main() {
     await (navegadorDe(computadora) as any).paginaActual().then((p: import("playwright-core").Page) =>
       p.setContent(Array.from({ length: 600 }, (_, i) => `<p><a href="#${i}">resultado ${i}</a></p>`).join("")));
     r = await correr("ver_pagina", {});
+    assert.match(r.salida, /resultado 0"/);
     console.log("escritorio: ok");
   } finally {
     await navegadorDe(computadora).cerrar();
