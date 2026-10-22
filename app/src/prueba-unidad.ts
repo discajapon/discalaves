@@ -136,6 +136,7 @@ for (const [dada, esperada] of [["e34", "e34"], ["34", "e34"], ["[ref=e7]", "e7"
   const juntas = Array.from({ length: total }, (_, i) => parteDe(arbol, i + 1).replace(/\n\[parte \d+ de \d+[^\]]*\]$/, "")).join("\n");
   assert.equal(juntas, arbol, "las partes juntas son la página entera");
   assert.match(parteDe(arbol, total), new RegExp(`\\[parte ${total} de ${total}\\]$`), "la última no ofrece otra");
+  assert.equal(parteDe(arbol, 99), parteDe(arbol, total), "una parte de más da la última");
 }
 
 // Freno de repeticiones: solo cuenta lo que da el mismo resultado otra vez.
