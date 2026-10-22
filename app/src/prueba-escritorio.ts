@@ -197,6 +197,7 @@ async function main() {
     r = await correr("ver_pagina", {});
     assert.match(r.salida, /resultado 0"/);
     assert.match(r.salida, /\[parte 1 de \d+: .*parte: 2\]$/, "sin aviso de que sigue");
+    const ultimo = Number([...r.salida.matchAll(/resultado (\d+)"/g)].pop()![1]);
     console.log("escritorio: ok");
   } finally {
     await navegadorDe(computadora).cerrar();
