@@ -470,6 +470,15 @@ imagen, ~2 min).
   - **Navegador:** `ver_pagina` usa el modo "ai" del árbol de Playwright: cada elemento lleva `[ref=e7]`, estable
     entre lecturas; `hacer_clic` y `escribir_en` aceptan `ref` (selector `aria-ref`) además del texto, y el
     recorte sube a 5000 caracteres. La regla de acciones delicadas mira el nombre real del elemento de la `ref`.
+    Arreglado el 2026-10-22 (el Investigador no podía buscar en YouTube): (1) una página larga llega **por partes**
+    de ~5000 caracteres (`parteDe`) y `ver_pagina` acepta `parte` (resultados de YouTube: ~31 000; un artículo de
+    Wikipedia: ~96 000; antes se cortaba y el aviso mandaba a herramientas que el empleado podía no tener); (2) tras
+    navegar, las refs llevan el frame delante (`f4e34`) y `normalizarRef` las rechazaba; (3) Chromium cree que el
+    ratón está donde lo dejó el escritorio (el centro): las sugerencias de un buscador se despliegan bajo él, una
+    queda resaltada y Enter buscaba esa («mariposa monarca tejida a crochet»); `escribir_en` lleva el ratón de la
+    página a la esquina por CDP (el puntero en vivo no se mueve); (4) en páginas que cambian sin recargar, la
+    respuesta traía la URL nueva con el árbol viejo: tras una acción se espera a que el árbol quede quieto (1 s si
+    cambió la URL, 0,5 s si no; máximo ~3 s). Probado con el Investigador real del usuario en el servidor CEDIA:
   - **Visión de qwen** (`--mmproj`, `rutas.mmproj` = `modelos/Qwen3.5-9B-mmproj-F16.gguf`, el `mmproj-F16.gguf`
     del mismo repositorio unsloth/Qwen3.5-9B-GGUF, 876 MB, sha256 `f70dc350…`; lo baja `instalar.ts` con qwen o
     desde Configuración → Visión de Qwen). Mediciones en la 3060 Ti (generación; "captura" = procesar una imagen
