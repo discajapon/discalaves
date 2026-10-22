@@ -94,6 +94,7 @@ assert.match(prompt, /consulta-tributaria: /);
 assert.ok(!/## Procedimientos/.test(promptEmpleado(e, equipo.procedimientos("contador"), "", false)), "solo chat: sin procedimientos");
 fs.rmSync(datos, { recursive: true, force: true });
 
+
 // ---- Verificación de honestidad al terminar una tarea ----
 const pedido = { de: "yo", texto: "investiga y deja un informe" };
 assert.equal(verificar("Listo, he guardado el informe en informes/a.md", [pedido], new Set())?.tipo, "archivo", "dice que guardó sin guardar");
