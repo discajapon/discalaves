@@ -183,9 +183,15 @@ export class Empleados {
         herramientas.splice(herramientas.indexOf("hacer_clic") + 1, 0, "escribir_en");
         fs.writeFileSync(path.join(this.dir(e.id), "identidad.md"), textoIdentidad({ ...e, herramientas }));
       }
+      this.procedimientosAlDia(e.id);
     }
     fs.mkdirSync(this.carpeta, { recursive: true });
     fs.writeFileSync(archivo, String(VERSION_PERFILES));
+  }
+
+  // Un procedimiento copiado de una plantilla pasa a su versión nueva solo si el usuario no lo tocó: todas sus líneas
+  // siguen, en orden, en la de la plantilla (la plantilla solo añadió). Uno editado a mano se queda como está.
+  private procedimientosAlDia(id: string) {
   }
 
   // ---- Procedimientos y memoria ----
