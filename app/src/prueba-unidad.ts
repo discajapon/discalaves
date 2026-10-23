@@ -152,6 +152,7 @@ for (const [dada, esperada] of [["e34", "e34"], ["34", "e34"], ["[ref=e7]", "e7"
 {
   const inv = guiaNavegador(["buscar_web", "abrir_pagina", "ver_pagina", "hacer_clic", "escribir_en"]);
   assert.match(inv, /para leer, abrir_pagina/);
+  assert.match(inv, /primero ver_pagina y luego hacer_clic o escribir_en con la referencia/);
 }
 
 // Un nombre de herramienta mal escrito apunta a la del puesto; uno ajeno, no.
