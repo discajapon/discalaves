@@ -3,7 +3,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { BORRADO, definicionesPara, ejecutarHerramienta, leerPunto, parecida, permitida, Repeticiones, verificar, type Marca } from "./herramientas";
+import { BORRADO, definicionesPara, ejecutarHerramienta, guiaNavegador, leerPunto, parecida, permitida, Repeticiones, verificar, type Marca } from "./herramientas";
 import { ADICIONALES_OC, OpenClaw, PRINCIPALES_OC } from "./openclaw";
 import { COLORES, Empleados, HERRAMIENTAS, PRINCIPALES, leerIdentidad, promptEmpleado, type Empleado, type Identidad } from "./empleados";
 import { apagarTodas, computadoraDe, responde, usarCursor, type Computadora } from "./computadora";
