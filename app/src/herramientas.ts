@@ -141,6 +141,7 @@ const DE_ESCRITORIO = new Set(ESCRITORIO.map((d) => d.function.name));
 // ¿Está la herramienta en el puesto? "escritorio" en el perfil permite todas las de capturas.
 export const permitida = (permitidas: string[], nombre: string) => permitidas.includes(nombre) || (DE_ESCRITORIO.has(nombre) && permitidas.includes("escritorio"));
 
+
 // La herramienta de su puesto con el nombre más parecido a uno inventado ("passing_trabajo" → "pasar_trabajo"), o
 // null. Sin la pista, el modelo concluía que no podía delegar y hacía el trabajo él mismo.
 export function parecida(permitidas: string[], nombre: string): string | null {
