@@ -1107,6 +1107,8 @@ ipcMain.handle("abrir-carpeta", async (_e, id: unknown) => {
   if (!equipo.buscar(String(id))) return;
   await shell.openPath(equipo.dir(String(id)));
 });
+// Un archivo que el empleado creó, en el gestor de archivos (no se abre: podría ser un script que escribió la IA).
+// Solo dentro de la carpeta de su computadora; su /home/<usuario> dentro del contenedor es esa carpeta.
 
 // Borrador de perfil a partir de una descripción del puesto, redactado por qwen. El usuario lo revisa.
 ipcMain.handle("borrador-empleado", async (_e, descripcion: unknown) => {
