@@ -141,6 +141,7 @@ const DE_ESCRITORIO = new Set(ESCRITORIO.map((d) => d.function.name));
 // ¿Está la herramienta en el puesto? "escritorio" en el perfil permite todas las de capturas.
 export const permitida = (permitidas: string[], nombre: string) => permitidas.includes(nombre) || (DE_ESCRITORIO.has(nombre) && permitidas.includes("escritorio"));
 
+
 // Herramientas del perfil de cada empleado (no usan su computadora: las resuelve main.ts con empleados.ts).
 export const LEER_PROCEDIMIENTO = herramienta(
   "leer_procedimiento",
