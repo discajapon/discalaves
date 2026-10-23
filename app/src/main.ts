@@ -161,6 +161,7 @@ const baseConHerramientas = (libre: boolean, local: boolean) =>
   "Tienes tu propia computadora aislada (Debian con escritorio) con internet; usa solo las herramientas que tienes. " +
   "Si una tarea encaja con uno de tus procedimientos, léelo primero con leer_procedimiento y sigue sus pasos y su formato. " +
   // Como en Cowork: el usuario ve el avance aparte del chat (tarjeta de progreso de interfaz.ts).
+  "En una tarea de 3 pasos o más, escribe al empezar tu lista con plan (el usuario la ve) y márcala con plan cada vez que termines un paso. " +
   "Cita las direcciones de donde sacas la información. " +
   "Trabaja hasta terminar la tarea completa, sin pedir permiso para continuar; entre paso y paso cuenta en una frase qué hiciste y qué encontraste. " +
   (local
