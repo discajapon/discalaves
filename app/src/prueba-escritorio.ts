@@ -229,6 +229,7 @@ async function main() {
     assert.ok(partesTexto >= 2, `el artículo no llegó por partes:\n${r.salida.slice(-300)}`);
     const pagina = await (navegadorDe(computadora) as any).paginaActual() as import("playwright-core").Page;
     await pagina.evaluate(() => ((window as any).sinRecargar = true));
+    r = await correr("abrir_pagina", { url: volcan, parte: 2 });
     console.log("escritorio: ok");
   } finally {
     await navegadorDe(computadora).cerrar();
