@@ -47,7 +47,8 @@ export const DEFINICIONES = [
   }),
   herramienta("abrir_pagina", "Abre una dirección en tu navegador y devuelve el texto principal de la página, para leerla. Una página larga llega por partes: con la misma url y parte: 2, 3… sigues leyendo sin recargarla.", {
     url: { type: "string", description: "por ejemplo: https://es.wikipedia.org/wiki/Linux" },
-  }),
+    parte: { type: "integer", description: "qué parte del texto leer: 1 (el principio, por defecto), 2, 3…" },
+  }, ["parte"]),
   herramienta("ver_pagina", "Muestra la estructura de la página abierta: enlaces, botones y campos, cada uno con su referencia [ref=e7] para hacer_clic o escribir_en. Una página larga llega por partes.", {
     parte: { type: "integer", description: "qué parte de una página larga ver: 1 (la de arriba, por defecto), 2, 3…" },
   }, ["parte"]),
