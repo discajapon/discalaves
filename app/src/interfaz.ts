@@ -369,7 +369,8 @@ function dibujarEstado() {
   el.dataset.fase = e.fase;
   (document.getElementById("enviar") as HTMLButtonElement).disabled = e.fase !== "listo";
   // Mientras trabaja, el botón de enviar se cambia por el de detener.
-  const ocupado = !["listo", "cargando", "error"].includes(e.fase);
+  const ocupado = trabajando(c);
+  document.querySelector(".progreso")?.classList.toggle("en-curso", ocupado);
   document.getElementById("enviar")!.hidden = ocupado;
   const detener = document.getElementById("detener") as HTMLButtonElement;
   if (detener.hidden === ocupado) detener.disabled = false;
