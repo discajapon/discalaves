@@ -191,6 +191,8 @@ async function main() {
     }
     assert.deepEqual(await raton(), { x: 640, y: 400 }, "el puntero que se ve en vivo no se movió");
 
+    // Un buscador que cambia su campo por otro al escribir (como el de Wikipedia al cargar su buscador): Enter va al
+    // campo nuevo, que conserva el texto y el foco; pulsarlo sobre el viejo esperaba 30 s a un elemento que ya no está.
     // Una página larga llega por partes y se puede pedir la siguiente (número o texto, como lo mande el modelo).
     await (navegadorDe(computadora) as any).paginaActual().then((p: import("playwright-core").Page) =>
       p.setContent(Array.from({ length: 600 }, (_, i) => `<p><a href="#${i}">resultado ${i}</a></p>`).join("")));
