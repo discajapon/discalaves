@@ -486,6 +486,7 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 .progreso-pasos .hecho, .progreso-pasos .pendiente { color: var(--secundario); }
 .progreso-pasos .actual { font-weight: 600; }
 .progreso-archivos li { display: flex; align-items: center; gap: var(--e2); }
+.progreso-archivos code { flex: 1; font-family: var(--fuente-mono); overflow-wrap: anywhere; }
 .panel.viendo .hilo {
   position: absolute;
   inset: calc(var(--cabecera-alto) + 55% + var(--e4)) 0 0 0;
