@@ -488,6 +488,18 @@ imagen, ~2 min).
     (siempre en la variante de la portada cuyo campo es `e25`); ahora Enter va con el teclado de la página al campo
     con el foco: 8 de 8, 5 de ellas con esa variante. `prueba-escritorio.ts` lo vigila con un campo que se
     sustituye al escribir (sin el arreglo falla con ese mismo error).
+  - **Leer páginas con menos pasos** (2026-10-23, medido en CEDIA sin GPU, por decisión del usuario; banco de 4 tareas
+    ×2 vueltas: buscador de Wikipedia, YouTube, criterios 1 y 2, con las plantillas actuales): (1) `abrir_pagina` cortaba
+    el texto en 2500 caracteres y el modelo, para leer un artículo, saltaba a `ver_pagina` por partes (árbol de menús
+    y referencias): 6–9 lecturas. Ahora el texto también llega por partes de 5000 (`MAX_PARTE`) y `abrir_pagina` con la
+    misma url y `parte` sigue leyendo sin recargar; (2) si un clic o un envío llevan a otra página, la respuesta trae su
+    texto (con una nota: enlaces y campos con `ver_pagina`), no el árbol; (3) una página que se pinta con JavaScript
+    (YouTube) llegaba vacía y el modelo creía que lo bloqueaban: con menos de 500 caracteres, `abrir_pagina` espera a
+    que aparezca texto (hasta ~4 s); (4) al ver «parte 1 de 14» el modelo leía 8 partes de Wikipedia para un informe
+    (criterio 1: 90–127 s): el aviso y el procedimiento `informe-web` dicen ahora que la primera parte suele bastar y
+    que pida más solo si falta un dato (versión 2 de la puesta al día); (5) un nombre de herramienta mal escrito
+    (`passing_trabajo`) recibía «no tienes la herramienta» y el modelo concluía que no podía delegar: `parecida()`
+    le da el nombre correcto. Resultado (antes → después, 2 vueltas cada uno, las 8 tareas bien en la última tanda):
   - **Puesta al día de perfiles** (`ponerAlDia()` en `empleados.ts`, una vez por `VERSION_PERFILES`, guardada en
     `empleados/version`): un empleado creado con una plantilla anterior no recibía lo nuevo (el Investigador del
     usuario, de antes del 2026-10-17, no tenía `escribir_en`). Versión 1: quien tiene `hacer_clic` recibe
