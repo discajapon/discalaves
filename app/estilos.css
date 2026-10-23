@@ -483,6 +483,7 @@ svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width:
 .progreso.en-curso { position: sticky; top: calc(var(--cabecera-alto) + var(--e2)); z-index: 1; }
 .progreso summary { cursor: pointer; font-weight: 600; }
 .progreso-pasos, .progreso-archivos { display: grid; gap: var(--e1); margin: var(--e2) 0 0; padding: 0; list-style: none; }
+.progreso-pasos .hecho, .progreso-pasos .pendiente { color: var(--secundario); }
 .panel.viendo .hilo {
   position: absolute;
   inset: calc(var(--cabecera-alto) + 55% + var(--e4)) 0 0 0;
