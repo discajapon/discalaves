@@ -170,6 +170,7 @@ assert.equal(leerPlan("no es json"), null);
 
 // Mostrar un archivo del empleado: solo dentro de su carpeta.
 {
+  const base = path.join(os.tmpdir(), "trabajo", "inv");
 }
 
 // Un nombre de herramienta mal escrito apunta a la del puesto; uno ajeno, no.
