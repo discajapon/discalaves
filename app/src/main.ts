@@ -197,7 +197,8 @@ function promptSistema(c: Conversacion, vision = false): string {
   const e = equipo.buscar(c.id)!;
   const base = c.herramientas ? baseConHerramientas(c.libre === true, c.origen === "local") : BASE_SOLO_CHAT;
   const escritorio = vision && c.permitidas.includes("escritorio") ? `\n\n${CON_ESCRITORIO}` : "";
-  return `${base}\n\n${promptEmpleado(e, equipo.procedimientos(c.id), equipo.memoria(c.id), c.herramientas)}${escritorio}`;
+  const navegador = c.herramientas && guiaNavegador(c.permitidas) ? `\n\n${guiaNavegador(c.permitidas)}` : ""; // al final: la base común sigue en caché
+  return `${base}\n\n${promptEmpleado(e, equipo.procedimientos(c.id), equipo.memoria(c.id), c.herramientas)}${navegador}${escritorio}`;
 }
 
 interface Llamada { id: string; nombre: string; argumentos: string }
