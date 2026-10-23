@@ -601,6 +601,8 @@ imagen, ~2 min).
     como pasos en el hilo. Plegada: "Progreso · 2 de 5 · 1 archivo". Sólida, no vidrio (está dentro del hilo).
   - "mostrar" de cada archivo: lo enseña en el gestor de archivos (`shell.showItemInFolder`), nunca lo abre: podría
     ser un script que escribió la IA. Solo dentro de la carpeta de su computadora (`rutaEnCarpeta`, con prueba).
+  - Probado en la app real con CEDIA y capturas: plan de 3 pasos al empezar, marcado al avanzar, 41–47 s por un
+    informe (52 s antes, sin plan) y el archivo con su botón.
 - **Configuración** (pedido del usuario, 2026-09-30): el engranaje junto al perfil, abajo a la izquierda,
   abre una hoja (`configuracion.ts`) con los modelos locales del equipo (qwen y Ollama), las
   especificaciones (`especificaciones.ts`: sistema, CPU, RAM y GPU NVIDIA por `nvidia-smi`) y los créditos
