@@ -178,7 +178,7 @@ export class Empleados {
     if (version >= VERSION_PERFILES) return;
     for (const e of this.listar()) {
       // 2026-10-17: escribir_en llegó a las plantillas; quien hacía clic en páginas no podía escribir en sus buscadores.
-      if (e.herramientas.includes("hacer_clic") && !e.herramientas.includes("escribir_en")) {
+      if (version < 1 && e.herramientas.includes("hacer_clic") && !e.herramientas.includes("escribir_en")) {
         const herramientas = [...e.herramientas];
         herramientas.splice(herramientas.indexOf("hacer_clic") + 1, 0, "escribir_en");
         fs.writeFileSync(path.join(this.dir(e.id), "identidad.md"), textoIdentidad({ ...e, herramientas }));
