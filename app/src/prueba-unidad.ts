@@ -151,6 +151,7 @@ for (const [dada, esperada] of [["e34", "e34"], ["34", "e34"], ["[ref=e7]", "e7"
 // Guía del navegador en el prompt: según las herramientas del puesto, también sin visión.
 {
   const inv = guiaNavegador(["buscar_web", "abrir_pagina", "ver_pagina", "hacer_clic", "escribir_en"]);
+  assert.match(inv, /para leer, abrir_pagina/);
 }
 
 // Un nombre de herramienta mal escrito apunta a la del puesto; uno ajeno, no.
