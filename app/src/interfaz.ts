@@ -241,6 +241,7 @@ function tarjeta(m: Extract<MensajeChat, { de: "herramienta" }>): HTMLElement {
 
 // Progreso de la tarea en curso (o de la última), como el panel de Cowork: la lista que el empleado escribe con plan
 // y los archivos que creó, desde el último mensaje del usuario. Tarjeta sólida fijada arriba del hilo.
+let progresoAbierto = true;
 function burbuja(de: "yo" | "ia", texto: string, quien?: string, a?: string): HTMLElement {
   const fila = crear("div", de === "yo" ? "mensaje mio" : "mensaje");
   const etiqueta = autor(quien, a);
