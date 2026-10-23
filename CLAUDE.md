@@ -505,6 +505,12 @@ imagen, ~2 min).
     fuente en vez de 2500), y una vez 207 s porque el modelo decidió ampliar y verificar el informe por su cuenta
     (10 KB en vez de 5). La latencia de CEDIA varía mucho entre corridas: con 2 vueltas solo Wikipedia es una mejora
     clara. Las mejoras del modo visión (GPU) quedan sin medir.
+    **Guía del navegador en el prompt** (`guiaNavegador()` en `herramientas.ts`, al final del prompt para no romper
+    la caché de la base común): cómo leer (`abrir_pagina` por partes) y cómo actuar (`ver_pagina` y luego
+    `hacer_clic`/`escribir_en` con `ref`, `enviar: true`), solo con las herramientas que tiene el puesto. Antes solo
+    iba en la guía del escritorio, que exige visión: un empleado del servidor remoto solo lo sabía por la
+    descripción de cada herramienta. Probado con una copia del Investigador real del usuario (perfil viejo, puesto al
+    día al abrir) en CEDIA: YouTube en 19 s / 3 pasos y el buscador de Wikipedia en 19 s / 4 pasos.
   - **Puesta al día de perfiles** (`ponerAlDia()` en `empleados.ts`, una vez por `VERSION_PERFILES`, guardada en
     `empleados/version`): un empleado creado con una plantilla anterior no recibía lo nuevo (el Investigador del
     usuario, de antes del 2026-10-17, no tenía `escribir_en`). Versión 1: quien tiene `hacer_clic` recibe
