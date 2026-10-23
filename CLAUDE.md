@@ -481,6 +481,13 @@ imagen, ~2 min).
     cambió la URL, 0,5 s si no; máximo ~3 s). Probado con el Investigador real del usuario en el servidor CEDIA:
     busca en YouTube en 18 s y 4 pasos. `prueba-escritorio.ts` lo vigila con una página propia (sugerencias bajo el
     puntero, resultados que llegan 0,7 s tarde y una página de 600 enlaces).
+    (5) 2026-10-23, causa del fallo del criterio 2 (1 de 3 el 17-10): `escribir_en` con `enviar` pulsaba Enter
+    sobre el campo por su ref, y el buscador de Wikipedia cambia su campo por otro nuevo al cargarse; si el cambio
+    llegaba tras escribir, Playwright esperaba 30 s al campo viejo y fallaba («locator.press: Timeout 30000ms»),
+    y el empleado acababa diciendo que no podía abrir la página. Reproducido 1 de 4 veces en un contenedor real
+    (siempre en la variante de la portada cuyo campo es `e25`); ahora Enter va con el teclado de la página al campo
+    con el foco: 8 de 8, 5 de ellas con esa variante. `prueba-escritorio.ts` lo vigila con un campo que se
+    sustituye al escribir (sin el arreglo falla con ese mismo error).
   - **Puesta al día de perfiles** (`ponerAlDia()` en `empleados.ts`, una vez por `VERSION_PERFILES`, guardada en
     `empleados/version`): un empleado creado con una plantilla anterior no recibía lo nuevo (el Investigador del
     usuario, de antes del 2026-10-17, no tenía `escribir_en`). Versión 1: quien tiene `hacer_clic` recibe
