@@ -223,6 +223,7 @@ async function main() {
       assert.match(r2.salida, /\[parte 2 de /);
     }
     // abrir_pagina: un artículo largo llega por partes; la parte 2 de la misma dirección no recarga la página.
+    const volcan = "https://es.wikipedia.org/wiki/Volcán";
     console.log("escritorio: ok");
   } finally {
     await navegadorDe(computadora).cerrar();
