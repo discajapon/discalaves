@@ -208,6 +208,7 @@ async function main() {
     const inicio = Date.now();
     r = await correr("escribir_en", { ref: campo, texto: "volcán", enviar: true });
     assert.match(r.salida, /Artículo de volcán/, `no envió en el campo nuevo:\n${r.salida}`);
+    assert.ok(Date.now() - inicio < 10_000, `tardó ${Date.now() - inicio} ms`);
     // Una página larga llega por partes y se puede pedir la siguiente (número o texto, como lo mande el modelo).
     await (navegadorDe(computadora) as any).paginaActual().then((p: import("playwright-core").Page) =>
       p.setContent(Array.from({ length: 600 }, (_, i) => `<p><a href="#${i}">resultado ${i}</a></p>`).join("")));
