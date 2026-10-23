@@ -202,6 +202,15 @@ export function rutaEnCarpeta(base: string, usuario: string, ruta: string): stri
 
 // Lista de progreso, como la de Cowork: el empleado escribe sus pasos al empezar y los va marcando; la interfaz la
 // muestra aparte, fijada arriba del hilo. Va a todos los empleados con herramientas, como recordar.
+export const PLAN = herramienta(
+  "plan",
+  "Tu lista de progreso, que el usuario ve aparte del chat. En una tarea de 3 pasos o más: al empezar, escribe los pasos (cortos); al terminar cada uno, vuelve a llamarla con la misma lista y cuántos llevas hechos. Si puedes, llámala en el mismo turno que otra herramienta.",
+  {
+    pasos: { type: "array", items: { type: "string" }, description: "los pasos de la tarea, en orden, de 3 a 8" },
+    hechos: { type: "integer", description: "cuántos pasos llevas terminados, contando desde el primero (0 al empezar)" },
+  },
+  ["hechos"],
+);
 // pasar_trabajo lleva en su descripción a los compañeros del equipo, así que se arma en cada turno.
 function pasarTrabajo(companeros: { nombre: string; rol: string }[]) {
   return herramienta(
