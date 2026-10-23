@@ -190,6 +190,8 @@ export const RECORDAR = herramienta(
   { texto: { type: "string", description: "la nota, en una frase" } },
 );
 
+// Ruta en el equipo de un archivo que el empleado nombra (relativa a su /home o con /home/<usuario>/ delante), o null
+// si cae fuera de su carpeta: "mostrar archivo" no puede llevar a nada del usuario.
 // pasar_trabajo lleva en su descripción a los compañeros del equipo, así que se arma en cada turno.
 function pasarTrabajo(companeros: { nombre: string; rol: string }[]) {
   return herramienta(
