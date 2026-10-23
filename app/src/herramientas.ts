@@ -249,6 +249,7 @@ export function definicionesPara(permitidas: string[], conProcedimientos: boolea
     ...(permitidas.includes("pasar_trabajo") && companeros.length ? [pasarTrabajo(companeros)] : []),
     ...(conProcedimientos ? [LEER_PROCEDIMIENTO] : []),
     RECORDAR,
+    PLAN,
   ];
 }
 
