@@ -599,6 +599,8 @@ imagen, ~2 min).
     usuario (la última llamada a `plan` y los archivos de `escribir_archivo`/`editar_archivo`); va tras ese mensaje,
     fijada bajo la cabecera mientras trabaja (`.en-curso`) y en su sitio al terminar; las llamadas a `plan` no salen
     como pasos en el hilo. Plegada: "Progreso · 2 de 5 · 1 archivo". Sólida, no vidrio (está dentro del hilo).
+  - "mostrar" de cada archivo: lo enseña en el gestor de archivos (`shell.showItemInFolder`), nunca lo abre: podría
+    ser un script que escribió la IA. Solo dentro de la carpeta de su computadora (`rutaEnCarpeta`, con prueba).
 - **Configuración** (pedido del usuario, 2026-09-30): el engranaje junto al perfil, abajo a la izquierda,
   abre una hoja (`configuracion.ts`) con los modelos locales del equipo (qwen y Ollama), las
   especificaciones (`especificaciones.ts`: sistema, CPU, RAM y GPU NVIDIA por `nvidia-smi`) y los créditos
