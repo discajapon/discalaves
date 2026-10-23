@@ -213,6 +213,7 @@ export const PLAN = herramienta(
 );
 const MAX_PASOS_PLAN = 10;
 
+// La lista de una llamada a plan, limpia; null si no trae pasos.
 // pasar_trabajo lleva en su descripción a los compañeros del equipo, así que se arma en cada turno.
 function pasarTrabajo(companeros: { nombre: string; rol: string }[]) {
   return herramienta(
