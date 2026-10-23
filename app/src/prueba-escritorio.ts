@@ -230,6 +230,7 @@ async function main() {
     const pagina = await (navegadorDe(computadora) as any).paginaActual() as import("playwright-core").Page;
     await pagina.evaluate(() => ((window as any).sinRecargar = true));
     r = await correr("abrir_pagina", { url: volcan, parte: 2 });
+    assert.match(r.salida, /\[parte 2 de /);
     console.log("escritorio: ok");
   } finally {
     await navegadorDe(computadora).cerrar();
