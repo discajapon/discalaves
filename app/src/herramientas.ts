@@ -199,6 +199,7 @@ export function rutaEnCarpeta(base: string, usuario: string, ruta: string): stri
   const archivo = path.resolve(raiz, relativa);
   return archivo.startsWith(raiz + path.sep) ? archivo : null;
 }
+
 // pasar_trabajo lleva en su descripción a los compañeros del equipo, así que se arma en cada turno.
 function pasarTrabajo(companeros: { nombre: string; rol: string }[]) {
   return herramienta(
