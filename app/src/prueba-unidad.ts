@@ -174,6 +174,7 @@ assert.equal(leerPlan("no es json"), null);
   assert.equal(rutaEnCarpeta(base, "inv", "informes/a.md"), path.join(base, "informes", "a.md"));
   assert.equal(rutaEnCarpeta(base, "inv", "/home/inv/informes/a.md"), path.join(base, "informes", "a.md"), "con su /home delante");
   assert.equal(rutaEnCarpeta(base, "inv", "../otro/secreto.txt"), null, "no sale de su carpeta");
+  assert.equal(rutaEnCarpeta(base, "inv", "informes/../../x"), null);
 }
 
 // Un nombre de herramienta mal escrito apunta a la del puesto; uno ajeno, no.
