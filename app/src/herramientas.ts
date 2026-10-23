@@ -45,7 +45,7 @@ export const DEFINICIONES = [
   herramienta("buscar_web", "Busca en internet y devuelve los primeros resultados (título, dirección y un fragmento).", {
     consulta: { type: "string", description: "qué buscar" },
   }),
-  herramienta("abrir_pagina", "Abre una dirección en tu navegador y devuelve el texto principal de la página.", {
+  herramienta("abrir_pagina", "Abre una dirección en tu navegador y devuelve el texto principal de la página, para leerla. Una página larga llega por partes: con la misma url y parte: 2, 3… sigues leyendo sin recargarla.", {
     url: { type: "string", description: "por ejemplo: https://es.wikipedia.org/wiki/Linux" },
   }),
   herramienta("ver_pagina", "Muestra la estructura de la página abierta: enlaces, botones y campos, cada uno con su referencia [ref=e7] para hacer_clic o escribir_en. Una página larga llega por partes.", {
