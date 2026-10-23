@@ -533,11 +533,11 @@ imagen, ~2 min).
     arregló). Con el localizador, el criterio de mousepad pasó en 21 pasos. Coste: una petición corta por clic
     (~1100 tokens de imagen). Límite visto: un objetivo en español ("botón Guardar") con la interfaz en inglés
     ("Save") puede ubicar otro botón.
-  - **Contexto:** solo las 2 capturas más recientes viajan como imagen (un mensaje "de la app" tras los resultados
-    de su turno; las anteriores pasan a una nota). Se guardan en `conversaciones/capturas/<id>/` (las 10 últimas).
-    Con Qwen 3.5 (híbrido) cada turno reprocesa ~3500 tokens (~5 s): al cambiar una captura vieja por la nota,
-    cambia el final del prompt y no se puede reutilizar la caché. Probar `-cms 0` (puntos de control en cada
-    prompt) si hace falta más velocidad.
+  - **Contexto:** solo la captura más reciente viaja como imagen, al final del prompt (`conCaptura` en `main.ts`,
+    desde el 2026-10-18): así el resto solo crece por el final y llama-server vuelve al punto de control de justo
+    antes de la imagen; cada paso reprocesa ~1150 tokens (la imagen nueva) en vez de ~2600 (3,0 s frente a 5,1 s
+    por paso). Con 2 capturas, la de hace dos pasos pasaba a nota y cambiaba el medio del prompt. Se guardan en
+    `conversaciones/capturas/<id>/` (las 10 últimas). En modo visión, `-cram 0` y `-ctxcp 8` por ranura.
   - **Detección de visión, no supuesta:** qwen si existe el mmproj y el servidor anuncia `vision` en `/props`;
     Ollama si `/api/show` dice `vision`. Nube, servidor remoto y Codex no reciben capturas (el remoto nunca recibe
     imágenes, decisión del 2026-10-02): no se les ofrecen las herramientas y siguen con las de texto. El diálogo del empleado avisa junto
