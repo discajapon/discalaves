@@ -152,6 +152,7 @@ for (const [dada, esperada] of [["e34", "e34"], ["34", "e34"], ["[ref=e7]", "e7"
 assert.equal(parecida(["abrir_pagina", "pasar_trabajo"], "passing_trabajo"), "pasar_trabajo");
 assert.equal(parecida(["abrir_pagina", "pasar_trabajo"], "Abrir_Pagina"), "abrir_pagina");
 assert.equal(parecida(["escritorio"], "capturar_pantalla"), "captura_pantalla", "las del escritorio cuentan");
+assert.equal(parecida(["abrir_pagina", "pasar_trabajo"], "terminal"), null, "una que no se parece a ninguna");
 
 // Freno de repeticiones: solo cuenta lo que da el mismo resultado otra vez.
 {
