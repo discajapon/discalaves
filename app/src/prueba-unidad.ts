@@ -150,6 +150,7 @@ for (const [dada, esperada] of [["e34", "e34"], ["34", "e34"], ["[ref=e7]", "e7"
 
 // Un nombre de herramienta mal escrito apunta a la del puesto; uno ajeno, no.
 assert.equal(parecida(["abrir_pagina", "pasar_trabajo"], "passing_trabajo"), "pasar_trabajo");
+assert.equal(parecida(["abrir_pagina", "pasar_trabajo"], "Abrir_Pagina"), "abrir_pagina");
 
 // Freno de repeticiones: solo cuenta lo que da el mismo resultado otra vez.
 {
