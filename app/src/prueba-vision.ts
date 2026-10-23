@@ -73,7 +73,8 @@ async function main() {
       const archivo = path.join(carpeta(id), "informes", "monarca.md");
       const tam = fs.existsSync(archivo) ? fs.statSync(archivo).size : 0;
       const escribio = r.pasos.find((m) => (m.nombre === "escribir_en" || m.nombre === "escribir_texto") && /monarca/i.test(m.argumentos));
-      const paginas = r.pasos.filter((m) => /url: https:\/\/es\.wikipedia\.org\/wiki\/[^\s]*[Mm]onarca/.test(m.salida ?? "")).length;
+      // El artículo es «Danaus plexippus»: con Enter se llega por la redirección «Mariposa monarca»; con la sugerencia, directo.
+      const paginas = r.pasos.filter((m) => /url: https:\/\/es\.wikipedia\.org\/wiki\/([^\s]*[Mm]onarca|Danaus_plexippus)/.test(m.salida ?? "")).length;
       informe.push(`buscador: ${r.seg} s, ${r.pasos.length} pasos, ${r.capturas} capturas, herramientas [${r.usadas.join(", ")}], escribió en el buscador: ${escribio ? escribio.nombre : "no"}, páginas del artículo: ${paginas}, informe ${tam} bytes${r.error ? `, ERROR ${r.error}` : ""}`);
       assert.ok(escribio, "no escribió en el buscador del sitio");
       assert.ok(paginas > 0, "no abrió el artículo");
