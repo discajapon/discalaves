@@ -159,6 +159,19 @@ for (const [dada, esperada] of [["e34", "e34"], ["34", "e34"], ["[ref=e7]", "e7"
   assert.equal(guiaNavegador(["terminal", "escribir_archivo"]), "", "sin navegador, sin guía");
 }
 
+// Lista de progreso (plan): limpia, con tope y con los hechos dentro del rango.
+assert.deepEqual(leerPlan('{"pasos":["Buscar","  Leer  la web ","",3,"Escribir"],"hechos":1}'), { pasos: ["Buscar", "Leer la web", "Escribir"], hechos: 1 });
+assert.equal(leerPlan('{"pasos":["a","b"],"hechos":9}')!.hechos, 2, "no más hechos que pasos");
+assert.equal(leerPlan('{"pasos":["a"],"hechos":-3}')!.hechos, 0);
+assert.equal(leerPlan('{"pasos":["a"]}')!.hechos, 0, "sin hechos: 0");
+assert.equal(leerPlan(JSON.stringify({ pasos: Array.from({ length: 30 }, (_, i) => `paso ${i}`) }))!.pasos.length, 10, "como mucho 10 pasos");
+assert.equal(leerPlan('{"hechos":1}'), null, "sin pasos no hay lista");
+assert.equal(leerPlan("no es json"), null);
+
+// Mostrar un archivo del empleado: solo dentro de su carpeta.
+{
+}
+
 // Un nombre de herramienta mal escrito apunta a la del puesto; uno ajeno, no.
 assert.equal(parecida(["abrir_pagina", "pasar_trabajo"], "passing_trabajo"), "pasar_trabajo");
 assert.equal(parecida(["abrir_pagina", "pasar_trabajo"], "Abrir_Pagina"), "abrir_pagina");
