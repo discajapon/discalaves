@@ -227,6 +227,7 @@ export function leerPlan(argumentos: string): { pasos: string[]; hechos: number 
   const hechos = Math.min(pasos.length, Math.max(0, Math.floor(Number(a.hechos)) || 0));
   return { pasos, hechos };
 }
+
 // pasar_trabajo lleva en su descripción a los compañeros del equipo, así que se arma en cada turno.
 function pasarTrabajo(companeros: { nombre: string; rol: string }[]) {
   return herramienta(
