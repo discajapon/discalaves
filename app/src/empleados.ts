@@ -20,7 +20,7 @@ const TODAS = [...HERRAMIENTAS, ...PRINCIPALES_OC, ...ADICIONALES_OC];
 export const COLORES = ["violeta", "turquesa", "naranja", "azul", "rojizo"];
 const MAX_MEMORIA = 1500; // caracteres de memoria que van al prompt (las notas más recientes)
 const MAX_PROCEDIMIENTO = 6000;
-const VERSION_PERFILES = 1; // súbela cuando una plantilla gane algo que los empleados ya creados también deban tener
+const VERSION_PERFILES = 2; // súbela cuando una plantilla gane algo que los empleados ya creados también deban tener
 
 // ¿Están todas las líneas de "viejo", en el mismo orden, dentro de "nuevo"?
 export function contiene(nuevo: string, viejo: string): boolean {
