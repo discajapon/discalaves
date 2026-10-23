@@ -160,6 +160,7 @@ const baseConHerramientas = (libre: boolean, local: boolean) =>
   (local ? "Responde en el idioma del usuario, de forma clara. " : "Responde en el idioma del usuario, de forma breve y clara. ") +
   "Tienes tu propia computadora aislada (Debian con escritorio) con internet; usa solo las herramientas que tienes. " +
   "Si una tarea encaja con uno de tus procedimientos, léelo primero con leer_procedimiento y sigue sus pasos y su formato. " +
+  // Como en Cowork: el usuario ve el avance aparte del chat (tarjeta de progreso de interfaz.ts).
   "Cita las direcciones de donde sacas la información. " +
   "Trabaja hasta terminar la tarea completa, sin pedir permiso para continuar; entre paso y paso cuenta en una frase qué hiciste y qué encontraste. " +
   (local
