@@ -464,6 +464,13 @@ excesivos, demasiado texto.
   canto `--vidrio-canto-fuerte`, radio concéntrico con su contenedor y
   estado activo con reflejo y elevación. Una tarjeta **fuera** del vidrio
   (dentro del hilo) es sólida, como las aprobaciones.
+- **Tarjeta de progreso** (`.progreso`): la lista de pasos de la tarea y sus
+  archivos, como el panel de Cowork. Sólida (`--fondo`, `--borde`,
+  `--radio-burbuja`, sombra de contacto `--vidrio-sombra`) porque vive dentro
+  del hilo; texto chico, hechos y pendientes en `--secundario`, el paso en
+  curso en negrita. Mientras el empleado trabaja queda fijada bajo la
+  cabecera (`position: sticky`); al terminar vuelve a su sitio. Sin
+  animaciones.
 
 ### 7.5 Botón
 
