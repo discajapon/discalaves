@@ -590,6 +590,7 @@ imagen, ~2 min).
     reprocesar el prompt y la generación a 18–30 tok/s con capas en la CPU.
   - **RAM de una computadora** (`docker stats`, imagen nueva): 96 MB en reposo, igual tras 10 capturas, 120 MB con
     Mousepad abierto. xdotool y xwd corren y terminan en cada acción: no suman memoria fija.
+- **Progreso como en Cowork** (pedido del usuario, 2026-10-23: "que se parezca a Cowork en funcionamiento"):
 - **Configuración** (pedido del usuario, 2026-09-30): el engranaje junto al perfil, abajo a la izquierda,
   abre una hoja (`configuracion.ts`) con los modelos locales del equipo (qwen y Ollama), las
   especificaciones (`especificaciones.ts`: sistema, CPU, RAM y GPU NVIDIA por `nvidia-smi`) y los créditos
