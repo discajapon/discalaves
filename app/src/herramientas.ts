@@ -192,6 +192,13 @@ export const RECORDAR = herramienta(
 
 // Ruta en el equipo de un archivo que el empleado nombra (relativa a su /home o con /home/<usuario>/ delante), o null
 // si cae fuera de su carpeta: "mostrar archivo" no puede llevar a nada del usuario.
+export function rutaEnCarpeta(base: string, usuario: string, ruta: string): string | null {
+  const raiz = path.resolve(base);
+  const relativa = ruta.startsWith(`/home/${usuario}/`) ? ruta.slice(`/home/${usuario}/`.length) : ruta;
+  if (!relativa || path.isAbsolute(relativa)) return null;
+  const archivo = path.resolve(raiz, relativa);
+  return archivo.startsWith(raiz + path.sep) ? archivo : null;
+}
 // pasar_trabajo lleva en su descripción a los compañeros del equipo, así que se arma en cada turno.
 function pasarTrabajo(companeros: { nombre: string; rol: string }[]) {
   return herramienta(
