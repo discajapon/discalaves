@@ -222,6 +222,7 @@ async function main() {
       assert.match(r2.salida, new RegExp(`resultado ${ultimo + 1}"`), `la parte 2 (${typeof parte}) no sigue donde acabó la 1`);
       assert.match(r2.salida, /\[parte 2 de /);
     }
+    // abrir_pagina: un artículo largo llega por partes; la parte 2 de la misma dirección no recarga la página.
     console.log("escritorio: ok");
   } finally {
     await navegadorDe(computadora).cerrar();
