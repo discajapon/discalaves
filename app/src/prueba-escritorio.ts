@@ -206,6 +206,7 @@ async function main() {
     const campo = (await correr("ver_pagina", {})).salida.match(/searchbox "Buscar en el sitio"[^\n]*?\[ref=((?:f\d+)?e\d+)\]/)?.[1];
     assert.ok(campo, "sin referencia del campo");
     const inicio = Date.now();
+    r = await correr("escribir_en", { ref: campo, texto: "volcán", enviar: true });
     // Una página larga llega por partes y se puede pedir la siguiente (número o texto, como lo mande el modelo).
     await (navegadorDe(computadora) as any).paginaActual().then((p: import("playwright-core").Page) =>
       p.setContent(Array.from({ length: 600 }, (_, i) => `<p><a href="#${i}">resultado ${i}</a></p>`).join("")));
