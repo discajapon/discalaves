@@ -228,6 +228,7 @@ async function main() {
     const partesTexto = Number(r.salida.match(/\[parte 1 de (\d+): .*abrir_pagina y parte: 2[^\]]*\]$/)?.[1]);
     assert.ok(partesTexto >= 2, `el artículo no llegó por partes:\n${r.salida.slice(-300)}`);
     const pagina = await (navegadorDe(computadora) as any).paginaActual() as import("playwright-core").Page;
+    await pagina.evaluate(() => ((window as any).sinRecargar = true));
     console.log("escritorio: ok");
   } finally {
     await navegadorDe(computadora).cerrar();
