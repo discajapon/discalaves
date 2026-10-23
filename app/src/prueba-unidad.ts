@@ -127,6 +127,7 @@ fs.writeFileSync(path.join(viejoEquipo.dir("investigador"), "procedimientos", "i
 fs.writeFileSync(path.join(datosV, "empleados", "version"), "1");
 viejoEquipo.ponerAlDia();
 assert.equal(fs.readFileSync(path.join(viejoEquipo.dir("investigador"), "procedimientos", "informe-web.md"), "utf8"), informeNuevo, "versión 2: procedimiento al día");
+assert.ok(!viejoEquipo.buscar("investigador")!.herramientas.includes("escribir_en"), "versión 2: escribir_en no vuelve");
 fs.rmSync(datosV, { recursive: true, force: true });
 
 // Referencias de ver_pagina como las escribe el modelo; tras navegar llevan el frame delante (f4e34).
