@@ -39,6 +39,7 @@ declare const discalaves: {
   responderSsh(id: string, valor: string | null): Promise<void>;
   borradorEmpleado(descripcion: string): Promise<{ borrador?: Identidad; error?: string }>;
   abrirCarpeta(id: string): Promise<void>;
+  mostrarArchivo(id: string, ruta: string): Promise<boolean>;
   historial(id: string): Promise<MensajeChat[]>;
   estado(id: string): Promise<EstadoQwen>;
   enviar(id: string, texto: string): Promise<{ error?: string }>;
