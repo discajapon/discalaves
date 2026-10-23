@@ -148,6 +148,7 @@ for (const [dada, esperada] of [["e34", "e34"], ["34", "e34"], ["[ref=e7]", "e7"
   assert.equal(parteDe("- link \"uno\" [ref=e1]", 1), "- link \"uno\" [ref=e1]", "una página corta va entera, sin aviso");
 }
 
+// Un nombre de herramienta mal escrito apunta a la del puesto; uno ajeno, no.
 
 // Freno de repeticiones: solo cuenta lo que da el mismo resultado otra vez.
 {
