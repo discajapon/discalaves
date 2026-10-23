@@ -148,6 +148,10 @@ for (const [dada, esperada] of [["e34", "e34"], ["34", "e34"], ["[ref=e7]", "e7"
   assert.equal(parteDe("- link \"uno\" [ref=e1]", 1), "- link \"uno\" [ref=e1]", "una página corta va entera, sin aviso");
 }
 
+// Guía del navegador en el prompt: según las herramientas del puesto, también sin visión.
+{
+}
+
 // Un nombre de herramienta mal escrito apunta a la del puesto; uno ajeno, no.
 assert.equal(parecida(["abrir_pagina", "pasar_trabajo"], "passing_trabajo"), "pasar_trabajo");
 assert.equal(parecida(["abrir_pagina", "pasar_trabajo"], "Abrir_Pagina"), "abrir_pagina");
