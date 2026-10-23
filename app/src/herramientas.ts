@@ -307,7 +307,7 @@ const NAVEGADOR = { buscar_web: 1, abrir_pagina: 1, ver_pagina: 1, hacer_clic: 1
 
 async function ejecutarNavegador(navegador: Navegador, nombre: string, t: (k: string) => string, enviar: boolean, parte: unknown): Promise<string | null> {
   if (nombre === "buscar_web" && t("consulta")) return navegador.buscarWeb(t("consulta"));
-  if (nombre === "abrir_pagina" && t("url")) return navegador.abrirPagina(t("url"));
+  if (nombre === "abrir_pagina" && t("url")) return navegador.abrirPagina(t("url"), Number(parte) || 1);
   if (nombre === "ver_pagina") return navegador.verPagina(Number(parte) || 1); // número o texto: "2"
   if (nombre === "hacer_clic" && (t("ref") || t("texto"))) return navegador.hacerClic(t("ref"), t("texto"));
   if (nombre === "escribir_en" && (t("ref") || t("campo"))) return navegador.escribirEn(t("ref"), t("campo"), t("texto"), enviar);
