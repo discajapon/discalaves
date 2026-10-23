@@ -560,7 +560,10 @@ imagen, ~2 min).
     sin el localizador y con el XWD mal leído no lo logró en 132 pasos. (b) Buscador de un sitio: en es.wikipedia.org
     usó `ver_pagina` y `escribir_en` con la ref del buscador, abrió el artículo y dejó el informe (90 s, 7 pasos).
     (c) Criterios de "listo": el 1 pasó (28–29 s) y el 2 pasó en 2 de 3 corridas (17–18 s); la que falló no pudo
-    abrir la página (no se conservaron los datos para ver por qué). Cada paso con capturas tarda ~8–10 s: ~5 s de
+    abrir la página (causa encontrada el 2026-10-23: el Enter de Wikipedia, ver Navegador). Tras el arreglo
+    (2026-10-23): `listo-2` solo, 5 de 5 (21–27 s); la secuencia original buscador + listo-1 + listo-2 en la misma
+    app, 2 de 2 completas. La prueba del buscador también daba por mal el artículo correcto: en es.wikipedia es
+    «Danaus plexippus» (con la sugerencia se llega directo, sin la redirección «Mariposa monarca»); ya lo acepta. Cada paso con capturas tarda ~8–10 s: ~5 s de
     reprocesar el prompt y la generación a 18–30 tok/s con capas en la CPU.
   - **RAM de una computadora** (`docker stats`, imagen nueva): 96 MB en reposo, igual tras 10 capturas, 120 MB con
     Mousepad abierto. xdotool y xwd corren y terminan en cada acción: no suman memoria fija.
