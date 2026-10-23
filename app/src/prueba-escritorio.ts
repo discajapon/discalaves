@@ -193,6 +193,16 @@ async function main() {
 
     // Un buscador que cambia su campo por otro al escribir (como el de Wikipedia al cargar su buscador): Enter va al
     // campo nuevo, que conserva el texto y el foco; pulsarlo sobre el viejo esperaba 30 s a un elemento que ya no está.
+    await (navegadorDe(computadora) as any).paginaActual().then((p: import("playwright-core").Page) => p.setContent(`
+      <div id="caja"><input type="search" aria-label="Buscar en el sitio" id="q"></div><main id="m">Portada</main>
+      <script>
+        q.addEventListener("input", function cambiar() {
+          q.removeEventListener("input", cambiar);
+          const nuevo = document.createElement("input"); nuevo.type = "search"; nuevo.setAttribute("aria-label", "Buscar en el sitio"); nuevo.value = q.value;
+          nuevo.onkeydown = (e) => { if (e.key === "Enter") { history.pushState(0, "", "?q=" + encodeURIComponent(nuevo.value)); m.textContent = "Artículo de " + nuevo.value; } };
+          caja.replaceChildren(nuevo); nuevo.focus();
+        });
+      </script>`));
     // Una página larga llega por partes y se puede pedir la siguiente (número o texto, como lo mande el modelo).
     await (navegadorDe(computadora) as any).paginaActual().then((p: import("playwright-core").Page) =>
       p.setContent(Array.from({ length: 600 }, (_, i) => `<p><a href="#${i}">resultado ${i}</a></p>`).join("")));
