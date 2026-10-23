@@ -1218,7 +1218,11 @@ async function usarHerramienta(c: Conversacion, l: Llamada, interfaz: Electron.W
     return { salida: `no existe ese procedimiento. Tienes: ${equipo.procedimientos(c.id).map((x) => x.nombre).join(", ") || "ninguno"}`, codigo: 1 };
   }
   if (l.nombre === "recordar") return { salida: equipo.recordar(c.id, texto("texto")), codigo: 0 };
-  if (!permitida(c.permitidas, l.nombre)) return { salida: `no tienes la herramienta ${l.nombre} en tu puesto; hazlo con las que tienes o dilo.`, codigo: 1 };
+  if (!permitida(c.permitidas, l.nombre)) {
+    const quisiste = parecida(c.permitidas, l.nombre);
+    if (quisiste) return { salida: `no existe la herramienta ${l.nombre}; la de tu puesto se llama ${quisiste}: úsala con ese nombre.`, codigo: 1 };
+    return { salida: `no tienes la herramienta ${l.nombre} en tu puesto; hazlo con las que tienes o dilo.`, codigo: 1 };
+  }
   if (l.nombre === "pasar_trabajo") {
     const quien = texto("empleado").trim().toLowerCase();
     const otro = conversaciones.find((o) => o.id !== c.id && (o.nombre.toLowerCase() === quien || o.id === quien));
