@@ -217,7 +217,9 @@ export class Navegador {
       if (!(await c.count())) continue;
       const url = p.url();
       await c.first().fill(texto, { timeout: 8000 });
-      if (enviar) await c.first().press("Enter");
+      // Enter con el teclado de la página, no sobre el campo: algunos buscadores (Wikipedia) cambian el campo por
+      // otro al recibir el foco, y pulsar sobre el viejo esperaba 30 s a un elemento que ya no existe.
+      if (enviar) await p.keyboard.press("Enter");
       return this.despues(p, `escribí en ${porRef ? `[ref=${normalizarRef(ref)}]` : `"${campo}"`}${enviar ? " y lo envié" : ""}.`, url);
     }
     return `no encontré el campo "${campo}". Usa ver_pagina para ver los campos disponibles.`;
