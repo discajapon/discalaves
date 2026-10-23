@@ -1109,6 +1109,14 @@ ipcMain.handle("abrir-carpeta", async (_e, id: unknown) => {
 });
 // Un archivo que el empleado creó, en el gestor de archivos (no se abre: podría ser un script que escribió la IA).
 // Solo dentro de la carpeta de su computadora; su /home/<usuario> dentro del contenedor es esa carpeta.
+ipcMain.handle("mostrar-archivo", (_e, id: unknown, ruta: unknown) => {
+  const c = conversaciones.find((x) => x.id === id && x.herramientas);
+  if (!c || typeof ruta !== "string") return false;
+  const archivo = rutaEnCarpeta(rutas.trabajo(c.usuario), c.usuario, ruta);
+  if (!archivo || !fs.existsSync(archivo)) return false;
+  shell.showItemInFolder(archivo);
+  return true;
+});
 
 // Borrador de perfil a partir de una descripción del puesto, redactado por qwen. El usuario lo revisa.
 ipcMain.handle("borrador-empleado", async (_e, descripcion: unknown) => {
