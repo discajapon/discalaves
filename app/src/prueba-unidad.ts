@@ -120,6 +120,7 @@ assert.match(fs.readFileSync(path.join(viejoEquipo.dir("editado"), "procedimient
 viejoEquipo.actualizar("investigador", { ...aldia, herramientas: sinEscribir }, true);
 viejoEquipo.ponerAlDia();
 assert.ok(!viejoEquipo.buscar("investigador")!.herramientas.includes("escribir_en"), "solo una vez por versión");
+// De la versión 1 a la 2: el procedimiento sin tocar se pone al día, pero escribir_en no vuelve a quien lo quitó.
 fs.rmSync(datosV, { recursive: true, force: true });
 
 // Referencias de ver_pagina como las escribe el modelo; tras navegar llevan el frame delante (f4e34).
