@@ -500,6 +500,11 @@ imagen, ~2 min).
     que pida más solo si falta un dato (versión 2 de la puesta al día); (5) un nombre de herramienta mal escrito
     (`passing_trabajo`) recibía «no tienes la herramienta» y el modelo concluía que no podía delegar: `parecida()`
     le da el nombre correcto. Resultado (antes → después, 2 vueltas cada uno, las 8 tareas bien en la última tanda):
+    Wikipedia 102–134 s / 14–17 pasos → 53–60 s / 9–10; YouTube 19–44 s / 4 → 21–22 s / 3; criterio 2 26–57 s →
+    30–78 s (el de 78 con el nombre mal escrito, recuperado); criterio 1 39–48 s → 51–65 s (lee 5000 caracteres por
+    fuente en vez de 2500), y una vez 207 s porque el modelo decidió ampliar y verificar el informe por su cuenta
+    (10 KB en vez de 5). La latencia de CEDIA varía mucho entre corridas: con 2 vueltas solo Wikipedia es una mejora
+    clara. Las mejoras del modo visión (GPU) quedan sin medir.
   - **Puesta al día de perfiles** (`ponerAlDia()` en `empleados.ts`, una vez por `VERSION_PERFILES`, guardada en
     `empleados/version`): un empleado creado con una plantilla anterior no recibía lo nuevo (el Investigador del
     usuario, de antes del 2026-10-17, no tenía `escribir_en`). Versión 1: quien tiene `hacer_clic` recibe
