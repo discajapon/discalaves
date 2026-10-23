@@ -191,7 +191,7 @@ const CON_ESCRITORIO =
   "Antes de escribir, haz clic dentro de la ventana correcta: el texto va a la ventana activa (la de título resaltado). " +
   "Coordenadas de 0 a 1000 sobre la última captura. Si algo es pequeño, usa ampliar. Prefiere atajos de teclado (ctrl+s guarda). " +
   "Si algo tarda en abrir o cargar, usa esperar en vez de repetir la acción. " +
-  "En páginas web usa primero ver_pagina y las referencias (ref) con hacer_clic y escribir_en; las coordenadas, solo si no hay referencia.";
+  "En páginas web, las referencias (ref) antes que las coordenadas; las coordenadas, solo si no hay referencia.";
 
 function promptSistema(c: Conversacion, vision = false): string {
   const e = equipo.buscar(c.id)!;
