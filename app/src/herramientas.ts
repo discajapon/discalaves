@@ -214,6 +214,19 @@ export const PLAN = herramienta(
 const MAX_PASOS_PLAN = 10;
 
 // La lista de una llamada a plan, limpia; null si no trae pasos.
+export function leerPlan(argumentos: string): { pasos: string[]; hechos: number } | null {
+  let a: { pasos?: unknown; hechos?: unknown };
+  try {
+    a = JSON.parse(argumentos);
+  } catch {
+    return null;
+  }
+  const pasos = (Array.isArray(a.pasos) ? a.pasos : []).filter((p): p is string => typeof p === "string" && !!p.trim())
+    .slice(0, MAX_PASOS_PLAN).map((p) => p.replace(/\s+/g, " ").trim().slice(0, 120));
+  if (!pasos.length) return null;
+  const hechos = Math.min(pasos.length, Math.max(0, Math.floor(Number(a.hechos)) || 0));
+  return { pasos, hechos };
+}
 // pasar_trabajo lleva en su descripción a los compañeros del equipo, así que se arma en cada turno.
 function pasarTrabajo(companeros: { nombre: string; rol: string }[]) {
   return herramienta(
