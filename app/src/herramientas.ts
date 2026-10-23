@@ -200,6 +200,8 @@ export function rutaEnCarpeta(base: string, usuario: string, ruta: string): stri
   return archivo.startsWith(raiz + path.sep) ? archivo : null;
 }
 
+// Lista de progreso, como la de Cowork: el empleado escribe sus pasos al empezar y los va marcando; la interfaz la
+// muestra aparte, fijada arriba del hilo. Va a todos los empleados con herramientas, como recordar.
 // pasar_trabajo lleva en su descripción a los compañeros del equipo, así que se arma en cada turno.
 function pasarTrabajo(companeros: { nombre: string; rol: string }[]) {
   return herramienta(
