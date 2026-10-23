@@ -595,6 +595,10 @@ imagen, ~2 min).
     `recordar`: el empleado escribe sus pasos al empezar una tarea de 3 o más y los marca (`hechos`) al avanzar; la
     app no hace nada con ella salvo guardarla en el historial. El prompt base lo pide en una frase: sin ella, el
     modelo no la usaba (probado en CEDIA).
+  - Tarjeta de progreso (`progreso()` en `interfaz.ts`): se arma con el historial desde el último mensaje del
+    usuario (la última llamada a `plan` y los archivos de `escribir_archivo`/`editar_archivo`); va tras ese mensaje,
+    fijada bajo la cabecera mientras trabaja (`.en-curso`) y en su sitio al terminar; las llamadas a `plan` no salen
+    como pasos en el hilo. Plegada: "Progreso · 2 de 5 · 1 archivo". Sólida, no vidrio (está dentro del hilo).
 - **Configuración** (pedido del usuario, 2026-09-30): el engranaje junto al perfil, abajo a la izquierda,
   abre una hoja (`configuracion.ts`) con los modelos locales del equipo (qwen y Ollama), las
   especificaciones (`especificaciones.ts`: sistema, CPU, RAM y GPU NVIDIA por `nvidia-smi`) y los créditos
