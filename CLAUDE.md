@@ -742,10 +742,11 @@ Con Qwen 3.5 9B en una RTX 3060 Ti de 8 GB:
 ## Modo de trabajo
 
 - Hacer commit y push directo a `main` después de cada cambio coherente.
-- Commits pequeños y numerosos: cada cambio se reparte en **10–20 commits**
-  (decisión del usuario, 2026-10-17; no 10–20 en total,
-  sino por cambio), cada uno con un paso que compile por sí solo (p. ej.
-  estructura HTML, estilos, lógica, correcciones).
+- Commits pequeños y numerosos: cada cambio se reparte en **al menos 100 commits** (decisión del usuario,
+  2026-10-22; antes 10–20), clasificados con su categoría y numerados: `[categoría] descripción (i/n)`. Cada uno
+  compila por sí solo (se parte línea a línea y se hace commit cada vez que `tsc` pasa) y se parten **antes** del
+  primer push, para no reescribir la historia. Un cambio pequeño que no da para 100 sin commits vacíos ni líneas
+  partidas lleva tantos como compilen.
 - Mensajes de commit claros, en español.
 - Credenciales: se usan las ya configuradas en la máquina (`gh` como helper
   de git por HTTPS). No crear tokens ni cambiar la configuración global de git.
