@@ -4,15 +4,15 @@
 import { chromium, type BrowserContext, type Page } from "playwright-core";
 import type { Computadora } from "./computadora";
 
-const MAX_TEXTO = 2500;
-const MAX_ESTRUCTURA = 5000; // la estructura lleva referencias: más larga, para que no se corten los campos de abajo
+// Tamaño de cada parte, del texto (abrir_pagina) y de la estructura (ver_pagina). El texto se cortaba en 2500
+// caracteres y el modelo, para leer un artículo, saltaba a la estructura por partes (menús y referencias, mucho
+// menos texto por paso): en un artículo de Wikipedia, 6–9 lecturas.
+const MAX_PARTE = 5000;
 
 // ---- Herramientas para el modelo ----
 
-const recortar = (t: string) => (t.length > MAX_TEXTO ? t.slice(0, MAX_TEXTO) + "\n[… recortado …]" : t);
-
-async function resumen(p: Page, cuerpo: string, limite = true): Promise<string> {
-  return `título: ${await p.title()}\nurl: ${p.url()}\n\n${limite ? recortar(cuerpo) : cuerpo}`;
+async function resumen(p: Page, cuerpo: string): Promise<string> {
+  return `título: ${await p.title()}\nurl: ${p.url()}\n\n${cuerpo}`;
 }
 
 async function textoPrincipal(p: Page): Promise<string> {
@@ -30,17 +30,28 @@ async function estructura(p: Page): Promise<string> {
 
 // Un trozo del árbol (desde 1), cortado entre líneas. Una página grande no cabe entera (resultados de YouTube:
 // ~31 000 caracteres; un artículo de Wikipedia: ~96 000): el modelo pide la parte siguiente con ver_pagina.
-export function parteDe(arbol: string, parte: number): string {
+export function parteDe(arbol: string, parte: number, herramienta = "ver_pagina"): string {
   const partes: string[] = [];
   let actual = "";
   for (const l of arbol.split("\n")) {
-    if (actual && actual.length + l.length + 1 > MAX_ESTRUCTURA) (partes.push(actual), (actual = ""));
-    actual += (actual ? "\n" : "") + l.slice(0, MAX_ESTRUCTURA);
+    if (actual && actual.length + l.length + 1 > MAX_PARTE) (partes.push(actual), (actual = ""));
+    actual += (actual ? "\n" : "") + l.slice(0, MAX_PARTE);
   }
   partes.push(actual);
   if (partes.length === 1) return partes[0];
   const n = Math.min(Math.max(1, Math.floor(parte) || 1), partes.length);
-  return `${partes[n - 1]}\n[parte ${n} de ${partes.length}${n < partes.length ? `: lo que sigue más abajo, con ver_pagina y parte: ${n + 1}` : ""}]`;
+  return `${partes[n - 1]}\n[parte ${n} de ${partes.length}${n < partes.length ? `: lo que sigue más abajo, con ${herramienta} y parte: ${n + 1}${herramienta === "abrir_pagina" ? ", solo si te falta un dato concreto" : ""}` : ""}]`;
+}
+
+// La misma dirección con o sin ancla (#sección) y codificada igual ("Volcán" y "Volc%C3%A1n").
+function sinAncla(url: string): string {
+  try {
+    const u = new URL(url);
+    u.hash = "";
+    return u.href;
+  } catch {
+    return url;
+  }
 }
 
 // "e7", "ref=e7", "[ref=e7]", "ref_7" o "7" → "e7".
@@ -127,15 +138,25 @@ export class Navegador {
     return `sin resultados para "${consulta}" (los buscadores no respondieron o bloquearon la búsqueda)`;
   }
 
-  async abrirPagina(url: string): Promise<string> {
+  // Con parte > 1 y la misma página ya abierta, sigue leyendo sin recargarla.
+  async abrirPagina(url: string, parte = 1): Promise<string> {
     const p = await this.paginaActual();
-    await p.goto(/^https?:\/\//.test(url) ? url : `https://${url}`, { timeout: 30000, waitUntil: "domcontentloaded" });
-    return resumen(p, await textoPrincipal(p));
+    const destino = /^https?:\/\//.test(url) ? url : `https://${url}`;
+    if (parte <= 1 || sinAncla(p.url()) !== sinAncla(destino)) await p.goto(destino, { timeout: 30000, waitUntil: "domcontentloaded" });
+    // Las páginas que se pintan con JavaScript (YouTube) llegan vacías al cargar el HTML y el modelo creía que lo
+    // bloqueaban: si hay poco texto, se espera a que aparezca y deje de crecer (hasta ~4 s).
+    let texto = await textoPrincipal(p);
+    for (let i = 0, previo = ""; i < 8 && texto.length < 500 && (!texto || texto !== previo); i++) {
+      previo = texto;
+      await p.waitForTimeout(500);
+      texto = await textoPrincipal(p);
+    }
+    return resumen(p, parteDe(texto, parte, "abrir_pagina"));
   }
 
   async verPagina(parte = 1): Promise<string> {
     const p = await this.paginaActual();
-    return resumen(p, parteDe(await estructura(p), parte), false);
+    return resumen(p, parteDe(await estructura(p), parte));
   }
 
   // Elemento por su referencia de ver_pagina; null si la referencia no es válida o ya no está en la página.
@@ -168,7 +189,12 @@ export class Navegador {
       iguales = nuevo === arbol ? iguales + 1 : 0;
       arbol = nuevo;
     }
-    return `${hecho}\n` + (await resumen(q, parteDe(arbol, 1), false));
+    // Si la acción llevó a otra página, lo útil es su contenido (como abrir_pagina); si no, la estructura.
+    if (q.url() !== urlAntes) {
+      return `${hecho}\n` + (await resumen(q, parteDe(await textoPrincipal(q), 1, "abrir_pagina"))) +
+        "\n(sus enlaces y campos con referencia [ref=…]: ver_pagina)";
+    }
+    return `${hecho}\n` + (await resumen(q, parteDe(arbol, 1)));
   }
 
   async hacerClic(ref: string, texto: string): Promise<string> {
