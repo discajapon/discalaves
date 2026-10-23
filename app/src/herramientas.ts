@@ -143,6 +143,17 @@ export const permitida = (permitidas: string[], nombre: string) => permitidas.in
 
 // Cómo usar el navegador, para quien tenga herramientas de páginas (con o sin visión): antes solo iba en la guía del
 // escritorio, así que un empleado sin visión (servidor remoto) solo conocía escribir_en o las partes por su descripción.
+export function guiaNavegador(permitidas: string[]): string {
+  const tiene = (n: string) => permitidas.includes(n);
+  if (!tiene("abrir_pagina") && !tiene("ver_pagina")) return "";
+  const frases = ["En páginas web:"];
+  if (tiene("abrir_pagina")) frases.push("para leer, abrir_pagina (una página larga llega por partes: la primera suele bastar; pide parte: 2… solo si te falta un dato).");
+  if (tiene("ver_pagina") && (tiene("hacer_clic") || tiene("escribir_en"))) {
+    frases.push(`para actuar (${tiene("escribir_en") ? "usar el buscador del propio sitio, rellenar campos, " : ""}pulsar enlaces o botones), primero ver_pagina y luego ${[tiene("hacer_clic") && "hacer_clic", tiene("escribir_en") && "escribir_en"].filter(Boolean).join(" o ")} con la referencia (ref).`);
+    if (tiene("escribir_en")) frases.push("escribir_en con enviar: true pulsa Intro para buscar.");
+  }
+  return frases.join(" ");
+}
 
 // La herramienta de su puesto con el nombre más parecido a uno inventado ("passing_trabajo" → "pasar_trabajo"), o
 // null. Sin la pista, el modelo concluía que no podía delegar y hacía el trabajo él mismo.
