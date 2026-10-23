@@ -148,6 +148,7 @@ for (const [dada, esperada] of [["e34", "e34"], ["34", "e34"], ["[ref=e7]", "e7"
   assert.equal(parteDe("- link \"uno\" [ref=e1]", 1), "- link \"uno\" [ref=e1]", "una página corta va entera, sin aviso");
 }
 
+
 // Freno de repeticiones: solo cuenta lo que da el mismo resultado otra vez.
 {
   const r = new Repeticiones();
