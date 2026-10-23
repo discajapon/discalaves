@@ -143,6 +143,25 @@ export const permitida = (permitidas: string[], nombre: string) => permitidas.in
 
 // La herramienta de su puesto con el nombre más parecido a uno inventado ("passing_trabajo" → "pasar_trabajo"), o
 // null. Sin la pista, el modelo concluía que no podía delegar y hacía el trabajo él mismo.
+export function parecida(permitidas: string[], nombre: string): string | null {
+  const nombres = [...permitidas.filter((p) => p !== "escritorio"), ...(permitidas.includes("escritorio") ? DE_ESCRITORIO : [])];
+  const distancia = (a: string, b: string) => {
+    let fila = Array.from({ length: b.length + 1 }, (_, j) => j);
+    for (let i = 1; i <= a.length; i++) {
+      const nueva = [i];
+      for (let j = 1; j <= b.length; j++) nueva[j] = Math.min(fila[j] + 1, nueva[j - 1] + 1, fila[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      fila = nueva;
+    }
+    return fila[b.length];
+  };
+  let mejor: string | null = null;
+  let menor = Infinity;
+  for (const n of nombres) {
+    const d = distancia(nombre.toLowerCase(), n);
+    if (d < menor) (menor = d), (mejor = n);
+  }
+  return mejor && menor <= Math.max(2, Math.floor(mejor.length / 3)) ? mejor : null;
+}
 
 // Herramientas del perfil de cada empleado (no usan su computadora: las resuelve main.ts con empleados.ts).
 export const LEER_PROCEDIMIENTO = herramienta(
