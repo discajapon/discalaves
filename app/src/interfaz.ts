@@ -242,6 +242,64 @@ function tarjeta(m: Extract<MensajeChat, { de: "herramienta" }>): HTMLElement {
 // Progreso de la tarea en curso (o de la última), como el panel de Cowork: la lista que el empleado escribe con plan
 // y los archivos que creó, desde el último mensaje del usuario. Tarjeta sólida fijada arriba del hilo.
 let progresoAbierto = true;
+function progreso(): HTMLElement | null {
+  const c = actual();
+  if (c.equipo || !c.herramientas) return null;
+  const inicio = mensajes.map((m) => m.de).lastIndexOf("yo");
+  const pasos = mensajes.slice(inicio + 1).filter((m): m is Extract<MensajeChat, { de: "herramienta" }> => m.de === "herramienta" && m.codigo === 0);
+  let plan: { pasos: string[]; hechos: number } | null = null;
+  const ultimo = pasos.filter((m) => m.nombre === "plan").at(-1);
+  try {
+    const a = ultimo ? JSON.parse(ultimo.argumentos) : null;
+    const lista = Array.isArray(a?.pasos) ? (a.pasos as unknown[]).filter((x): x is string => typeof x === "string" && !!x.trim()).slice(0, 10) : [];
+    if (lista.length) plan = { pasos: lista, hechos: Math.min(lista.length, Math.max(0, Math.floor(Number(a.hechos)) || 0)) };
+  } catch {
+    // una llamada mal formada no tiene lista
+  }
+  const archivos = [...new Set(pasos.filter((m) => m.nombre === "escribir_archivo" || m.nombre === "editar_archivo").map((m) => {
+    try {
+      return String(JSON.parse(m.argumentos).ruta ?? "");
+    } catch {
+      return "";
+    }
+  }).filter(Boolean))];
+  if (!plan && !archivos.length) return null;
+
+  const d = document.createElement("details");
+  d.className = "progreso";
+  d.classList.toggle("en-curso", trabajando(c)); // fijada arriba solo mientras trabaja
+  d.open = progresoAbierto;
+  d.addEventListener("toggle", () => (progresoAbierto = d.open));
+  const partes = [plan ? `${plan.hechos} de ${plan.pasos.length}` : "", archivos.length ? `${archivos.length} ${archivos.length === 1 ? "archivo" : "archivos"}` : ""].filter(Boolean);
+  d.append(crear("summary", "", `Progreso · ${partes.join(" · ")}`));
+  if (plan) {
+    const ol = crear("ol", "progreso-pasos");
+    plan.pasos.forEach((paso, i) => {
+      const estado = i < plan!.hechos ? "hecho" : i === plan!.hechos ? "actual" : "pendiente";
+      const li = crear("li", estado, `${estado === "hecho" ? "✓" : estado === "actual" ? "▸" : "○"} ${paso}`);
+      li.setAttribute("aria-label", `${paso}: ${estado === "hecho" ? "hecho" : estado === "actual" ? "en curso" : "pendiente"}`);
+      ol.append(li);
+    });
+    d.append(ol);
+  }
+  if (archivos.length) {
+    const ul = crear("ul", "progreso-archivos");
+    for (const ruta of archivos) {
+      const boton = crear("button", "boton secundario", "mostrar") as HTMLButtonElement;
+      boton.type = "button";
+      boton.title = "Mostrarlo en su carpeta";
+      boton.addEventListener("click", async () => {
+        if (!(await discalaves.mostrarArchivo(c.id, ruta))) aviso(`no encontré ${ruta} en su carpeta`);
+      });
+      const li = crear("li");
+      li.append(crear("code", "", ruta), boton);
+      ul.append(li);
+    }
+    d.append(ul);
+  }
+  return d;
+}
+
 function burbuja(de: "yo" | "ia", texto: string, quien?: string, a?: string): HTMLElement {
   const fila = crear("div", de === "yo" ? "mensaje mio" : "mensaje");
   const etiqueta = autor(quien, a);
@@ -272,6 +330,7 @@ function dibujarHilo() {
     hilo.append(vacio);
   }
   let anterior = 0;
+  let ultimoMio: HTMLElement | null = null; // la tarjeta de progreso va tras el último mensaje del usuario
   for (const m of mensajes) {
     if (m.de === "separador") hilo.append(crear("p", "separador colaboracion", `${etiquetaDia(m.t)} · ${m.texto}`));
     else if (m.t - anterior > 60 * 60 * 1000) hilo.append(crear("p", "separador", etiquetaDia(m.t)));
@@ -279,12 +338,25 @@ function dibujarHilo() {
       anterior = m.t;
       continue;
     }
-    if (m.de === "herramienta") hilo.append(tarjeta(m));
-    else if (m.texto) hilo.append(burbuja(m.de, m.texto, m.quien, m.a));
+    if (m.de === "herramienta") {
+      if (m.nombre !== "plan") hilo.append(tarjeta(m)); // la lista va en la tarjeta de progreso
+    }
+    else if (m.texto) {
+      const b = burbuja(m.de, m.texto, m.quien, m.a);
+      if (m.de === "yo") ultimoMio = b;
+      hilo.append(b);
+    }
     anterior = m.t;
+  }
+  const p = progreso();
+  if (p) {
+    if (ultimoMio) ultimoMio.after(p);
+    else hilo.prepend(p);
   }
   hilo.scrollTop = hilo.scrollHeight;
 }
+
+const trabajando = (c: Conversacion) => !["listo", "cargando", "error"].includes(c.estado.fase);
 
 function dibujarEstado() {
   const c = actual();
