@@ -2,6 +2,7 @@
 // computadora.ts); nada toca el sistema del usuario. Los comandos que empiezan por "sudo" corren como
 // root de SU contenedor, sin contraseña (decisión del usuario, 2026-09-27).
 import fs from "node:fs";
+import path from "node:path";
 import type { Computadora } from "./computadora";
 import type { Navegador } from "./navegador";
 import { escritorioDe, type Captura } from "./escritorio";
