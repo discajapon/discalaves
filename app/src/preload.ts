@@ -24,6 +24,7 @@ contextBridge.exposeInMainWorld("discalaves", {
   guardarEmpleado: (id: string, datos: unknown) => ipcRenderer.invoke("guardar-empleado", id, datos),
   borradorEmpleado: (descripcion: string) => ipcRenderer.invoke("borrador-empleado", descripcion),
   abrirCarpeta: (id: string) => ipcRenderer.invoke("abrir-carpeta", id),
+  mostrarArchivo: (id: string, ruta: string) => ipcRenderer.invoke("mostrar-archivo", id, ruta),
   historial: (id: string) => ipcRenderer.invoke("historial", id),
   estado: (id: string) => ipcRenderer.invoke("estado", id),
   enviar: (id: string, texto: string) => ipcRenderer.invoke("enviar", id, texto),
