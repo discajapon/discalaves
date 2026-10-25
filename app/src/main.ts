@@ -616,7 +616,7 @@ async function turnoRemoto(c: Conversacion, p: Proveedor, url: string, pedido: O
         if (!t.uso.estimado && t.uso.entrada > 0) caracteresPorToken.set(c.id, caracteresDe(pedido) / t.uso.entrada);
         return t;
       } catch (e) {
-        if (modo === "texto" || !/respondió (400|422|501)/.test((e as Error).message) || !/tool|function|herramienta/i.test((e as Error).message)) throw e;
+        if (modo === "texto" || desborde((e as Error).message) !== null || !/respondió (400|422|501)/.test((e as Error).message) || !/tool|function|herramienta/i.test((e as Error).message)) throw e;
         modo = ponerModo(p, c.modelo, "texto");
       }
     }
