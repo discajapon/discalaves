@@ -521,7 +521,7 @@ function conCaptura(c: Conversacion, historial: Mensaje[], mensajes: MensajeOA[]
 
 // Un turno del modelo: el texto se reenvía a la interfaz mientras llega; las llamadas se acumulan.
 // Todos los orígenes devuelven lo mismo (proveedores.ts): texto, llamadas a herramientas y uso de tokens.
-async function turno(c: Conversacion, interfaz: Electron.WebContents, senal: AbortSignal, avisos: string[] = []): Promise<{ texto: string; llamadas: Llamada[]; uso: Uso }> {
+async function turno(c: Conversacion, interfaz: Electron.WebContents, senal: AbortSignal, avisos: string[] = [], intento = 1): Promise<{ texto: string; llamadas: Llamada[]; uso: Uso }> {
   const remoto = c.origen === "remoto" ? proveedores().find((x) => x.id === c.cuenta) : undefined;
   if (remoto) c.ventana = await ventanaDelServidor(remoto, c.modelo); // antes de armar el historial: lo recorta a esa ventana
   const companeros = conversaciones.filter((o) => o.id !== c.id).map((o) => ({ nombre: o.nombre, rol: o.rol }));
