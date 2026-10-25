@@ -17,7 +17,7 @@ import { registrarWsl } from "./ipc-wsl";
 import { Boveda, SinAlmacenSeguro } from "./boveda";
 import { Codex } from "./codex";
 import { Gasto, TOPE_POR_DEFECTO } from "./gasto";
-import { Cola, Corte, URL_POR_DEFECTO, detectarBase, esRemoto, jsonValido, listarModelos, sinClave, sondaHerramientas, turnoClaude, turnoOpenAI, type ModeloNube, type ModoHerramientas, type Pedido, type Proveedor, type Tipo, type Uso } from "./proveedores";
+import { Cola, Corte, URL_POR_DEFECTO, desborde, detectarBase, esRemoto, jsonValido, listarModelos, sinClave, sondaHerramientas, turnoClaude, turnoOpenAI, type ModeloNube, type ModoHerramientas, type Pedido, type Proveedor, type Tipo, type Uso } from "./proveedores";
 import { Tunel, destino, sshValido, type Pregunta } from "./tunel";
 import * as gestor from "./modelos";
 
