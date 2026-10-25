@@ -182,6 +182,7 @@ assert.equal(leerPlan("no es json"), null);
 
 // Un nombre de herramienta mal escrito apunta a la del puesto; uno ajeno, no.
 assert.equal(parecida(["abrir_pagina", "pasar_trabajo"], "passing_trabajo"), "pasar_trabajo");
+// El prompt no cupo: el error real de CEDIA (vLLM tras LiteLLM) da los tokens; otro 400 no es desborde.
 assert.equal(parecida(["abrir_pagina", "pasar_trabajo"], "Abrir_Pagina"), "abrir_pagina");
 assert.equal(parecida(["escritorio"], "capturar_pantalla"), "captura_pantalla", "las del escritorio cuentan");
 assert.equal(parecida(["abrir_pagina", "pasar_trabajo"], "terminal"), null, "una que no se parece a ninguna");
