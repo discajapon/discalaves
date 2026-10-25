@@ -612,7 +612,9 @@ async function turnoRemoto(c: Conversacion, p: Proveedor, url: string, pedido: O
     let modo = pedido.herramientas.length ? await modoDe(p, url, c.modelo) : "nativas";
     for (;;) {
       try {
-        return await turnoOpenAI({ ...pedido, url, clave: p.clave, modoTexto: modo === "texto", respetar429: true });
+        const t = await turnoOpenAI({ ...pedido, url, clave: p.clave, modoTexto: modo === "texto", respetar429: true });
+        if (!t.uso.estimado && t.uso.entrada > 0) caracteresPorToken.set(c.id, caracteresDe(pedido) / t.uso.entrada);
+        return t;
       } catch (e) {
         if (modo === "texto" || !/respondió (400|422|501)/.test((e as Error).message) || !/tool|function|herramienta/i.test((e as Error).message)) throw e;
         modo = ponerModo(p, c.modelo, "texto");
