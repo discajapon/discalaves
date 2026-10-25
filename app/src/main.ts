@@ -560,6 +560,11 @@ async function turno(c: Conversacion, interfaz: Electron.WebContents, senal: Abo
     const m = (e as Error).message;
     // No cupo pese a la medida (el primer turno tras abrir la app aún no la tiene): se recorta más y se repite.
     const tokens = remoto && !senal.aborted ? desborde(m) : null;
+    if (tokens !== null && intento < 3) {
+      const antes = caracteresPorToken.get(c.id) ?? 3.5;
+      caracteresPorToken.set(c.id, Math.min(antes * 0.7, tokens ? caracteresDe(pedido) / tokens : antes));
+      return turno(c, interfaz, senal, avisos, intento + 1);
+    }
     // Se cortó la conexión con el servidor remoto: se detiene y avisa; nunca pasa a un modelo local ni reintenta.
     if (remoto && !(e instanceof Corte) && !senal.aborted && /fetch failed|terminated|other side closed|ECONN|ETIMEDOUT|ENOTFOUND|socket|network/i.test(`${m} ${(e as { cause?: { code?: string } }).cause?.code ?? ""}`)) {
       throw new Corte(`se cortó la conexión con ${c.donde} (${(e as { cause?: { code?: string } }).cause?.code ?? m}); ${c.nombre} se detuvo y no usa otro modelo por su cuenta`);
