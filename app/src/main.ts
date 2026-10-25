@@ -46,7 +46,12 @@ const yaHiciste = (c: Conversacion, n: number) =>
 // Servidor remoto (decisión del usuario, 2026-10-02): hasta 9 peticiones a la vez; sin VRAM, sin precios ni tope.
 const PETICIONES_REMOTAS = 9;
 const colaRemota = new Cola(PETICIONES_REMOTAS);
-const CARACTERES_POR_TOKEN_UTIL = 2; // ~3,5 caracteres por token y un 57 % de la ventana para el historial (el resto: prompt, herramientas y respuesta)
+const PARTE_HISTORIAL = 0.57; // de la ventana del modelo remoto, para el historial (el resto: prompt, herramientas y respuesta)
+// Caracteres por token de cada conversación con el servidor remoto: se miden con el uso que devuelve en cada turno.
+// Se suponía ~3,5 fijo, pero un árbol de página (sangría honda, refs, ids de 19 cifras) da ~1,6: un Investigador
+// navegando Discord en CEDIA mandó ~100 000 caracteres y pasó de 65 536 tokens (2026-10-24, «ContextWindowExceeded»).
+const caracteresPorToken = new Map<string, number>();
+const caracteresDe = (p: Omit<Pedido, "url">) => JSON.stringify([p.sistema, p.mensajes, p.herramientas]).length;
 const CONTEXTO_OLLAMA = 10000; // Ollama recorta por defecto a ~4k tokens: se le manda menos historial
 
 // Cada conversación es con un EMPLEADO (perfil en archivos, ver empleados.ts) asignado a un modelo (campo
@@ -470,7 +475,7 @@ const recortes = new Map<string, Recorte>(); // por conversación, en memoria: a
 const salidaCorta = (texto: string) => `${texto.slice(0, 200)}\n[… salida antigua recortada para que quepa la tarea …]`;
 function contexto(c: Conversacion, vision = false): MensajeOA[] {
   const historial = historialDe(c.id);
-  const limite = c.ventana ? c.ventana * CARACTERES_POR_TOKEN_UTIL : c.proveedor === "ollama" ? CONTEXTO_OLLAMA : CONTEXTO_CARACTERES;
+  const limite = c.ventana ? c.ventana * (caracteresPorToken.get(c.id) ?? 3.5) * PARTE_HISTORIAL : c.proveedor === "ollama" ? CONTEXTO_OLLAMA : CONTEXTO_CARACTERES;
   const todos: MensajeOA[] = historial.map((m) => {
     if (m.de === "yo") return { role: "user", content: m.texto };
     // Sin visión, la nota de la captura va siempre (el mensaje no cambia entre turnos).
