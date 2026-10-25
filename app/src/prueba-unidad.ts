@@ -183,6 +183,7 @@ assert.equal(leerPlan("no es json"), null);
 // Un nombre de herramienta mal escrito apunta a la del puesto; uno ajeno, no.
 assert.equal(parecida(["abrir_pagina", "pasar_trabajo"], "passing_trabajo"), "pasar_trabajo");
 // El prompt no cupo: el error real de CEDIA (vLLM tras LiteLLM) da los tokens; otro 400 no es desborde.
+assert.equal(desborde("el servidor respondió 400: litellm.ContextWindowExceededError: litellm.BadRequestError: ContextWindowExceededError: Hosted_vllmException - {\"error\":{\"message\":\"This model's maximum context length is 65536 tokens. However, you requested 0 output tokens and your prompt contains at least 65537 input tokens"), 65537);
 assert.equal(parecida(["abrir_pagina", "pasar_trabajo"], "Abrir_Pagina"), "abrir_pagina");
 assert.equal(parecida(["escritorio"], "capturar_pantalla"), "captura_pantalla", "las del escritorio cuentan");
 assert.equal(parecida(["abrir_pagina", "pasar_trabajo"], "terminal"), null, "una que no se parece a ninguna");
