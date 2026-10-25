@@ -411,7 +411,11 @@ imagen, ~2 min).
     la que devuelve una lista (una página web o un 404 la descartan). Una clave rechazada (401/403) corta con mensaje
     claro; solo se usa `Authorization: Bearer`. Los modelos salen de esa lista y la ventana de contexto de campos como
     `max_model_len`/`context_length`; si el servidor no la dice, el usuario la escribe en Configuración → Proveedores y
-    servidores. `contexto()` recorta el historial a esa ventana (2 caracteres por token de ventana). Imágenes: nunca se
+    servidores. `contexto()` recorta el historial al 57 % de esa ventana, con los caracteres por token **medidos**
+    en cada turno con el uso que devuelve el servidor (3,5 hasta tener la medida). Con 3,5 fijo, un Investigador que
+    navegaba Discord en CEDIA (árboles de página con sangría honda, refs e ids de 19 cifras: ~1,6 caracteres por
+    token) mandó ~100 000 caracteres y pasó de 65 536 tokens («ContextWindowExceeded», 2026-10-24); si el servidor
+    responde que no cupo (`desborde()`), se ajusta con los tokens que dice y se repite el turno (hasta 3 veces). Imágenes: nunca se
     envían. Streaming siempre (`stream_options.include_usage`).
   - **Herramientas:** `sondaHerramientas()` hace una llamada de prueba por modelo y guarda `nativas` o `texto` (en la
     bóveda). Modo texto: la IA escribe `<<<llamar:MARCA nombre>>>{json}<<<fin:MARCA>>>`; la MARCA es aleatoria y distinta
