@@ -12,7 +12,7 @@ import { execFileSync } from "node:child_process";
 import { ordenMotor } from "./computadora";
 import { normalizarRef, parteDe } from "./navegador";
 import { bajar, extraer } from "./instalar";
-import { turnoOpenAI } from "./proveedores";
+import { desborde, turnoOpenAI } from "./proveedores";
 import { rutasPara } from "./rutas";
 import { cuantDe, nombreValido } from "./modelos";
 import { distrosDe, textoWsl } from "./wsl";
