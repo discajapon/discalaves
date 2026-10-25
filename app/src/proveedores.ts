@@ -64,6 +64,14 @@ function errorHttp(status: number, cuerpo: string, clave?: string): Error {
   return new Error(`el servidor respondió ${status}: ${m}`);
 }
 
+// El prompt no cupo en la ventana del modelo (vLLM, LiteLLM, OpenAI): devuelve los tokens que dice el servidor (0 si
+// no los dice), o null si el error es otro.
+export function desborde(mensaje: string): number | null {
+  if (!/context.?length|context.?window|ContextWindowExceeded|too many tokens|prompt is too long/i.test(mensaje)) return null;
+  const n = mensaje.match(/(?:contains|prompt has|resulted in) (?:at least )?(\d+) (?:input )?tokens/i);
+  return n ? Number(n[1]) : 0;
+}
+
 // Líneas "data: ..." de un stream SSE (el "event:" de Claude también viene en el JSON como "type").
 async function* eventos(r: Response): AsyncGenerator<Record<string, any>> {
   const lector = r.body!.pipeThrough(new TextDecoderStream()).getReader();
